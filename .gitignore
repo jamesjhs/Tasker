@@ -301,6 +301,15 @@ FakesAssemblies/
 .ntvs_analysis.dat
 node_modules/
 
+# TypeScript build output
+dist/
+
+# SQLite database
+data/
+
+# Environment variables
+.env
+
 # Visual Studio 6 build log
 *.plg
 

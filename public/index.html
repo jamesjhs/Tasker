@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="theme-color" content="#4f46e5" />
+  <title>Tasker</title>
+  <link rel="stylesheet" href="/css/styles.css" />
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════════════
+     LOGIN / REGISTER PAGE
+════════════════════════════════════════════════════ -->
+<div id="login-page" class="page">
+  <div class="login-logo">
+    <div class="logo-icon">
+      <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M9 11l3 3L22 4"/>
+        <path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/>
+      </svg>
+    </div>
+    <h1>Tasker</h1>
+    <p>Work task logger</p>
+  </div>
+
+  <div class="card" style="width:100%;max-width:400px;">
+    <div class="login-tabs">
+      <button class="login-tab active" id="tab-login" onclick="showTab('login')">Sign In</button>
+      <button class="login-tab" id="tab-register" onclick="showTab('register')">Register</button>
+    </div>
+
+    <div id="auth-alert"></div>
+
+    <!-- LOGIN FORM -->
+    <form id="login-form" onsubmit="handleLogin(event)">
+      <div class="form-group">
+        <label for="login-username">Username</label>
+        <input id="login-username" class="input" type="text" placeholder="Enter your username"
+               autocomplete="username" autocapitalize="none" required />
+      </div>
+      <div class="form-group">
+        <label for="login-password">Password</label>
+        <input id="login-password" class="input" type="password" placeholder="Enter your password"
+               autocomplete="current-password" required />
+      </div>
+      <button type="submit" class="btn btn-primary btn-full" id="login-btn">Sign In</button>
+    </form>
+
+    <!-- REGISTER FORM -->
+    <form id="register-form" class="hidden" onsubmit="handleRegister(event)">
+      <div class="form-group">
+        <label for="reg-username">Username</label>
+        <input id="reg-username" class="input" type="text" placeholder="Choose a username"
+               autocomplete="username" autocapitalize="none" required minlength="2" />
+      </div>
+      <div class="form-group">
+        <label for="reg-email">Email address</label>
+        <input id="reg-email" class="input" type="email" placeholder="your@email.com"
+               autocomplete="email" required />
+      </div>
+      <div class="form-group">
+        <label for="reg-password">Password</label>
+        <input id="reg-password" class="input" type="password" placeholder="At least 6 characters"
+               autocomplete="new-password" required minlength="6" />
+      </div>
+      <div class="form-group">
+        <label for="reg-password2">Confirm password</label>
+        <input id="reg-password2" class="input" type="password" placeholder="Repeat password"
+               autocomplete="new-password" required minlength="6" />
+      </div>
+      <button type="submit" class="btn btn-primary btn-full" id="register-btn">Create Account</button>
+    </form>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════
+     DASHBOARD PAGE
+════════════════════════════════════════════════════ -->
+<div id="dashboard-page" class="page hidden">
+
+  <!-- Header -->
+  <header class="app-header">
+    <h1>
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+           stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:-3px;margin-right:6px">
+        <path d="M9 11l3 3L22 4"/>
+        <path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/>
+      </svg>Tasker
+    </h1>
+    <div style="display:flex;align-items:center;gap:0.75rem;">
+      <span class="user-info" id="header-username"></span>
+      <button class="btn btn-ghost btn-sm" onclick="handleLogout()">Sign out</button>
+    </div>
+  </header>
+
+  <!-- Search / filter bar -->
+  <div class="search-bar">
+    <input type="search" class="input" id="search-input" placeholder="Search tasks…" oninput="renderTasks()" />
+    <select class="select" id="filter-outcome" onchange="renderTasks()" style="width:auto;min-width:0;padding-right:1.75rem;">
+      <option value="">All outcomes</option>
+      <option value="actioned">Actioned</option>
+      <option value="forwarded">Forwarded</option>
+      <option value="completed_without_action">Completed w/o action</option>
+      <option value="in_progress">In progress</option>
+    </select>
+  </div>
+
+  <!-- Task list -->
+  <main class="dashboard-body">
+    <div class="task-list" id="task-list"></div>
+    <div class="empty-state hidden" id="empty-state">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <rect x="3" y="3" width="18" height="18" rx="2"/>
+        <path d="M9 12h6M12 9v6"/>
+      </svg>
+      <p>No tasks yet</p>
+      <small>Tap <strong>+</strong> to log your first task</small>
+    </div>
+  </main>
+
+  <!-- Floating action button -->
+  <button class="fab" onclick="openModal()" title="Log new task" aria-label="Log new task">+</button>
+</div>
+
+<!-- ═══════════════════════════════════════════════════
+     TASK MODAL (Add / Edit)
+════════════════════════════════════════════════════ -->
+<div id="task-modal" class="modal-backdrop hidden" onclick="backdropClose(event)">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title-text">
+    <div class="modal-header">
+      <span class="modal-title" id="modal-title-text">Log Task</span>
+      <button class="modal-close" onclick="closeModal()" aria-label="Close">✕</button>
+    </div>
+
+    <div class="modal-body">
+      <div id="modal-alert"></div>
+
+      <form id="task-form" onsubmit="handleTaskSubmit(event)">
+        <input type="hidden" id="task-id" value="" />
+
+        <!-- Task type -->
+        <div class="form-group">
+          <label for="task-type">Task type <span style="color:var(--danger)">*</span></label>
+          <input id="task-type" class="input" type="text" list="task-type-list"
+                 placeholder="e.g. Data entry, Phone call…" required autocomplete="off" />
+          <datalist id="task-type-list"></datalist>
+          <span class="form-hint">Select from list or type a new type</span>
+        </div>
+
+        <!-- Team -->
+        <div class="form-group">
+          <label for="task-team">Received from team <span style="color:var(--danger)">*</span></label>
+          <input id="task-team" class="input" type="text" list="team-list"
+                 placeholder="e.g. Finance, HR…" required autocomplete="off" />
+          <datalist id="team-list"></datalist>
+        </div>
+
+        <!-- Sender initials -->
+        <div class="form-group">
+          <label for="task-sender">Sent by (initials) <span style="color:var(--danger)">*</span></label>
+          <input id="task-sender" class="input" type="text"
+                 placeholder="e.g. JH" required maxlength="5"
+                 oninput="this.value=this.value.toUpperCase()" />
+        </div>
+
+        <!-- Time row -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem;">
+          <div class="form-group" style="margin-bottom:0">
+            <label for="task-start">Start time <span style="color:var(--danger)">*</span></label>
+            <input id="task-start" class="input" type="time" required />
+          </div>
+          <div class="form-group" style="margin-bottom:0">
+            <label for="task-finish">Finish time</label>
+            <input id="task-finish" class="input" type="time" />
+          </div>
+        </div>
+        <div style="display:flex;gap:0.5rem;margin-bottom:1rem;margin-top:0.5rem;">
+          <button type="button" class="btn btn-outline btn-sm" onclick="setNow('task-start')">Set start now</button>
+          <button type="button" class="btn btn-outline btn-sm" onclick="setNow('task-finish')">Set finish now</button>
+        </div>
+
+        <!-- Outcome -->
+        <div class="form-group">
+          <label>Outcome</label>
+          <div class="pill-group">
+            <input type="radio" name="outcome" id="o-actioned" value="actioned" class="pill-input" />
+            <label for="o-actioned" class="pill-label">Actioned</label>
+
+            <input type="radio" name="outcome" id="o-forwarded" value="forwarded" class="pill-input" />
+            <label for="o-forwarded" class="pill-label">Forwarded</label>
+
+            <input type="radio" name="outcome" id="o-cwa" value="completed_without_action" class="pill-input" />
+            <label for="o-cwa" class="pill-label">Completed w/o action</label>
+
+            <input type="radio" name="outcome" id="o-inprogress" value="in_progress" class="pill-input" />
+            <label for="o-inprogress" class="pill-label">In progress</label>
+          </div>
+        </div>
+
+        <!-- Appropriate toggle -->
+        <div class="toggle-row" style="margin-bottom:1rem;">
+          <span class="toggle-label">Task was appropriate</span>
+          <label class="toggle">
+            <input type="checkbox" id="task-appropriate" checked />
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+
+        <!-- Notes -->
+        <div class="form-group" style="margin-bottom:0">
+          <label for="task-notes">Notes <span style="color:var(--gray-400);font-weight:400;">(optional)</span></label>
+          <textarea id="task-notes" class="textarea input" placeholder="Any additional details…"></textarea>
+        </div>
+
+      </form>
+    </div>
+
+    <div class="modal-footer">
+      <button type="button" class="btn btn-outline" onclick="closeModal()">Cancel</button>
+      <button type="submit" form="task-form" class="btn btn-primary" id="save-task-btn">Save Task</button>
+    </div>
+  </div>
+</div>
+
+<script src="/js/app.js"></script>
+</body>
+</html>
