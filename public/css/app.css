@@ -32,6 +32,58 @@ html, body {
 .view-header h1 { font-size: 1.4rem; flex: 1; }
 .loading { text-align: center; padding: 3rem 1rem; color: #666; }
 
+/* ── Loading screen ───────────────────────────────────────────────── */
+.loading-screen {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  gap: 14px;
+  padding: 2rem 1rem;
+  text-align: center;
+}
+.loading-title {
+  font-size: 1.3rem;
+  font-weight: 700;
+  color: #1a1a2e;
+}
+.loading-status {
+  font-size: 0.95rem;
+  color: #555;
+  min-height: 1.4em;
+}
+.loading-error {
+  font-size: 0.9rem;
+  color: #991b1b;
+  background: #fee2e2;
+  border: 1px solid #fca5a5;
+  border-radius: 10px;
+  padding: 12px 16px;
+  max-width: 340px;
+  word-break: break-word;
+}
+.loading-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: center;
+  margin-top: 4px;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.loading-spinner {
+  width: 44px;
+  height: 44px;
+  border: 4px solid #d1d5db;
+  border-top-color: #1a56db;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+.loading-spinner--error {
+  border-top-color: #dc2626;
+  animation: none;
+}
+
 /* ── Cards ────────────────────────────────────────────────────────── */
 .card {
   background: #fff;

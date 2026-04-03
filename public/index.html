@@ -11,7 +11,18 @@
   <link rel="stylesheet" href="/css/app.css">
 </head>
 <body>
-  <div id="app"><p class="loading">Loading Tasker…</p></div>
+  <div id="app">
+    <div class="loading-screen">
+      <div class="loading-spinner" aria-hidden="true"></div>
+      <p class="loading-title">Loading Tasker…</p>
+      <p id="loading-status" class="loading-status">Starting…</p>
+      <p id="loading-error" class="loading-error" hidden></p>
+      <div id="loading-actions" class="loading-actions" hidden>
+        <button class="btn btn-primary" onclick="init()">Retry</button>
+        <button class="btn btn-secondary" onclick="renderLogin()">Go to Login</button>
+      </div>
+    </div>
+  </div>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <script src="/js/app.js"></script>
 </body>
