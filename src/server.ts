@@ -21,6 +21,7 @@ import adminRouter from './routes/admin';
 const SqliteStoreFactory = require('better-sqlite3-session-store');
 const Store = SqliteStoreFactory(session);
 const app = express();
+app.set('trust proxy', 1);
 const PORT = process.env['PORT'] || 3020;
 const SESSION_SECRET = process.env['SESSION_SECRET'] || crypto.randomBytes(64).toString('hex');
 
