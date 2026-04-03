@@ -1200,4 +1200,8 @@ async function deleteDropdown(id) {
 }
 
 // ── Bootstrap ────────────────────────────────────────────────────────────────
-document.addEventListener('DOMContentLoaded', init);
+document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('loading-retry-btn')?.addEventListener('click', init);
+  document.getElementById('loading-login-btn')?.addEventListener('click', renderLogin);
+  init();
+});
