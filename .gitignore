@@ -416,3 +416,15 @@ FodyWeavers.xsd
 *.msix
 *.msm
 *.msp
+
+# Tasker — Node/TypeScript
+node_modules/
+dist/
+data/
+*.db
+*.db-shm
+*.db-wal
+.env
+*.env.local
+npm-debug.log*
+.DS_Store
