@@ -7,6 +7,7 @@
 const state = {
   csrfToken: null,
   user: null,           // { username, isAdmin, mustChangePassword }
+  registrationConfig: null, // { selfRegistration, userInvite }
   activeTask: null,     // current in_progress task
   timerInterval: null,
   currentView: null,
@@ -158,6 +159,12 @@ function renderBottomNav(active) {
 // ── LOGIN ────────────────────────────────────────────────────────────────────
 async function renderLogin() {
   stopTimer(); clearCharts(); state.currentView = 'login';
+  // Fetch registration config to decide whether to show Register button
+  try {
+    const cfgRes = await fetch('/api/auth/registration-config', { credentials: 'same-origin' });
+    if (cfgRes.ok) state.registrationConfig = await cfgRes.json();
+  } catch(e) {}
+  const showRegister = state.registrationConfig?.selfRegistration !== 'disabled';
   app().innerHTML = `
   <div class="view">
     <div style="text-align:center;padding-top:30px;margin-bottom:28px">
@@ -181,7 +188,7 @@ async function renderLogin() {
       <button class="btn btn-primary btn-full" id="l-btn" onclick="doLogin()">Log in</button>
     </div>
     <div style="text-align:center;margin-top:16px;display:flex;flex-direction:column;gap:10px">
-      <button class="link-btn" onclick="renderRegister()">Don't have an account? Register</button>
+      ${showRegister ? `<button class="link-btn" onclick="renderRegister()">Don't have an account? Register</button>` : ''}
       <a href="/policy" target="_blank" style="font-size:.85rem;color:#6b7280">Data &amp; Use Policy</a>
     </div>
     <p style="text-align:center;font-size:.75rem;color:#9ca3af;margin-top:24px;padding-bottom:16px">v1.0.0</p>
@@ -267,12 +274,35 @@ async function doRegister() {
   try {
     const d = await api('POST', '/api/auth/register', { password: pass });
     if (!d) return;
-    showRegisterSuccess(d.username);
+    if (d.pending) {
+      showRegisterPending(d.username);
+    } else {
+      showRegisterSuccess(d.username);
+    }
   } catch(e) {
     btn.disabled = false; btn.textContent = 'Register';
     showAlert(e.message, 'error', 'reg-alerts');
   }
 }
+
+function showRegisterPending(username) {
+  app().innerHTML = `
+  <div class="view">
+    <h1 style="margin-bottom:16px;color:#d97706">⏳ Awaiting Approval</h1>
+    <div class="alert alert-warning">
+      ⚠️ <strong>Save your username now.</strong> It cannot be recovered if lost.
+    </div>
+    <div class="username-box">
+      <p style="font-size:.9rem;color:#374151;margin-bottom:4px">Your username is:</p>
+      <span class="username-text">${esc(username)}</span>
+      <button class="btn btn-outline btn-sm" style="margin-top:10px" onclick="navigator.clipboard?.writeText('${esc(username)}').then(()=>showAlert('Copied!','success'))">📋 Copy</button>
+    </div>
+    <div class="alert alert-info" style="margin-top:16px">
+      Your registration has been submitted and is awaiting administrator approval. 
+      You will be able to log in once your account has been approved.
+    </div>
+    <button class="btn btn-primary btn-full" onclick="renderLogin()">Go to Login</button>
+  </div>`;}
 
 function showRegisterSuccess(username) {
   app().innerHTML = `
@@ -412,15 +442,18 @@ async function discardActiveTask() {
 // ── SETTINGS ─────────────────────────────────────────────────────────────────
 function renderSettings() {
   stopTimer(); clearCharts(); state.currentView = 'settings';
+  const showInvite = state.registrationConfig?.userInvite !== 'disabled';
   app().innerHTML = `
   <div class="view">
     <div class="view-header">
       <h1>⚙️ Settings</h1>
     </div>
+    <div id="settings-alerts"></div>
     <div class="card">
       <p style="font-size:.9rem;color:#555;margin-bottom:14px">Logged in as: <strong>${esc(state.user?.username)}</strong></p>
       <div class="divider"></div>
       <button class="btn btn-outline btn-full" style="margin-bottom:10px" onclick="renderChangePassword()">🔑 Change Password</button>
+      ${showInvite ? `<button class="btn btn-outline btn-full" style="margin-bottom:10px" id="invite-btn" onclick="doInviteUser()">👤 Invite a User</button>` : ''}
       <button class="btn btn-secondary btn-full" style="margin-bottom:10px" onclick="window.open('/policy','_blank')">📄 Data &amp; Use Policy</button>
       <button class="btn btn-secondary btn-full" style="margin-bottom:10px" onclick="window.open('/help','_blank')">❓ Help &amp; User Guide</button>
       <button class="btn btn-danger btn-full" style="margin-bottom:10px" onclick="doLogout()">🚪 Log Out</button>
@@ -434,8 +467,60 @@ function renderSettings() {
 async function doLogout() {
   try { await api('POST', '/api/auth/logout'); } catch(e){}
   state.user = null; state.activeTask = null; state.csrfToken = null;
+  state.registrationConfig = null;
   try { await refreshCsrf(); } catch(e){}
   renderLogin();
+}
+
+async function doInviteUser() {
+  const btn = document.getElementById('invite-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Creating invite…'; }
+  try {
+    const d = await api('POST', '/api/auth/invite', {});
+    if (!d) { if (btn) { btn.disabled = false; btn.textContent = '👤 Invite a User'; } return; }
+    if (btn) { btn.disabled = false; btn.textContent = '👤 Invite a User'; }
+    showInviteResult(d.username, d.tempPassword, d.pending);
+  } catch(e) {
+    if (btn) { btn.disabled = false; btn.textContent = '👤 Invite a User'; }
+    showAlert(e.message, 'error', 'settings-alerts');
+  }
+}
+
+function showInviteResult(username, tempPassword, pending) {
+  const alertsEl = document.getElementById('settings-alerts');
+  if (!alertsEl) return;
+  const loginUrl = window.location.origin;
+  const pendingNote = pending ? '\n\n⚠️ This account requires administrator approval before the user can log in.' : '';
+  const shareMsg = `You have been invited to use Tasker.\n\nUsername: ${username}\nTemporary password: ${tempPassword}\nLog in at: ${loginUrl}\n\nYou will be asked to set a new password when you first log in.${pendingNote}`;
+  const div = document.createElement('div');
+  div.className = 'alert alert-success';
+  div.style.cssText = 'display:flex;flex-direction:column;gap:10px';
+  div.innerHTML = `
+    <div><strong>Invite created</strong>${pending ? ' <span style="color:#d97706">(pending admin approval)</span>' : ''}</div>
+    <div style="font-size:.85rem">Username: <strong>${esc(username)}</strong></div>
+    <div style="display:flex;align-items:center;gap:8px;background:#f0fdf4;border:1px solid #86efac;border-radius:6px;padding:8px 12px">
+      <code class="tmp-pw-code" style="flex:1;font-size:1rem;letter-spacing:.05em;word-break:break-all">${esc(tempPassword)}</code>
+      <button class="btn btn-outline btn-sm tmp-pw-copy">📋 Copy</button>
+    </div>
+    ${pending ? '<div class="alert alert-warning" style="margin:0">⏳ This account needs administrator approval before the user can log in. Share the credentials now and let the user know they may need to wait.</div>' : ''}
+    <div style="margin-top:4px">
+      <p style="font-size:.8rem;color:#374151;margin:0 0 6px">Share via a <strong>secure channel</strong> (e.g. encrypted messaging or in person):</p>
+      <div style="background:#f0fdf4;border:1px solid #86efac;border-radius:6px;padding:8px 12px">
+        <pre class="tmp-share-msg" style="font-size:.78rem;color:#374151;white-space:pre-wrap;word-break:break-word;margin:0">${esc(shareMsg)}</pre>
+      </div>
+      <button class="btn btn-outline btn-sm tmp-share-copy" style="margin-top:6px;width:100%">📤 Copy Invite Message</button>
+    </div>
+    <p style="font-size:.8rem;color:#dc2626;margin:0">⚠️ Share credentials only through a secure channel. They will not be shown again.</p>
+    <button class="btn btn-secondary btn-sm tmp-pw-dismiss">Dismiss</button>`;
+  const codeEl = div.querySelector('.tmp-pw-code');
+  div.querySelector('.tmp-pw-copy').addEventListener('click', function() {
+    copyToClipboard(this, codeEl.textContent || '', '✓ Copied!');
+  });
+  div.querySelector('.tmp-share-copy').addEventListener('click', function() {
+    copyToClipboard(this, shareMsg, '✓ Message copied!');
+  });
+  div.querySelector('.tmp-pw-dismiss').addEventListener('click', () => div.remove());
+  alertsEl.prepend(div);
 }
 
 function renderDeleteAccount() {
@@ -1169,20 +1254,22 @@ async function renderAdmin() {
   stopTimer(); clearCharts(); state.currentView = 'admin';
   app().innerHTML = `<div class="view"><p class="loading">Loading admin panel…</p></div>`;
   try {
-    const [stats, users, dropOpts] = await Promise.all([
+    const [stats, users, dropOpts, settings, pendingUsers] = await Promise.all([
       api('GET', '/api/admin/stats'),
       api('GET', '/api/admin/users'),
       api('GET', '/api/dropdowns/admin/all'),
+      api('GET', '/api/admin/settings'),
+      api('GET', '/api/admin/pending-users'),
     ]);
-    if (!stats || !users || !dropOpts) return;
-    renderAdminContent(stats, users?.users || [], dropOpts?.options || []);
+    if (!stats || !users || !dropOpts || !settings || !pendingUsers) return;
+    renderAdminContent(stats, users?.users || [], dropOpts?.options || [], settings, pendingUsers?.users || []);
   } catch(e) {
     app().innerHTML = `<div class="view"><div id="admin-alerts"></div></div>`;
     showAlert(e.message, 'error', 'admin-alerts');
   }
 }
 
-function renderAdminContent(stats, users, dropOpts) {
+function renderAdminContent(stats, users, dropOpts, settings, pendingUsers) {
   const pending = dropOpts.filter(o => !o.approved);
   const approved = dropOpts.filter(o => o.approved);
   const userCards = users.map(u => `
@@ -1237,6 +1324,26 @@ function renderAdminContent(stats, users, dropOpts) {
     </div>
   </div>`).join('') : '<p style="font-size:.85rem;color:#6b7280">No pending proposals.</p>';
 
+  const modeLabel = { disabled: 'Disabled', admin_approved: 'Administrator approval', auto: 'Automatic approval' };
+  const modeOpts = (field, current) => ['disabled','admin_approved','auto'].map(m =>
+    `<option value="${m}"${current===m?' selected':''}>${modeLabel[m]}</option>`
+  ).join('');
+
+  const pendingUserCards = pendingUsers.length ? pendingUsers.map(u => `
+  <div class="card" style="padding:12px">
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+      <div>
+        <span style="font-weight:700">${esc(u.username)}</span>
+        ${u.must_change_password ? '<span class="badge badge-warn" style="margin-left:6px">Temp pw</span>' : ''}
+        <span style="font-size:.75rem;color:#6b7280;display:block;margin-top:2px">Registered ${new Date(u.created_at+'Z').toLocaleDateString()}</span>
+      </div>
+      <div style="display:flex;gap:6px">
+        <button class="btn btn-primary btn-sm" onclick="approvePendingUser(${u.id})">✓ Approve</button>
+        <button class="btn btn-danger btn-sm" onclick="deleteUser(${u.id}, '${esc(u.username)}')">✗ Reject</button>
+      </div>
+    </div>
+  </div>`).join('') : '<p style="font-size:.85rem;color:#6b7280">No pending users.</p>';
+
   app().innerHTML = `
   <div class="view">
     <div class="view-header">
@@ -1247,6 +1354,26 @@ function renderAdminContent(stats, users, dropOpts) {
       <div class="stat-card"><div class="stat-number">${stats?.userCount ?? '?'}</div><div class="stat-label">Registered users</div></div>
       <div class="stat-card"><div class="stat-number">${stats?.eventCount ?? '?'}</div><div class="stat-label">Events logged</div></div>
     </div>
+
+    <div class="section-heading">Registration Settings</div>
+    <div class="card">
+      <div class="form-group">
+        <label for="reg-self-mode" style="font-size:.9rem">Self-registration (from login page)</label>
+        <select id="reg-self-mode" class="input" style="margin-top:4px">
+          ${modeOpts('self_registration', settings?.selfRegistration)}
+        </select>
+      </div>
+      <div class="form-group" style="margin-top:10px">
+        <label for="reg-invite-mode" style="font-size:.9rem">User invitations (by logged-in users)</label>
+        <select id="reg-invite-mode" class="input" style="margin-top:4px">
+          ${modeOpts('user_invite', settings?.userInvite)}
+        </select>
+      </div>
+      <button class="btn btn-primary btn-full" style="margin-top:12px" id="reg-settings-btn" onclick="saveRegistrationSettings()">💾 Save Settings</button>
+    </div>
+
+    <div class="section-heading">Pending User Approvals ${pendingUsers.length ? `<span class="badge badge-warn" style="margin-left:6px">${pendingUsers.length}</span>` : ''}</div>
+    ${pendingUserCards}
 
     <div class="section-heading">Users</div>
     <button class="btn btn-primary btn-full" style="margin-bottom:14px" onclick="addUser()">➕ Add User</button>
@@ -1324,6 +1451,30 @@ function showTempPassword(label, username, tempPassword) {
   });
   div.querySelector('.tmp-pw-dismiss').addEventListener('click', () => div.remove());
   alertsEl.prepend(div);
+}
+
+async function saveRegistrationSettings() {
+  const btn = document.getElementById('reg-settings-btn');
+  const selfRegistration = document.getElementById('reg-self-mode')?.value;
+  const userInvite = document.getElementById('reg-invite-mode')?.value;
+  if (!selfRegistration || !userInvite) return;
+  if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+  try {
+    await api('POST', '/api/admin/settings', { selfRegistration, userInvite });
+    showAlert('Registration settings saved.', 'success', 'admin-alerts');
+  } catch(e) {
+    showAlert(e.message, 'error', 'admin-alerts');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '💾 Save Settings'; }
+  }
+}
+
+async function approvePendingUser(userId) {
+  try {
+    await api('POST', `/api/admin/users/${userId}/approve`, {});
+    showAlert('User approved and activated.', 'success', 'admin-alerts');
+    renderAdmin();
+  } catch(e) { showAlert(e.message, 'error', 'admin-alerts'); }
 }
 
 async function addUser() {
