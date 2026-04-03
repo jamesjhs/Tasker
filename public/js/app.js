@@ -955,7 +955,7 @@ async function deleteTask(taskId) {
 }
 
 async function clearAllTasks() {
-  if (!confirm('Permanently delete all tasks? This cannot be undone.')) return;
+  if (!confirm('Permanently delete all tasks? Active (in-progress) tasks will not be affected. This cannot be undone.')) return;
   try {
     await api('DELETE', '/api/tasks');
     if (state.currentView === 'analytics-history') renderAnalyticsHistory();

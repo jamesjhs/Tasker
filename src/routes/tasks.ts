@@ -92,7 +92,7 @@ router.delete('/', validateCsrf, (req: Request, res: Response) => {
   const s = req.session as any;
   const r = getDb().prepare(`DELETE FROM tasks WHERE user_id=? AND status!='in_progress'`).run(s.userId);
   logEvent('tasks_cleared');
-  res.json({ deleted: r.changes });
+  res.json({ deleted: r.changes, message: `${r.changes} task(s) deleted. Active tasks were not affected.` });
 });
 
 router.delete('/:id', validateCsrf, (req: Request, res: Response) => {
