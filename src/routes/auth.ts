@@ -42,11 +42,11 @@ router.post('/login', validateCsrf, async (req: Request, res: Response) => {
     res.status(401).json({ error: 'Incorrect username or password. Please check and try again.' });
     return;
   }
+  const valid = await bcrypt.compare(password, user.password_hash);
   if (user.is_locked) {
     res.status(403).json({ error: 'This account has been locked after too many failed login attempts. Please contact an administrator to unlock it.' });
     return;
   }
-  const valid = await bcrypt.compare(password, user.password_hash);
   if (!valid) {
     const attempts = (user.failed_login_attempts || 0) + 1;
     const locked = attempts >= 3;

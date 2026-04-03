@@ -1187,11 +1187,17 @@ function showTempPassword(label, username, tempPassword) {
     <div><strong>${esc(label)}</strong></div>
     <div style="font-size:.85rem">Username: <strong>${esc(username)}</strong></div>
     <div style="display:flex;align-items:center;gap:8px;background:#f0fdf4;border:1px solid #86efac;border-radius:6px;padding:8px 12px">
-      <code id="tmp-pw-display" style="flex:1;font-size:1rem;letter-spacing:.05em;word-break:break-all">${esc(tempPassword)}</code>
-      <button class="btn btn-outline btn-sm" onclick="navigator.clipboard?.writeText('${esc(tempPassword)}').then(()=>this.textContent='✓ Copied!').catch(()=>{})">📋 Copy</button>
+      <code class="tmp-pw-code" style="flex:1;font-size:1rem;letter-spacing:.05em;word-break:break-all">${esc(tempPassword)}</code>
+      <button class="btn btn-outline btn-sm tmp-pw-copy">📋 Copy</button>
     </div>
     <p style="font-size:.8rem;color:#374151;margin:0">Share this with the user securely. It will not be shown again.</p>
-    <button class="btn btn-secondary btn-sm" onclick="this.closest('.alert').remove()">Dismiss</button>`;
+    <button class="btn btn-secondary btn-sm tmp-pw-dismiss">Dismiss</button>`;
+  const copyBtn = div.querySelector('.tmp-pw-copy');
+  const codeEl = div.querySelector('.tmp-pw-code');
+  copyBtn.addEventListener('click', () => {
+    navigator.clipboard?.writeText(codeEl.textContent || '').then(() => { copyBtn.textContent = '✓ Copied!'; }).catch(() => {});
+  });
+  div.querySelector('.tmp-pw-dismiss').addEventListener('click', () => div.remove());
   alertsEl.prepend(div);
 }
 
