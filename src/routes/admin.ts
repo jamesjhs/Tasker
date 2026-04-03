@@ -22,7 +22,7 @@ router.get('/stats', (_req: Request, res: Response) => {
 
 router.get('/users', (_req: Request, res: Response) => {
   const users = getDb().prepare(
-    'SELECT id,username,must_change_password,created_at FROM users WHERE is_admin=0 ORDER BY username'
+    'SELECT id,username,must_change_password,is_locked,created_at FROM users WHERE is_admin=0 ORDER BY username'
   ).all();
   res.json({ users });
 });
@@ -43,9 +43,18 @@ router.post('/users/:id/reset-password', validateCsrf, async (req: Request, res:
   if (!user) { res.status(404).json({ error: 'User not found.' }); return; }
   const tempPassword = crypto.randomBytes(5).toString('hex') + '!';
   const hash = await bcrypt.hash(tempPassword, 12);
-  getDb().prepare('UPDATE users SET password_hash=?,must_change_password=1 WHERE id=?').run(hash, userId);
+  getDb().prepare('UPDATE users SET password_hash=?,must_change_password=1,failed_login_attempts=0,is_locked=0 WHERE id=?').run(hash, userId);
   logEvent('admin_password_reset');
   res.json({ tempPassword });
+});
+
+router.post('/users/:id/unlock', validateCsrf, (req: Request, res: Response) => {
+  const userId = Number(req.params['id']);
+  const user = getDb().prepare('SELECT id FROM users WHERE id=? AND is_admin=0').get(userId);
+  if (!user) { res.status(404).json({ error: 'User not found.' }); return; }
+  getDb().prepare('UPDATE users SET failed_login_attempts=0, is_locked=0 WHERE id=?').run(userId);
+  logEvent('admin_user_unlocked');
+  res.json({ success: true });
 });
 
 router.delete('/users/:id', validateCsrf, (req: Request, res: Response) => {
