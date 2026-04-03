@@ -571,6 +571,8 @@ async function doStartTask() {
   const subcategory = document.getElementById('ts-sub-sel')?.value || null;
   const assigned_date = document.getElementById('ts-assigned')?.value || new Date().toISOString().split('T')[0];
   const is_duty = state.taskForm.is_duty !== false;
+  if (!category) { showAlert('Please select a Task From.', 'error', 'ts-alerts'); return; }
+  if (!subcategory) { showAlert('Please select a Task Type.', 'error', 'ts-alerts'); return; }
   try {
     const d = await api('POST', '/api/tasks/start', {
       is_duty, category: category || null, subcategory: subcategory || null,
@@ -902,13 +904,19 @@ async function submitTaskReview(taskId, isEdit, dest) {
   const start = document.getElementById('te-start')?.value;
   const end = document.getElementById('te-end')?.value;
   if (!end) { showAlert('Please set an end time.', 'error', 'te-alerts'); return; }
+  const outcome = document.getElementById('te-outcome')?.value || null;
+  if (!outcome) { showAlert('Please select an Outcome.', 'error', 'te-alerts'); return; }
   const dutyEl = document.getElementById('te-duty');
+  const categoryVal = document.getElementById('te-category')?.value || t.category || null;
+  const subcategoryVal = document.getElementById('te-subcategory')?.value || t.subcategory || null;
+  if (isEdit && !categoryVal) { showAlert('Please select a Task From.', 'error', 'te-alerts'); return; }
+  if (isEdit && !subcategoryVal) { showAlert('Please select a Task Type.', 'error', 'te-alerts'); return; }
   const body = {
     status: 'completed',
     is_duty: dutyEl ? (dutyEl.classList.contains('active') ? 1 : 0) : (t.is_duty ? 1 : 0),
-    category: document.getElementById('te-category')?.value || t.category || null,
-    subcategory: document.getElementById('te-subcategory')?.value || t.subcategory || null,
-    outcome: document.getElementById('te-outcome')?.value || null,
+    category: categoryVal,
+    subcategory: subcategoryVal,
+    outcome,
     notes: document.getElementById('te-notes')?.value || null,
     start_time: start ? new Date(start).toISOString() : t.start_time,
     end_time: new Date(end).toISOString(),
