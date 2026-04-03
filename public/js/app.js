@@ -151,7 +151,8 @@ function renderBottomNav(active) {
     <button class="nav-btn ${active==='settings'?'active':''}" onclick="renderSettings()">
       <span class="nav-icon">⚙️</span><span>Settings</span>
     </button>
-  </nav>`;
+  </nav>
+  <p style="text-align:center;font-size:.75rem;color:#9ca3af;padding:8px 0 16px">v0.5.1 &nbsp;·&nbsp; <a href="/policy" target="_blank" style="color:#9ca3af">Privacy Policy</a></p>`;
 }
 
 // ── LOGIN ────────────────────────────────────────────────────────────────────
@@ -184,6 +185,7 @@ async function renderLogin() {
       <button class="link-btn" onclick="renderRegister()">Don't have an account? Register</button>
       <a href="/policy" target="_blank" style="font-size:.85rem;color:#6b7280">Data &amp; Use Policy</a>
     </div>
+    <p style="text-align:center;font-size:.75rem;color:#9ca3af;margin-top:24px;padding-bottom:16px">v0.5.1</p>
   </div>`;
   document.getElementById('l-user').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
   document.getElementById('l-pass').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
@@ -1173,7 +1175,8 @@ function renderAdminContent(stats, users, dropOpts) {
     ${pendingCards}
 
     <div class="divider"></div>
-    <button class="btn btn-secondary btn-full" style="margin-bottom:80px" onclick="doLogout()">🚪 Log Out</button>
+    <button class="btn btn-secondary btn-full" style="margin-bottom:16px" onclick="doLogout()">🚪 Log Out</button>
+    <p style="text-align:center;font-size:.75rem;color:#9ca3af;padding-bottom:80px">v0.5.1 &nbsp;·&nbsp; <a href="/policy" target="_blank" style="color:#9ca3af">Privacy Policy</a></p>
   </div>`;
 }
 
