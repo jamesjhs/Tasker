@@ -300,7 +300,7 @@ function renderChangePassword() {
   app().innerHTML = `
   <div class="view">
     <div class="view-header">
-      ${!isForced ? '<button class="btn btn-secondary btn-sm" onclick="renderHome()">← Back</button>' : ''}
+      ${!isForced ? `<button class="btn btn-secondary btn-sm" onclick="${state.user?.isAdmin ? 'renderAdmin' : 'renderHome'}()">← Back</button>` : ''}
       <h1>Change Password</h1>
     </div>
     ${isForced ? '<div class="alert alert-warning">⚠️ You must set a new password before continuing.</div>' : ''}
@@ -1245,6 +1245,11 @@ function renderAdminContent(stats, users, dropOpts) {
       </div>
     </div>
 
+    <div class="section-heading">My Account</div>
+    <div class="card">
+      <button class="btn btn-outline btn-full" onclick="renderChangePassword()">🔑 Change My Password</button>
+    </div>
+
     <div class="section-heading">Dropdown Options</div>
     ${dropSections}
 
@@ -1257,9 +1262,19 @@ function renderAdminContent(stats, users, dropOpts) {
   </div>`;
 }
 
+function copyToClipboard(btn, text, successLabel) {
+  navigator.clipboard?.writeText(text).then(() => {
+    const orig = btn.textContent;
+    btn.textContent = successLabel;
+    setTimeout(() => { btn.textContent = orig; }, 2000);
+  }).catch(() => {});
+}
+
 function showTempPassword(label, username, tempPassword) {
   const alertsEl = document.getElementById('admin-alerts');
   if (!alertsEl) return;
+  const loginUrl = window.location.origin;
+  const shareMsg = `You have been invited to use Tasker.\n\nUsername: ${username}\nTemporary password: ${tempPassword}\nLog in at: ${loginUrl}\n\nYou will be asked to set a new password when you first log in.`;
   const div = document.createElement('div');
   div.className = 'alert alert-success';
   div.style.cssText = 'display:flex;flex-direction:column;gap:10px';
@@ -1270,12 +1285,21 @@ function showTempPassword(label, username, tempPassword) {
       <code class="tmp-pw-code" style="flex:1;font-size:1rem;letter-spacing:.05em;word-break:break-all">${esc(tempPassword)}</code>
       <button class="btn btn-outline btn-sm tmp-pw-copy">📋 Copy</button>
     </div>
-    <p style="font-size:.8rem;color:#374151;margin:0">Share this with the user securely. It will not be shown again.</p>
+    <div style="margin-top:4px">
+      <p style="font-size:.8rem;color:#374151;margin:0 0 6px">Share this invite message with the user via a <strong>secure channel</strong> (e.g. encrypted messaging or in person):</p>
+      <div style="background:#f0fdf4;border:1px solid #86efac;border-radius:6px;padding:8px 12px">
+        <pre class="tmp-share-msg" style="font-size:.78rem;color:#374151;white-space:pre-wrap;word-break:break-word;margin:0">${esc(shareMsg)}</pre>
+      </div>
+      <button class="btn btn-outline btn-sm tmp-share-copy" style="margin-top:6px;width:100%">📤 Copy Invite Message</button>
+    </div>
+    <p style="font-size:.8rem;color:#dc2626;margin:0">⚠️ Share credentials only through a secure channel. They will not be shown again.</p>
     <button class="btn btn-secondary btn-sm tmp-pw-dismiss">Dismiss</button>`;
-  const copyBtn = div.querySelector('.tmp-pw-copy');
   const codeEl = div.querySelector('.tmp-pw-code');
-  copyBtn.addEventListener('click', () => {
-    navigator.clipboard?.writeText(codeEl.textContent || '').then(() => { copyBtn.textContent = '✓ Copied!'; }).catch(() => {});
+  div.querySelector('.tmp-pw-copy').addEventListener('click', function() {
+    copyToClipboard(this, codeEl.textContent || '', '✓ Copied!');
+  });
+  div.querySelector('.tmp-share-copy').addEventListener('click', function() {
+    copyToClipboard(this, shareMsg, '✓ Message copied!');
   });
   div.querySelector('.tmp-pw-dismiss').addEventListener('click', () => div.remove());
   alertsEl.prepend(div);
