@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tasker — Data and Use Policy</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: system-ui,-apple-system,sans-serif; max-width: 700px; margin: 0 auto; padding: 24px 16px 60px; color: #1a1a2e; line-height: 1.7; background: #f0f4ff; }
+    h1 { color: #1a56db; font-size: 1.7rem; margin: 1.5rem 0 0.5rem; }
+    h2 { font-size: 1.1rem; margin: 2rem 0 0.5rem; color: #1a1a2e; border-bottom: 2px solid #e5e7eb; padding-bottom: 0.3rem; }
+    p  { margin-bottom: 0.75rem; }
+    ul { padding-left: 1.5rem; margin-bottom: 0.75rem; }
+    li { margin-bottom: 0.3rem; }
+    .warning-box { background: #fee2e2; border: 2px solid #dc2626; border-radius: 10px; padding: 1rem; margin: 1.25rem 0; color: #991b1b; font-weight: 600; }
+    .info-box { background: #dbeafe; border: 2px solid #1a56db; border-radius: 10px; padding: 1rem; margin: 1.25rem 0; color: #1e40af; }
+    .back-link { display: inline-block; color: #1a56db; margin-bottom: 16px; text-decoration: none; font-weight: 600; }
+    small { color: #6b7280; }
+  </style>
+</head>
+<body>
+  <a class="back-link" href="/" onclick="history.back();return false;">← Back</a>
+  <h1>📋 Tasker — Data and Use Policy</h1>
+  <p><small>Version 1.0 — Effective from the date of deployment</small></p>
+
+  <div class="warning-box">
+    ⚠️ <strong>CRITICAL:</strong> You must NEVER enter any patient names, initials, NHS numbers, dates of birth, or any other information that could identify a patient or person. This application is for recording task metadata only.
+  </div>
+
+  <h2>1. About This Application</h2>
+  <p>Tasker is a personal task-logging tool for healthcare staff to track their workload activity anonymously. It is hosted on a private, personal server and is not connected to any NHS system.</p>
+
+  <h2>2. What Data Is Collected</h2>
+  <ul>
+    <li><strong>Anonymous username</strong> — a computer-generated, two-word identifier (e.g. CalmRiver). Not linked to your real name.</li>
+    <li><strong>Password</strong> — stored as a one-way cryptographic hash. Never readable by anyone, including the administrator.</li>
+    <li><strong>Task metadata</strong> — type (duty/personal), start and end times, category, subcategory, outcome, interruption times, and optional free-text notes.</li>
+    <li><strong>Anonymous event counts</strong> — total login events, task counts etc. No user identity or data is attached to these counts.</li>
+  </ul>
+
+  <h2>3. What Is NEVER Collected</h2>
+  <ul>
+    <li>Real names, surnames, or any personal identifier</li>
+    <li>Email addresses or phone numbers</li>
+    <li>NHS numbers, hospital numbers, or any patient identifier</li>
+    <li>Staff identification numbers or initials</li>
+    <li>Patient names, initials, ward names, or any information that could identify a patient</li>
+    <li>Location data, IP addresses (beyond what is used for NHS network blocking)</li>
+  </ul>
+
+  <div class="info-box">
+    ℹ️ The free-text notes field is provided for task metadata only. You are personally responsible for ensuring no identifiable information is entered into it.
+  </div>
+
+  <h2>4. Data Retention</h2>
+  <p>Task records are automatically and permanently deleted after <strong>30 days</strong>. This deletion is irreversible and runs automatically every day. Your account (username and password) is retained until you request deletion or an administrator removes your account.</p>
+
+  <h2>5. Who Can See What</h2>
+  <ul>
+    <li><strong>You</strong> — can see and export only your own task data. You cannot see any other user's data.</li>
+    <li><strong>Administrator</strong> — can see only the total number of registered users and total event counts. The administrator cannot access your task data, notes, timestamps, or analytics. The administrator can see your username for the purpose of account management.</li>
+    <li><strong>No one else</strong> — data is stored only on the server hosting this application and is not shared with any third party, cloud service, or NHS system.</li>
+  </ul>
+
+  <h2>6. Mobile-Only Access</h2>
+  <p>This application is only accessible from mobile devices. Desktop browser access is blocked. Access from NHS networks (HSCN/N3) is also blocked to prevent accidental access from clinical workstations.</p>
+
+  <h2>7. Your Responsibilities</h2>
+  <ul>
+    <li>You must NEVER enter patient names, initials, identifiers, or any information that could identify a patient.</li>
+    <li>You are responsible for keeping your username and password secure.</li>
+    <li>You should log out when you have finished your session.</li>
+    <li>You must use this application only on your personal device and personal network — not on NHS systems or NHS Wi-Fi.</li>
+    <li>If you believe you have accidentally entered patient-identifiable information, contact the administrator immediately so your account data can be deleted.</li>
+  </ul>
+
+  <h2>8. Right to Deletion</h2>
+  <p>You have the right to request complete deletion of your account and all associated data at any time. Contact the administrator to do so. The administrator can permanently delete your account and all your task data, which is irreversible.</p>
+
+  <h2>9. Security</h2>
+  <ul>
+    <li>All sessions are protected with CSRF tokens and rate limiting.</li>
+    <li>Passwords are stored using bcrypt with a cost factor of 12.</li>
+    <li>Session cookies are HTTP-only and SameSite=strict.</li>
+    <li>Sessions automatically expire after 30 minutes of inactivity and cannot span midnight.</li>
+    <li>The server uses HTTPS in production (the administrator is responsible for ensuring this).</li>
+  </ul>
+
+  <h2>10. No Third Parties</h2>
+  <p>No data is shared with third parties, cloud services, analytics providers, or any external system. The only external resource loaded is Chart.js from a CDN (for charts); no user data is sent to the CDN.</p>
+
+  <h2>11. Contact</h2>
+  <p>If you have questions about this policy or wish to request deletion of your data, contact the administrator who provided you with your account credentials.</p>
+
+  <p style="margin-top: 2rem; font-size: .85rem; color: #6b7280;">
+    This policy was last updated at the time of deployment. The administrator is responsible for reviewing and updating it as needed.
+  </p>
+</body>
+</html>
