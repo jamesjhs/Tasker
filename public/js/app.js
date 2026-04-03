@@ -872,6 +872,7 @@ async function submitNewOutcomeEnd() {
     sel.value = val;
     document.getElementById('te-out-new').style.display = 'none';
     input.value = '';
+    showAlert('Outcome added — pending admin approval.', 'success', 'te-alerts');
   } catch(e) { showAlert(e.message, 'error', 'te-alerts'); }
 }
 
@@ -892,9 +893,10 @@ async function submitTaskReview(taskId, isEdit) {
   const start = document.getElementById('te-start')?.value;
   const end = document.getElementById('te-end')?.value;
   if (!end) { showAlert('Please set an end time.', 'error', 'te-alerts'); return; }
+  const dutyEl = document.getElementById('te-duty');
   const body = {
     status: 'completed',
-    is_duty: document.getElementById('te-duty') ? (document.getElementById('te-duty').classList.contains('active') ? 1 : 0) : (t.is_duty ? 1 : 0),
+    is_duty: dutyEl ? (dutyEl.classList.contains('active') ? 1 : 0) : (t.is_duty ? 1 : 0),
     category: document.getElementById('te-category')?.value || t.category || null,
     subcategory: document.getElementById('te-subcategory')?.value || t.subcategory || null,
     outcome: document.getElementById('te-outcome')?.value || null,
