@@ -36,7 +36,7 @@ router.post('/login', validateCsrf, async (req: Request, res: Response) => {
   const { username, password } = req.body as { username: string; password: string };
   if (!username || !password) { res.status(400).json({ error: 'Username and password required.' }); return; }
   const db = getDb();
-  const user = db.prepare('SELECT * FROM users WHERE username=?').get(username) as any;
+  const user = db.prepare('SELECT * FROM users WHERE LOWER(username)=LOWER(?)').get(username) as any;
   if (!user) {
     await bcrypt.compare(password, '$2a$12$invalidhashfortimingsafety00000000000000000');
     res.status(401).json({ error: 'Incorrect username or password. Please check and try again.' });
