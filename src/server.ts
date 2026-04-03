@@ -5,6 +5,9 @@ import rateLimit from 'express-rate-limit';
 import helmet from 'helmet';
 import path from 'path';
 import crypto from 'crypto';
+import fs from 'fs';
+import https from 'https';
+import http from 'http';
 import Database from 'better-sqlite3';
 import { getDb } from './db';
 import { nhsNetworkBlock, mobileOnly } from './middleware/index';
@@ -21,6 +24,12 @@ const app = express();
 const PORT = process.env['PORT'] || 3020;
 const SESSION_SECRET = process.env['SESSION_SECRET'] || crypto.randomBytes(64).toString('hex');
 
+// ─── SSL configuration ────────────────────────────────────────────────────────
+const SSL_CERT_DIR = process.env['SSL_CERT_DIR'] || '/etc/letsencrypt/live/jahosi.co.uk';
+const SSL_CERT = process.env['SSL_CERT'] || path.join(SSL_CERT_DIR, 'fullchain.pem');
+const SSL_KEY  = process.env['SSL_KEY']  || path.join(SSL_CERT_DIR, 'privkey.pem');
+const useHttps = fs.existsSync(SSL_CERT) && fs.existsSync(SSL_KEY);
+
 // ─── Security headers ─────────────────────────────────────────────────────────
 app.use(helmet({
   contentSecurityPolicy: {
@@ -32,7 +41,7 @@ app.use(helmet({
       connectSrc: ["'self'", 'https://cdn.jsdelivr.net'],
       workerSrc: ["'self'"],
       manifestSrc: ["'self'"],
-      upgradeInsecureRequests: null, // server runs on plain HTTP; omit this directive to avoid browsers upgrading asset requests to HTTPS
+      upgradeInsecureRequests: useHttps ? [] : null, // enable when running over HTTPS
     },
   },
 }));
@@ -97,5 +106,17 @@ setInterval(runRetention, 24 * 60 * 60 * 1000);
 
 // ─── Start ────────────────────────────────────────────────────────────────────
 getDb();
-app.listen(PORT, () => console.log(`Tasker running on port ${PORT}`));
+if (useHttps) {
+  const tlsOptions = {
+    cert: fs.readFileSync(SSL_CERT),
+    key:  fs.readFileSync(SSL_KEY),
+  };
+  https.createServer(tlsOptions, app).listen(PORT, () =>
+    console.log(`Tasker running on port ${PORT} (HTTPS)`),
+  );
+} else {
+  http.createServer(app).listen(PORT, () =>
+    console.log(`Tasker running on port ${PORT} (HTTP – no SSL certs found)`),
+  );
+}
 export default app;
