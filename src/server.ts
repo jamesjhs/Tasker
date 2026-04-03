@@ -1,0 +1,99 @@
+import express from 'express';
+import session from 'express-session';
+import rateLimit from 'express-rate-limit';
+import helmet from 'helmet';
+import path from 'path';
+import crypto from 'crypto';
+import Database from 'better-sqlite3';
+import { getDb } from './db';
+import { nhsNetworkBlock, mobileOnly } from './middleware/index';
+import authRouter from './routes/auth';
+import tasksRouter from './routes/tasks';
+import analyticsRouter from './routes/analytics';
+import dropdownsRouter from './routes/dropdowns';
+import adminRouter from './routes/admin';
+
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const SqliteStoreFactory = require('better-sqlite3-session-store');
+const Store = SqliteStoreFactory(session);
+const app = express();
+const PORT = process.env['PORT'] || 3000;
+const SESSION_SECRET = process.env['SESSION_SECRET'] || crypto.randomBytes(64).toString('hex');
+
+// ─── Security headers ─────────────────────────────────────────────────────────
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'", "'unsafe-inline'", 'https://cdn.jsdelivr.net'],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      imgSrc: ["'self'", 'data:'],
+      connectSrc: ["'self'"],
+      workerSrc: ["'self'"],
+      manifestSrc: ["'self'"],
+    },
+  },
+}));
+
+app.use(express.json({ limit: '1mb' }));
+app.use(express.urlencoded({ extended: true, limit: '1mb' }));
+
+// ─── Sessions ─────────────────────────────────────────────────────────────────
+const sessionDb = new Database(path.join(__dirname, '..', 'data', 'sessions.db'));
+app.use(session({
+  store: new Store({ client: sessionDb }),
+  secret: SESSION_SECRET,
+  resave: false,
+  saveUninitialized: false,
+  cookie: {
+    httpOnly: true,
+    sameSite: 'strict',
+    secure: process.env['NODE_ENV'] === 'production',
+    maxAge: 30 * 60 * 1000,
+  },
+}));
+
+// ─── Rate limiting ────────────────────────────────────────────────────────────
+const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 20, standardHeaders: true, legacyHeaders: false });
+const apiLimiter = rateLimit({ windowMs: 60 * 1000, max: 200, standardHeaders: true, legacyHeaders: false });
+
+// ─── NHS block on auth ────────────────────────────────────────────────────────
+app.use('/api/auth', nhsNetworkBlock);
+
+// ─── Mobile-only BEFORE static files ─────────────────────────────────────────
+app.use(mobileOnly);
+
+// ─── Static files ─────────────────────────────────────────────────────────────
+app.use(express.static(path.join(__dirname, '..', 'public'), {
+  setHeaders: (res, filePath) => {
+    if (filePath.endsWith('sw.js')) {
+      res.setHeader('Cache-Control', 'no-cache');
+      res.setHeader('Service-Worker-Allowed', '/');
+    }
+  },
+}));
+
+// ─── API routes ───────────────────────────────────────────────────────────────
+app.use('/api/auth', authLimiter, authRouter);
+app.use('/api/tasks', apiLimiter, tasksRouter);
+app.use('/api/analytics', apiLimiter, analyticsRouter);
+app.use('/api/dropdowns', apiLimiter, dropdownsRouter);
+app.use('/api/admin', apiLimiter, adminRouter);
+
+app.get('/policy', apiLimiter, (_req, res) => res.sendFile(path.join(__dirname, '..', 'public', 'policy.html')));
+app.get('/{*path}', apiLimiter, (_req, res) => res.sendFile(path.join(__dirname, '..', 'public', 'index.html')));
+
+// ─── 30-day data retention job ────────────────────────────────────────────────
+function runRetention(): void {
+  try {
+    const r = getDb().prepare(`DELETE FROM tasks WHERE created_at<datetime('now','-30 days')`).run();
+    if (r.changes > 0) console.log(`[Retention] Deleted ${r.changes} tasks >30 days`);
+  } catch (e) { console.error('[Retention]', e); }
+}
+runRetention();
+setInterval(runRetention, 24 * 60 * 60 * 1000);
+
+// ─── Start ────────────────────────────────────────────────────────────────────
+getDb();
+app.listen(PORT, () => console.log(`Tasker running on port ${PORT}`));
+export default app;
