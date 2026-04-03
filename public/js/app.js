@@ -945,6 +945,24 @@ async function discardFromEnd(taskId) {
   } catch(e) { showAlert(e.message, 'error', 'te-alerts'); }
 }
 
+async function deleteTask(taskId) {
+  if (!confirm('Permanently delete this task? This cannot be undone.')) return;
+  try {
+    await api('DELETE', `/api/tasks/${taskId}`);
+    if (state.currentView === 'analytics-history') renderAnalyticsHistory();
+    else renderAnalyticsSession();
+  } catch(e) { showAlert(e.message); }
+}
+
+async function clearAllTasks() {
+  if (!confirm('Permanently delete all tasks? This cannot be undone.')) return;
+  try {
+    await api('DELETE', '/api/tasks');
+    if (state.currentView === 'analytics-history') renderAnalyticsHistory();
+    else renderAnalyticsSession();
+  } catch(e) { showAlert(e.message); }
+}
+
 // ── ANALYTICS — SESSION ──────────────────────────────────────────────────────
 async function renderAnalyticsSession() {
   stopTimer(); clearCharts(); state.currentView = 'analytics-session';
@@ -1033,6 +1051,7 @@ function renderAnalyticsContent(data, mode) {
       ${t.outcome ? `<div class="task-card-meta">Outcome: ${esc(t.outcome)}</div>` : ''}
       <div class="task-card-actions">
         <button class="btn btn-outline btn-sm" onclick="loadAndEditTask(${t.id})">✏️ Edit</button>
+        <button class="btn btn-danger btn-sm" onclick="deleteTask(${t.id})">🗑️ Delete</button>
       </div>
     </div>`;
   }).join('');
@@ -1076,6 +1095,7 @@ function renderAnalyticsContent(data, mode) {
       <button class="btn btn-secondary" style="flex:1" onclick="downloadExport()">⬇️ Download Excel</button>
     </div>
     <div class="section-heading">Tasks</div>
+    ${tasks.length > 0 ? `<div style="display:flex;justify-content:flex-end;margin-bottom:8px"><button class="btn btn-danger btn-sm" onclick="clearAllTasks()">🗑️ Clear All</button></div>` : ''}
     ${taskCards || '<p style="color:#6b7280;font-size:.9rem">No tasks found.</p>'}
   </div>
   ${renderBottomNav('analytics')}`;

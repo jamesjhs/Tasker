@@ -88,4 +88,22 @@ router.get('/:id', (req: Request, res: Response) => {
   res.json({ task });
 });
 
+router.delete('/', validateCsrf, (req: Request, res: Response) => {
+  const s = req.session as any;
+  const r = getDb().prepare(`DELETE FROM tasks WHERE user_id=? AND status!='in_progress'`).run(s.userId);
+  logEvent('tasks_cleared');
+  res.json({ deleted: r.changes });
+});
+
+router.delete('/:id', validateCsrf, (req: Request, res: Response) => {
+  const s = req.session as any;
+  const db = getDb();
+  const taskId = Number(req.params['id']);
+  const task = db.prepare('SELECT id FROM tasks WHERE id=? AND user_id=?').get(taskId, s.userId) as any;
+  if (!task) { res.status(404).json({ error: 'Task not found.' }); return; }
+  db.prepare('DELETE FROM tasks WHERE id=? AND user_id=?').run(taskId, s.userId);
+  logEvent('task_deleted');
+  res.json({ success: true });
+});
+
 export default router;
