@@ -14,9 +14,9 @@
     "better-sqlite3-session-store": "^0.1.0",
     "dotenv": "^17.4.0",
     "exceljs": "^4.4.0",
-    "express": "^5.0.1",
+    "express": "^5.2.1",
     "express-rate-limit": "^8.3.2",
-    "express-session": "^1.18.0",
+    "express-session": "^1.19.0",
     "helmet": "^8.1.0",
     "multer": "^2.1.1"
   },
@@ -25,8 +25,13 @@
     "@types/express": "^5.0.6",
     "@types/express-session": "^1.18.2",
     "@types/multer": "^2.1.0",
-    "@types/node": "^25.5.1",
+    "@types/node": "^25.5.2",
     "ts-node": "^10.9.2",
     "typescript": "^6.0.2"
+  },
+  "overrides": {
+    "archiver": "^7.0.1",
+    "unzipper": "^0.12.3",
+    "fast-csv": "^5.0.5"
   }
 }
