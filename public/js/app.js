@@ -103,6 +103,7 @@ async function init() {
     if (me.ok) {
       state.user = await me.json();
       if (state.user.mustChangePassword) { renderChangePassword(); return; }
+      if (state.user.pendingActivation) { renderAwaitActivation(); return; }
 
       setLoadingStatus('Loading dropdown options…');
       await loadDropdowns();
@@ -212,9 +213,10 @@ async function doLogin() {
   try {
     const d = await api('POST', '/api/auth/login', { username, password });
     if (!d) return;
-    state.user = { username, isAdmin: d.isAdmin, mustChangePassword: d.mustChangePassword };
+    state.user = { username, isAdmin: d.isAdmin, mustChangePassword: d.mustChangePassword, pendingActivation: d.pendingActivation };
     await refreshCsrf();
     if (d.mustChangePassword) { renderChangePassword(); return; }
+    if (d.pendingActivation) { renderAwaitActivation(); return; }
     await loadDropdowns();
     await checkActiveTask();
     d.isAdmin ? renderAdmin() : renderHome();
@@ -323,6 +325,30 @@ function showRegisterSuccess(username) {
   </div>`;
 }
 
+// ── AWAIT ACTIVATION ─────────────────────────────────────────────────────────
+function renderAwaitActivation() {
+  stopTimer(); clearCharts(); state.currentView = 'await-activation';
+  const username = state.user?.username || '';
+  app().innerHTML = `
+  <div class="view">
+    <h1 style="margin-bottom:16px;color:#d97706">⏳ Awaiting Activation</h1>
+    <div class="alert alert-warning">
+      Your account has been created and your password is set.
+      An administrator needs to activate your account before you can start logging tasks.
+    </div>
+    ${username ? `<div class="username-box">
+      <p style="font-size:.9rem;color:#374151;margin-bottom:4px">Your username is:</p>
+      <span class="username-text">${esc(username)}</span>
+      <button class="btn btn-outline btn-sm" style="margin-top:10px" onclick="navigator.clipboard?.writeText('${esc(username)}').then(()=>showAlert('Copied!','success','await-alerts'))">📋 Copy</button>
+    </div>` : ''}
+    <div id="await-alerts"></div>
+    <div class="alert alert-info" style="margin-top:16px">
+      Please check back later. Once activated, log in again to access Tasker.
+    </div>
+    <button class="btn btn-secondary btn-full" style="margin-top:16px" onclick="doLogout()">🚪 Log Out</button>
+  </div>`;
+}
+
 // ── CHANGE PASSWORD ──────────────────────────────────────────────────────────
 function renderChangePassword() {
   stopTimer(); clearCharts(); state.currentView = 'change-password';
@@ -372,8 +398,14 @@ async function doChangePassword(isForced) {
   if (newPass !== newPass2) { showAlert('Passwords do not match.', 'error', 'cp-alerts'); return; }
   btn.disabled = true; btn.textContent = 'Saving…';
   try {
-    await api('POST', '/api/auth/change-password', { currentPassword: oldPass, newPassword: newPass });
+    const d = await api('POST', '/api/auth/change-password', { currentPassword: oldPass, newPassword: newPass });
     if (state.user) state.user.mustChangePassword = false;
+    if (d?.pendingActivation) {
+      if (state.user) state.user.pendingActivation = true;
+      showAlert('Password changed successfully!', 'success', 'cp-alerts');
+      setTimeout(() => renderAwaitActivation(), 1000);
+      return;
+    }
     await loadDropdowns();
     await checkActiveTask();
     showAlert('Password changed successfully!', 'success', 'cp-alerts');
@@ -479,30 +511,30 @@ async function doInviteUser() {
     const d = await api('POST', '/api/auth/invite', {});
     if (!d) { if (btn) { btn.disabled = false; btn.textContent = '👤 Invite a User'; } return; }
     if (btn) { btn.disabled = false; btn.textContent = '👤 Invite a User'; }
-    showInviteResult(d.username, d.tempPassword, d.pending);
+    showInviteResult(d.username, d.tempPassword, d.pendingActivation);
   } catch(e) {
     if (btn) { btn.disabled = false; btn.textContent = '👤 Invite a User'; }
     showAlert(e.message, 'error', 'settings-alerts');
   }
 }
 
-function showInviteResult(username, tempPassword, pending) {
+function showInviteResult(username, tempPassword, pendingActivation) {
   const alertsEl = document.getElementById('settings-alerts');
   if (!alertsEl) return;
   const loginUrl = window.location.origin;
-  const pendingNote = pending ? '\n\n⚠️ This account requires administrator approval before the user can log in.' : '';
-  const shareMsg = `You have been invited to use Tasker.\n\nUsername: ${username}\nTemporary password: ${tempPassword}\nLog in at: ${loginUrl}\n\nYou will be asked to set a new password when you first log in.${pendingNote}`;
+  const activationNote = pendingActivation ? '\n\n⏳ This account requires administrator activation. The user can log in and set their password, but will not have full access until an administrator activates their account.' : '';
+  const shareMsg = `You have been invited to use Tasker.\n\nUsername: ${username}\nTemporary password: ${tempPassword}\nLog in at: ${loginUrl}\n\nYou will be asked to set a new password when you first log in.${activationNote}`;
   const div = document.createElement('div');
   div.className = 'alert alert-success';
   div.style.cssText = 'display:flex;flex-direction:column;gap:10px';
   div.innerHTML = `
-    <div><strong>Invite created</strong>${pending ? ' <span style="color:#d97706">(pending admin approval)</span>' : ''}</div>
+    <div><strong>Invite created</strong>${pendingActivation ? ' <span style="color:#d97706">(awaiting activation)</span>' : ''}</div>
     <div style="font-size:.85rem">Username: <strong>${esc(username)}</strong></div>
     <div style="display:flex;align-items:center;gap:8px;background:#f0fdf4;border:1px solid #86efac;border-radius:6px;padding:8px 12px">
       <code class="tmp-pw-code" style="flex:1;font-size:1rem;letter-spacing:.05em;word-break:break-all">${esc(tempPassword)}</code>
       <button class="btn btn-outline btn-sm tmp-pw-copy">📋 Copy</button>
     </div>
-    ${pending ? '<div class="alert alert-warning" style="margin:0">⏳ This account needs administrator approval before the user can log in. Share the credentials now and let the user know they may need to wait.</div>' : ''}
+    ${pendingActivation ? '<div class="alert alert-warning" style="margin:0">⏳ The user can log in and change their password, but will see an "awaiting activation" page until an administrator activates their account.</div>' : ''}
     <div style="margin-top:4px">
       <p style="font-size:.8rem;color:#374151;margin:0 0 6px">Share via a <strong>secure channel</strong> (e.g. encrypted messaging or in person):</p>
       <div style="background:#f0fdf4;border:1px solid #86efac;border-radius:6px;padding:8px 12px">
@@ -573,7 +605,7 @@ async function doDeleteAccount() {
 // ── TASK START ───────────────────────────────────────────────────────────────
 function renderTaskStart() {
   stopTimer(); clearCharts(); state.currentView = 'task-start';
-  state.taskForm = { is_duty: true };
+  state.taskForm = { is_duty: null };
   app().innerHTML = `
   <div class="view">
     <div class="view-header">
@@ -584,8 +616,8 @@ function renderTaskStart() {
     <div class="form-group">
       <label>Task type</label>
       <div class="toggle-group">
-        <button class="toggle-btn active" id="tb-duty" onclick="setDuty(true)">🏥 Duty</button>
         <button class="toggle-btn" id="tb-personal" onclick="setDuty(false)">👤 Personal</button>
+        <button class="toggle-btn" id="tb-duty" onclick="setDuty(true)">🏥 Duty</button>
       </div>
     </div>
     ${buildDropdownGroup('category','Task From', state.dropdowns.category, 'ts-cat')}
@@ -656,9 +688,10 @@ async function doStartTask() {
   const category = document.getElementById('ts-cat-sel')?.value || null;
   const subcategory = document.getElementById('ts-sub-sel')?.value || null;
   const assigned_date = document.getElementById('ts-assigned')?.value || new Date().toISOString().split('T')[0];
-  const is_duty = state.taskForm.is_duty !== false;
+  const is_duty = state.taskForm.is_duty;
   if (!category) { showAlert('Please select a Task From.', 'error', 'ts-alerts'); return; }
   if (!subcategory) { showAlert('Please select a Task Type.', 'error', 'ts-alerts'); return; }
+  if (is_duty === null) { showAlert('Please select Duty or Personal.', 'error', 'ts-alerts'); return; }
   try {
     const d = await api('POST', '/api/tasks/start', {
       is_duty, category: category || null, subcategory: subcategory || null,
@@ -1254,22 +1287,23 @@ async function renderAdmin() {
   stopTimer(); clearCharts(); state.currentView = 'admin';
   app().innerHTML = `<div class="view"><p class="loading">Loading admin panel…</p></div>`;
   try {
-    const [stats, users, dropOpts, settings, pendingUsers] = await Promise.all([
+    const [stats, users, dropOpts, settings, pendingUsers, awaitingUsers] = await Promise.all([
       api('GET', '/api/admin/stats'),
       api('GET', '/api/admin/users'),
       api('GET', '/api/dropdowns/admin/all'),
       api('GET', '/api/admin/settings'),
       api('GET', '/api/admin/pending-users'),
+      api('GET', '/api/admin/awaiting-activation'),
     ]);
-    if (!stats || !users || !dropOpts || !settings || !pendingUsers) return;
-    renderAdminContent(stats, users?.users || [], dropOpts?.options || [], settings, pendingUsers?.users || []);
+    if (!stats || !users || !dropOpts || !settings || !pendingUsers || !awaitingUsers) return;
+    renderAdminContent(stats, users?.users || [], dropOpts?.options || [], settings, pendingUsers?.users || [], awaitingUsers?.users || []);
   } catch(e) {
     app().innerHTML = `<div class="view"><div id="admin-alerts"></div></div>`;
     showAlert(e.message, 'error', 'admin-alerts');
   }
 }
 
-function renderAdminContent(stats, users, dropOpts, settings, pendingUsers) {
+function renderAdminContent(stats, users, dropOpts, settings, pendingUsers, awaitingUsers) {
   const pending = dropOpts.filter(o => !o.approved);
   const approved = dropOpts.filter(o => o.approved);
   const userCards = users.map(u => `
@@ -1344,6 +1378,21 @@ function renderAdminContent(stats, users, dropOpts, settings, pendingUsers) {
     </div>
   </div>`).join('') : '<p style="font-size:.85rem;color:#6b7280">No pending users.</p>';
 
+  const awaitingUserCards = awaitingUsers.length ? awaitingUsers.map(u => `
+  <div class="card" style="padding:12px">
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+      <div>
+        <span style="font-weight:700">${esc(u.username)}</span>
+        ${u.must_change_password ? '<span class="badge badge-warn" style="margin-left:6px">Temp pw</span>' : ''}
+        <span style="font-size:.75rem;color:#6b7280;display:block;margin-top:2px">Invited ${new Date(u.created_at+'Z').toLocaleDateString()}</span>
+      </div>
+      <div style="display:flex;gap:6px">
+        <button class="btn btn-primary btn-sm" onclick="activateUser(${u.id}, '${esc(u.username)}')">✓ Activate</button>
+        <button class="btn btn-danger btn-sm" onclick="deleteUser(${u.id}, '${esc(u.username)}')">✗ Reject</button>
+      </div>
+    </div>
+  </div>`).join('') : '<p style="font-size:.85rem;color:#6b7280">No users awaiting activation.</p>';
+
   app().innerHTML = `
   <div class="view">
     <div class="view-header">
@@ -1374,6 +1423,9 @@ function renderAdminContent(stats, users, dropOpts, settings, pendingUsers) {
 
     <div class="section-heading">Pending User Approvals ${pendingUsers.length ? `<span class="badge badge-warn" style="margin-left:6px">${pendingUsers.length}</span>` : ''}</div>
     ${pendingUserCards}
+
+    <div class="section-heading">Awaiting Activation ${awaitingUsers.length ? `<span class="badge badge-warn" style="margin-left:6px">${awaitingUsers.length}</span>` : ''}</div>
+    ${awaitingUserCards}
 
     <div class="section-heading">Users</div>
     <button class="btn btn-primary btn-full" style="margin-bottom:14px" onclick="addUser()">➕ Add User</button>
@@ -1473,6 +1525,15 @@ async function approvePendingUser(userId) {
   try {
     await api('POST', `/api/admin/users/${userId}/approve`, {});
     showAlert('User approved and activated.', 'success', 'admin-alerts');
+    renderAdmin();
+  } catch(e) { showAlert(e.message, 'error', 'admin-alerts'); }
+}
+
+async function activateUser(userId, username) {
+  if (!confirm(`Activate account for ${username}?`)) return;
+  try {
+    await api('POST', `/api/admin/users/${userId}/activate`, {});
+    showAlert(`Account activated for ${username}.`, 'success', 'admin-alerts');
     renderAdmin();
   } catch(e) { showAlert(e.message, 'error', 'admin-alerts'); }
 }

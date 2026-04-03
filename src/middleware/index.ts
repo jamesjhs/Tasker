@@ -79,6 +79,16 @@ export function requirePasswordChange(req: Request, res: Response, next: NextFun
   next();
 }
 
+export function requireActivation(req: Request, res: Response, next: NextFunction): void {
+  const s = req.session as any;
+  const allowed = req.path.includes('/logout');
+  if (s?.pendingActivation && !allowed) {
+    res.status(403).json({ error: 'Your account is awaiting administrator activation', pendingActivation: true });
+    return;
+  }
+  next();
+}
+
 // ─── CSRF ─────────────────────────────────────────────────────────────────────
 export function validateCsrf(req: Request, res: Response, next: NextFunction): void {
   const token = req.headers['x-csrf-token'] as string;

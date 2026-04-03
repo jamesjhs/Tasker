@@ -54,6 +54,7 @@ function initSchema(db: Database.Database): void {
       must_change_password INTEGER NOT NULL DEFAULT 0,
       is_admin INTEGER NOT NULL DEFAULT 0,
       is_approved INTEGER NOT NULL DEFAULT 1,
+      pending_activation INTEGER NOT NULL DEFAULT 0,
       mfa_enabled INTEGER NOT NULL DEFAULT 0,
       failed_login_attempts INTEGER NOT NULL DEFAULT 0,
       is_locked INTEGER NOT NULL DEFAULT 0,
@@ -109,6 +110,9 @@ function initSchema(db: Database.Database): void {
   }
   if (!userCols.includes('is_approved')) {
     db.exec('ALTER TABLE users ADD COLUMN is_approved INTEGER NOT NULL DEFAULT 1');
+  }
+  if (!userCols.includes('pending_activation')) {
+    db.exec('ALTER TABLE users ADD COLUMN pending_activation INTEGER NOT NULL DEFAULT 0');
   }
 
   // Migrate existing databases: add assigned_date column if missing

@@ -16,10 +16,11 @@ const VALID_MODES = ['disabled', 'admin_approved', 'auto'];
 
 router.get('/stats', (_req: Request, res: Response) => {
   const db = getDb();
-  const userCount = (db.prepare('SELECT COUNT(*) as c FROM users WHERE is_admin=0 AND is_approved=1').get() as any).c;
+  const userCount = (db.prepare('SELECT COUNT(*) as c FROM users WHERE is_admin=0 AND is_approved=1 AND pending_activation=0').get() as any).c;
   const pendingCount = (db.prepare('SELECT COUNT(*) as c FROM users WHERE is_admin=0 AND is_approved=0').get() as any).c;
+  const awaitingActivationCount = (db.prepare('SELECT COUNT(*) as c FROM users WHERE is_admin=0 AND is_approved=1 AND pending_activation=1').get() as any).c;
   const eventCount = (db.prepare('SELECT COUNT(*) as c FROM events').get() as any).c;
-  res.json({ userCount, pendingCount, eventCount });
+  res.json({ userCount, pendingCount, awaitingActivationCount, eventCount });
 });
 
 router.get('/settings', (_req: Request, res: Response) => {
@@ -42,7 +43,7 @@ router.post('/settings', validateCsrf, (req: Request, res: Response) => {
 
 router.get('/users', (_req: Request, res: Response) => {
   const users = getDb().prepare(
-    'SELECT id,username,must_change_password,is_locked,created_at FROM users WHERE is_admin=0 AND is_approved=1 ORDER BY username'
+    'SELECT id,username,must_change_password,is_locked,created_at FROM users WHERE is_admin=0 AND is_approved=1 AND pending_activation=0 ORDER BY username'
   ).all();
   res.json({ users });
 });
@@ -50,6 +51,13 @@ router.get('/users', (_req: Request, res: Response) => {
 router.get('/pending-users', (_req: Request, res: Response) => {
   const users = getDb().prepare(
     'SELECT id,username,must_change_password,created_at FROM users WHERE is_admin=0 AND is_approved=0 ORDER BY created_at'
+  ).all();
+  res.json({ users });
+});
+
+router.get('/awaiting-activation', (_req: Request, res: Response) => {
+  const users = getDb().prepare(
+    'SELECT id,username,must_change_password,created_at FROM users WHERE is_admin=0 AND is_approved=1 AND pending_activation=1 ORDER BY created_at'
   ).all();
   res.json({ users });
 });
@@ -99,6 +107,15 @@ router.post('/users/:id/approve', validateCsrf, (req: Request, res: Response) =>
   if (!user) { res.status(404).json({ error: 'Pending user not found.' }); return; }
   getDb().prepare('UPDATE users SET is_approved=1 WHERE id=?').run(userId);
   logEvent('admin_user_approved');
+  res.json({ success: true });
+});
+
+router.post('/users/:id/activate', validateCsrf, (req: Request, res: Response) => {
+  const userId = Number(req.params['id']);
+  const user = getDb().prepare('SELECT id FROM users WHERE id=? AND is_admin=0 AND is_approved=1 AND pending_activation=1').get(userId);
+  if (!user) { res.status(404).json({ error: 'User awaiting activation not found.' }); return; }
+  getDb().prepare('UPDATE users SET pending_activation=0 WHERE id=?').run(userId);
+  logEvent('admin_user_activated');
   res.json({ success: true });
 });
 
