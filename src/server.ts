@@ -32,6 +32,7 @@ app.use(helmet({
       connectSrc: ["'self'", 'https://cdn.jsdelivr.net'],
       workerSrc: ["'self'"],
       manifestSrc: ["'self'"],
+      upgradeInsecureRequests: null, // server runs on plain HTTP; omit this directive to avoid browsers upgrading asset requests to HTTPS
     },
   },
 }));
