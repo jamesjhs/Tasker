@@ -185,6 +185,7 @@ async function renderLogin() {
       <a href="/policy" target="_blank" style="font-size:.85rem;color:#6b7280">Data &amp; Use Policy</a>
     </div>
   </div>`;
+  document.getElementById('l-user').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
   document.getElementById('l-pass').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
 }
 
@@ -326,6 +327,10 @@ function renderChangePassword() {
       <button class="btn btn-primary btn-full" id="cp-btn" onclick="doChangePassword(${isForced})">Save new password</button>
     </div>
   </div>`;
+  const cpEnter = e => { if (e.key === 'Enter') doChangePassword(isForced); };
+  document.getElementById('cp-new').addEventListener('keydown', cpEnter);
+  document.getElementById('cp-new2').addEventListener('keydown', cpEnter);
+  if (!isForced) document.getElementById('cp-old')?.addEventListener('keydown', cpEnter);
 }
 
 async function doChangePassword(isForced) {
@@ -417,7 +422,9 @@ function renderSettings() {
       <div class="divider"></div>
       <button class="btn btn-outline btn-full" style="margin-bottom:10px" onclick="renderChangePassword()">🔑 Change Password</button>
       <button class="btn btn-secondary btn-full" style="margin-bottom:10px" onclick="window.open('/policy','_blank')">📄 Data &amp; Use Policy</button>
-      <button class="btn btn-danger btn-full" onclick="doLogout()">🚪 Log Out</button>
+      <button class="btn btn-danger btn-full" style="margin-bottom:10px" onclick="doLogout()">🚪 Log Out</button>
+      <div class="divider"></div>
+      <button class="btn btn-danger btn-full" onclick="renderDeleteAccount()">🗑️ Delete My Account</button>
     </div>
   </div>
   ${renderBottomNav('settings')}`;
@@ -428,6 +435,53 @@ async function doLogout() {
   state.user = null; state.activeTask = null; state.csrfToken = null;
   try { await refreshCsrf(); } catch(e){}
   renderLogin();
+}
+
+function renderDeleteAccount() {
+  stopTimer(); clearCharts(); state.currentView = 'delete-account';
+  app().innerHTML = `
+  <div class="view">
+    <div class="view-header">
+      <button class="btn btn-secondary btn-sm" onclick="renderSettings()">← Back</button>
+      <h1>Delete Account</h1>
+    </div>
+    <div class="alert alert-warning" style="margin-bottom:16px">⚠️ <strong>This cannot be undone.</strong> All your tasks and data will be permanently deleted.</div>
+    <div id="da-alerts"></div>
+    <div class="card">
+      <div class="form-group">
+        <label for="da-user">Type your username to confirm</label>
+        <input id="da-user" class="input" type="text" autocomplete="off" autocapitalize="off" placeholder="${esc(state.user?.username)}">
+      </div>
+      <div class="form-group">
+        <label for="da-pass">Enter your password</label>
+        <div class="pw-field">
+          <input id="da-pass" class="input" type="password" autocomplete="current-password">
+          <button class="pw-toggle" type="button" onclick="togglePw('da-pass',this)">👁️</button>
+        </div>
+      </div>
+      <button class="btn btn-danger btn-full" id="da-btn" onclick="doDeleteAccount()">🗑️ Permanently Delete My Account</button>
+    </div>
+  </div>`;
+  const daEnter = e => { if (e.key === 'Enter') doDeleteAccount(); };
+  document.getElementById('da-user').addEventListener('keydown', daEnter);
+  document.getElementById('da-pass').addEventListener('keydown', daEnter);
+}
+
+async function doDeleteAccount() {
+  const btn = document.getElementById('da-btn');
+  const username = document.getElementById('da-user').value.trim();
+  const password = document.getElementById('da-pass').value;
+  if (!username || !password) { showAlert('Please enter your username and password.', 'error', 'da-alerts'); return; }
+  btn.disabled = true; btn.textContent = 'Deleting…';
+  try {
+    await api('DELETE', '/api/auth/account', { username, password });
+    state.user = null; state.activeTask = null; state.csrfToken = null;
+    try { await refreshCsrf(); } catch(e){}
+    renderLogin();
+  } catch(e) {
+    btn.disabled = false; btn.textContent = '🗑️ Permanently Delete My Account';
+    showAlert(e.message, 'error', 'da-alerts');
+  }
 }
 
 // ── TASK START ───────────────────────────────────────────────────────────────
@@ -1037,8 +1091,10 @@ function renderAdminContent(stats, users, dropOpts) {
       <div>
         <span style="font-weight:700">${esc(u.username)}</span>
         ${u.must_change_password ? '<span class="badge badge-warn" style="margin-left:6px">Temp pw</span>' : ''}
+        ${u.is_locked ? '<span class="badge badge-danger" style="margin-left:6px">🔒 Locked</span>' : ''}
       </div>
-      <div style="display:flex;gap:6px">
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        ${u.is_locked ? `<button class="btn btn-outline btn-sm" onclick="unlockUser(${u.id}, '${esc(u.username)}')">🔓 Unlock</button>` : ''}
         <button class="btn btn-outline btn-sm" onclick="resetUserPw(${u.id}, '${esc(u.username)}')">🔑 Reset</button>
         <button class="btn btn-danger btn-sm" onclick="deleteUser(${u.id}, '${esc(u.username)}')">🗑</button>
       </div>
@@ -1121,14 +1177,32 @@ function renderAdminContent(stats, users, dropOpts) {
   </div>`;
 }
 
+function showTempPassword(label, username, tempPassword) {
+  const alertsEl = document.getElementById('admin-alerts');
+  if (!alertsEl) return;
+  const div = document.createElement('div');
+  div.className = 'alert alert-success';
+  div.style.cssText = 'display:flex;flex-direction:column;gap:10px';
+  div.innerHTML = `
+    <div><strong>${esc(label)}</strong></div>
+    <div style="font-size:.85rem">Username: <strong>${esc(username)}</strong></div>
+    <div style="display:flex;align-items:center;gap:8px;background:#f0fdf4;border:1px solid #86efac;border-radius:6px;padding:8px 12px">
+      <code id="tmp-pw-display" style="flex:1;font-size:1rem;letter-spacing:.05em;word-break:break-all">${esc(tempPassword)}</code>
+      <button class="btn btn-outline btn-sm" onclick="navigator.clipboard?.writeText('${esc(tempPassword)}').then(()=>this.textContent='✓ Copied!').catch(()=>{})">📋 Copy</button>
+    </div>
+    <p style="font-size:.8rem;color:#374151;margin:0">Share this with the user securely. It will not be shown again.</p>
+    <button class="btn btn-secondary btn-sm" onclick="this.closest('.alert').remove()">Dismiss</button>`;
+  alertsEl.prepend(div);
+}
+
 async function addUser() {
   const btn = event.target;
   btn.disabled = true; btn.textContent = 'Creating…';
   try {
     const d = await api('POST', '/api/admin/users', {});
     if (!d) { btn.disabled = false; btn.textContent = '➕ Add User'; return; }
-    showAlert(`Created: ${d.username} / ${d.tempPassword} (share securely)`, 'success', 'admin-alerts');
-    renderAdmin();
+    await renderAdmin();
+    showTempPassword('New user created', d.username, d.tempPassword);
   } catch(e) {
     btn.disabled = false; btn.textContent = '➕ Add User';
     showAlert(e.message, 'error', 'admin-alerts');
@@ -1140,7 +1214,17 @@ async function resetUserPw(userId, username) {
   try {
     const d = await api('POST', `/api/admin/users/${userId}/reset-password`, {});
     if (!d) return;
-    showAlert(`New temp password for ${username}: ${d.tempPassword}`, 'success', 'admin-alerts');
+    await renderAdmin();
+    showTempPassword(`Temporary password for ${username}`, username, d.tempPassword);
+  } catch(e) { showAlert(e.message, 'error', 'admin-alerts'); }
+}
+
+async function unlockUser(userId, username) {
+  if (!confirm(`Unlock account for ${username}?`)) return;
+  try {
+    await api('POST', `/api/admin/users/${userId}/unlock`, {});
+    showAlert(`Account unlocked for ${username}.`, 'success', 'admin-alerts');
+    renderAdmin();
   } catch(e) { showAlert(e.message, 'error', 'admin-alerts'); }
 }
 

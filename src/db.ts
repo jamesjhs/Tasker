@@ -45,6 +45,8 @@ function initSchema(db: Database.Database): void {
       must_change_password INTEGER NOT NULL DEFAULT 0,
       is_admin INTEGER NOT NULL DEFAULT 0,
       mfa_enabled INTEGER NOT NULL DEFAULT 0,
+      failed_login_attempts INTEGER NOT NULL DEFAULT 0,
+      is_locked INTEGER NOT NULL DEFAULT 0,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
 
@@ -80,6 +82,15 @@ function initSchema(db: Database.Database): void {
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
   `);
+
+  // Migrate existing databases: add lockout columns if missing
+  const userCols = (db.prepare("PRAGMA table_info(users)").all() as { name: string }[]).map(c => c.name);
+  if (!userCols.includes('failed_login_attempts')) {
+    db.exec('ALTER TABLE users ADD COLUMN failed_login_attempts INTEGER NOT NULL DEFAULT 0');
+  }
+  if (!userCols.includes('is_locked')) {
+    db.exec('ALTER TABLE users ADD COLUMN is_locked INTEGER NOT NULL DEFAULT 0');
+  }
 
   // Seed default dropdowns if empty
   const count = (db.prepare('SELECT COUNT(*) as c FROM dropdown_options WHERE approved=1').get() as { c: number }).c;

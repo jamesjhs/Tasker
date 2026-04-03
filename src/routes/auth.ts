@@ -39,11 +39,26 @@ router.post('/login', validateCsrf, async (req: Request, res: Response) => {
   const user = db.prepare('SELECT * FROM users WHERE username=?').get(username) as any;
   if (!user) {
     await bcrypt.compare(password, '$2a$12$invalidhashfortimingsafety00000000000000000');
-    res.status(401).json({ error: 'Invalid username or password.' });
+    res.status(401).json({ error: 'Incorrect username or password. Please check and try again.' });
+    return;
+  }
+  if (user.is_locked) {
+    res.status(403).json({ error: 'This account has been locked after too many failed login attempts. Please contact an administrator to unlock it.' });
     return;
   }
   const valid = await bcrypt.compare(password, user.password_hash);
-  if (!valid) { res.status(401).json({ error: 'Invalid username or password.' }); return; }
+  if (!valid) {
+    const attempts = (user.failed_login_attempts || 0) + 1;
+    const locked = attempts >= 3;
+    db.prepare('UPDATE users SET failed_login_attempts=?, is_locked=? WHERE id=?').run(attempts, locked ? 1 : 0, user.id);
+    const remaining = 3 - attempts;
+    if (locked) {
+      res.status(403).json({ error: 'Account locked after 3 failed login attempts. Please contact an administrator to unlock it.' });
+    } else {
+      res.status(401).json({ error: `Incorrect password. ${remaining} attempt${remaining === 1 ? '' : 's'} remaining before account lockout.` });
+    }
+    return;
+  }
   const s = req.session as any;
   s.userId = user.id;
   s.isAdmin = user.is_admin === 1;
@@ -51,6 +66,7 @@ router.post('/login', validateCsrf, async (req: Request, res: Response) => {
   s.lastActivity = Date.now();
   s.sessionDate = new Date().toDateString();
   s.csrfToken = crypto.randomBytes(32).toString('hex');
+  db.prepare('UPDATE users SET failed_login_attempts=0, is_locked=0 WHERE id=?').run(user.id);
   logEvent('user_login');
   res.json({ success: true, isAdmin: user.is_admin === 1, mustChangePassword: user.must_change_password === 1 });
 });
@@ -83,6 +99,24 @@ router.get('/me', requireAuth, (req: Request, res: Response) => {
   const s = req.session as any;
   const user = getDb().prepare('SELECT username,is_admin,must_change_password FROM users WHERE id=?').get(s.userId) as any;
   res.json({ username: user.username, isAdmin: user.is_admin === 1, mustChangePassword: user.must_change_password === 1 });
+});
+
+router.delete('/account', requireAuth, validateCsrf, async (req: Request, res: Response) => {
+  const { username, password } = req.body as { username: string; password: string };
+  const s = req.session as any;
+  const db = getDb();
+  const user = db.prepare('SELECT * FROM users WHERE id=? AND is_admin=0').get(s.userId) as any;
+  if (!user) { res.status(404).json({ error: 'Account not found.' }); return; }
+  if (!username || username !== user.username) {
+    res.status(400).json({ error: 'Username does not match. Account not deleted.' });
+    return;
+  }
+  const valid = await bcrypt.compare(password || '', user.password_hash);
+  if (!valid) { res.status(401).json({ error: 'Incorrect password. Account not deleted.' }); return; }
+  db.prepare('DELETE FROM users WHERE id=?').run(user.id);
+  logEvent('user_self_deleted');
+  req.session.destroy(() => {});
+  res.json({ success: true });
 });
 
 export default router;
