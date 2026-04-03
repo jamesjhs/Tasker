@@ -112,7 +112,7 @@ async function init() {
       setLoadingStatus('Rendering…');
       await (state.user.isAdmin ? renderAdmin() : renderHome());
     } else {
-      renderLogin();
+      await renderLogin();
     }
   } catch(e) {
     showLoadingError(`Initialization failed: ${e.message || e}`);
@@ -157,6 +157,7 @@ function renderBottomNav(active) {
 // ── LOGIN ────────────────────────────────────────────────────────────────────
 async function renderLogin() {
   stopTimer(); clearCharts(); state.currentView = 'login';
+  try { await refreshCsrf(); } catch(e) {}
   app().innerHTML = `
   <div class="view">
     <div style="text-align:center;padding-top:30px;margin-bottom:28px">
