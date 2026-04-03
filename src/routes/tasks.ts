@@ -21,15 +21,15 @@ router.post('/start', validateCsrf, (req: Request, res: Response) => {
   const db = getDb();
   const active = db.prepare(`SELECT id FROM tasks WHERE user_id=? AND status='in_progress'`).get(s.userId);
   if (active) { res.status(409).json({ error: 'You already have an active task. Complete or discard it first.' }); return; }
-  const { is_duty, category, subcategory, outcome, notes, start_time } = req.body as any;
+  const { is_duty, category, subcategory, outcome, notes, start_time, assigned_date } = req.body as any;
   const now = start_time || new Date().toISOString();
   if (new Date(now).toDateString() !== new Date().toDateString()) {
     res.status(400).json({ error: 'Task start time must be today.' }); return;
   }
   const r = db.prepare(
-    `INSERT INTO tasks (user_id,is_duty,start_time,category,subcategory,outcome,notes,status)
-     VALUES (?,?,?,?,?,?,?,'in_progress')`
-  ).run(s.userId, is_duty ? 1 : 0, now, category || null, subcategory || null, outcome || null, notes || null);
+    `INSERT INTO tasks (user_id,is_duty,assigned_date,start_time,category,subcategory,outcome,notes,status)
+     VALUES (?,?,?,?,?,?,?,?,'in_progress')`
+  ).run(s.userId, is_duty ? 1 : 0, assigned_date || null, now, category || null, subcategory || null, outcome || null, notes || null);
   logEvent('task_started');
   res.json({ taskId: r.lastInsertRowid });
 });

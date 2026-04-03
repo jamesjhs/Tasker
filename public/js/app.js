@@ -502,13 +502,11 @@ function renderTaskStart() {
         <button class="toggle-btn" id="tb-personal" onclick="setDuty(false)">👤 Personal</button>
       </div>
     </div>
-    ${buildDropdownGroup('category','Category', state.dropdowns.category, 'ts-cat')}
-    ${buildDropdownGroup('subcategory','Subcategory', state.dropdowns.subcategory, 'ts-sub')}
-    ${buildDropdownGroup('outcome','Outcome (optional)', state.dropdowns.outcome, 'ts-out')}
+    ${buildDropdownGroup('category','Task From', state.dropdowns.category, 'ts-cat')}
+    ${buildDropdownGroup('subcategory','Task Type', state.dropdowns.subcategory, 'ts-sub')}
     <div class="form-group">
-      <div class="warning-label">⚠️ DO NOT enter any patient names, initials, NHS numbers, or any information that could identify a patient or person.</div>
-      <label for="ts-notes">Notes (optional)</label>
-      <textarea id="ts-notes" class="textarea" placeholder="Optional notes about this task (no patient data)"></textarea>
+      <label for="ts-assigned">Date assigned</label>
+      <input id="ts-assigned" class="input" type="date" value="${new Date().toISOString().split('T')[0]}">
     </div>
     <button class="btn btn-primary btn-full" style="font-size:1.1rem;padding:18px" onclick="doStartTask()">▶ Start Timer</button>
   </div>`;
@@ -571,13 +569,14 @@ async function submitNewOption(containerId, field) {
 async function doStartTask() {
   const category = document.getElementById('ts-cat-sel')?.value || null;
   const subcategory = document.getElementById('ts-sub-sel')?.value || null;
-  const outcome = document.getElementById('ts-out-sel')?.value || null;
-  const notes = document.getElementById('ts-notes')?.value || null;
+  const assigned_date = document.getElementById('ts-assigned')?.value || new Date().toISOString().split('T')[0];
   const is_duty = state.taskForm.is_duty !== false;
+  if (!category) { showAlert('Please select a Task From.', 'error', 'ts-alerts'); return; }
+  if (!subcategory) { showAlert('Please select a Task Type.', 'error', 'ts-alerts'); return; }
   try {
     const d = await api('POST', '/api/tasks/start', {
       is_duty, category: category || null, subcategory: subcategory || null,
-      outcome: outcome || null, notes: notes || null,
+      assigned_date,
       start_time: new Date().toISOString(),
     });
     if (!d) return;
@@ -759,6 +758,40 @@ function renderTaskReview(t, isEdit) {
     <button class="btn btn-danger btn-sm" onclick="removeInterruption(${idx})">✕</button>
   </div>`).join('') : '<p style="font-size:.85rem;color:#6b7280">No interruptions recorded.</p>';
 
+  const taskSummaryHtml = !isEdit ? `
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:10px 0;border-bottom:1px solid #e5e7eb;margin-bottom:4px">
+        <span class="badge ${t.is_duty ? 'badge-duty' : 'badge-personal'}">${t.is_duty ? '🏥 Duty' : '👤 Personal'}</span>
+        ${t.category ? `<span style="font-weight:600;color:#374151">${esc(t.category)}</span>` : ''}
+        ${t.subcategory ? `<span style="color:#6b7280">›</span><span style="color:#374151">${esc(t.subcategory)}</span>` : ''}
+      </div>` : `
+      <div class="form-group">
+        <label>Task type</label>
+        <div class="toggle-group">
+          <button class="toggle-btn ${t.is_duty ? 'active' : ''}" id="te-duty" onclick="setEditDuty(true)">🏥 Duty</button>
+          <button class="toggle-btn ${!t.is_duty ? 'active' : ''}" id="te-personal" onclick="setEditDuty(false)">👤 Personal</button>
+        </div>
+      </div>
+      ${buildReviewDropdown('category', 'Task From', state.dropdowns.category, t.category)}
+      ${buildReviewDropdown('subcategory', 'Task Type', state.dropdowns.subcategory, t.subcategory)}`;
+
+  const outcomeHtml = !isEdit
+    ? buildReviewOutcomeGroup(state.dropdowns.outcome, t.outcome)
+    : buildReviewDropdown('outcome', 'Outcome', state.dropdowns.outcome, t.outcome);
+
+  const notesHtml = !isEdit ? `
+      <details class="form-group">
+        <summary style="cursor:pointer;font-weight:600;color:#374151;padding:4px 0;user-select:none">Notes (optional)</summary>
+        <div style="margin-top:10px">
+          <div class="warning-label">⚠️ DO NOT enter any patient names, initials, or identifiable information.</div>
+          <textarea id="te-notes" class="textarea" style="margin-top:6px" placeholder="Optional notes (no patient data)">${esc(t.notes || '')}</textarea>
+        </div>
+      </details>` : `
+      <div class="form-group">
+        <div class="warning-label">⚠️ DO NOT enter any patient names, initials, or identifiable information.</div>
+        <label for="te-notes">Notes</label>
+        <textarea id="te-notes" class="textarea">${esc(t.notes || '')}</textarea>
+      </div>`;
+
   app().innerHTML = `
   <div class="view">
     <div class="view-header">
@@ -767,16 +800,8 @@ function renderTaskReview(t, isEdit) {
     </div>
     <div id="te-alerts"></div>
     <div class="card">
-      <div class="form-group">
-        <label>Task type</label>
-        <div class="toggle-group">
-          <button class="toggle-btn ${t.is_duty ? 'active' : ''}" id="te-duty" onclick="setEditDuty(true)">🏥 Duty</button>
-          <button class="toggle-btn ${!t.is_duty ? 'active' : ''}" id="te-personal" onclick="setEditDuty(false)">👤 Personal</button>
-        </div>
-      </div>
-      ${buildReviewDropdown('category', 'Category', state.dropdowns.category, t.category)}
-      ${buildReviewDropdown('subcategory', 'Subcategory', state.dropdowns.subcategory, t.subcategory)}
-      ${buildReviewDropdown('outcome', 'Outcome', state.dropdowns.outcome, t.outcome)}
+      ${taskSummaryHtml}
+      ${outcomeHtml}
       <div class="form-group">
         <label for="te-start">Start time</label>
         <input id="te-start" class="input" type="datetime-local" value="${formatDatetimeLocal(t.start_time)}">
@@ -785,21 +810,20 @@ function renderTaskReview(t, isEdit) {
         <label for="te-end">End time</label>
         <input id="te-end" class="input" type="datetime-local" value="${formatDatetimeLocal(t.end_time)}">
       </div>
-      <div class="form-group">
-        <div class="warning-label">⚠️ DO NOT enter any patient names, initials, or identifiable information.</div>
-        <label for="te-notes">Notes</label>
-        <textarea id="te-notes" class="textarea">${esc(t.notes || '')}</textarea>
-      </div>
+      ${notesHtml}
     </div>
     <div class="card">
       <div class="card-title">Interruptions</div>
       <div id="intr-list">${intrHtml}</div>
     </div>
     <div style="display:flex;gap:10px;margin-bottom:80px">
-      <button class="btn btn-primary" style="flex:1" onclick="submitTaskReview(${t.id}, ${isEdit})">
-        ${isEdit ? '💾 Save changes' : '✅ Submit task'}
-      </button>
-      ${!isEdit ? `<button class="btn btn-danger btn-sm" onclick="discardFromEnd(${t.id})">🗑</button>` : ''}
+      ${isEdit ? `
+        <button class="btn btn-primary" style="flex:1" onclick="submitTaskReview(${t.id}, true)">💾 Save changes</button>
+      ` : `
+        <button class="btn btn-secondary" style="flex:1" onclick="submitTaskReview(${t.id}, false, 'start')">➕ Submit &amp; add another</button>
+        <button class="btn btn-primary" style="flex:1" onclick="submitTaskReview(${t.id}, false, 'analytics')">📊 Submit &amp; analytics</button>
+        <button class="btn btn-danger btn-sm" onclick="discardFromEnd(${t.id})">🗑</button>
+      `}
     </div>
   </div>`;
 
@@ -819,6 +843,50 @@ function buildReviewDropdown(field, label, options, current) {
   </div>`;
 }
 
+function buildReviewOutcomeGroup(options, current) {
+  const opts = options.map(o => `<option value="${esc(o)}" ${o === current ? 'selected' : ''}>${esc(o)}</option>`).join('');
+  return `
+  <div class="form-group" id="te-out-group">
+    <label for="te-outcome">Outcome</label>
+    <select id="te-outcome" class="select" onchange="onOutcomeEndChange()">
+      <option value="">— Select —</option>${opts}
+      <option value="__new__">+ Add new outcome…</option>
+    </select>
+    <div id="te-out-new" style="display:none" class="add-new-row">
+      <input id="te-out-new-input" class="input" type="text" placeholder="Type new outcome…">
+      <button class="btn btn-outline btn-sm" onclick="submitNewOutcomeEnd()">Add</button>
+    </div>
+  </div>`;
+}
+
+function onOutcomeEndChange() {
+  const sel = document.getElementById('te-outcome');
+  const newDiv = document.getElementById('te-out-new');
+  if (sel.value === '__new__') {
+    newDiv.style.display = 'flex';
+    sel.value = '';
+  } else {
+    newDiv.style.display = 'none';
+  }
+}
+
+async function submitNewOutcomeEnd() {
+  const input = document.getElementById('te-out-new-input');
+  const val = input.value.trim();
+  if (!val) return;
+  try {
+    await api('POST', '/api/dropdowns/propose', { field_name: 'outcome', value: val });
+    const sel = document.getElementById('te-outcome');
+    const opt = document.createElement('option');
+    opt.value = val; opt.textContent = val;
+    sel.insertBefore(opt, sel.lastElementChild);
+    sel.value = val;
+    document.getElementById('te-out-new').style.display = 'none';
+    input.value = '';
+    showAlert('Outcome added — pending admin approval.', 'success', 'te-alerts');
+  } catch(e) { showAlert(e.message, 'error', 'te-alerts'); }
+}
+
 function setEditDuty(isDuty) {
   document.getElementById('te-duty').classList.toggle('active', isDuty);
   document.getElementById('te-personal').classList.toggle('active', !isDuty);
@@ -831,17 +899,24 @@ function removeInterruption(idx) {
   renderTaskReview(t, window._reviewIsEdit);
 }
 
-async function submitTaskReview(taskId, isEdit) {
+async function submitTaskReview(taskId, isEdit, dest) {
   const t = window._reviewTask;
   const start = document.getElementById('te-start')?.value;
   const end = document.getElementById('te-end')?.value;
   if (!end) { showAlert('Please set an end time.', 'error', 'te-alerts'); return; }
+  const outcome = document.getElementById('te-outcome')?.value || null;
+  if (!outcome) { showAlert('Please select an Outcome.', 'error', 'te-alerts'); return; }
+  const dutyEl = document.getElementById('te-duty');
+  const categoryVal = document.getElementById('te-category')?.value || t.category || null;
+  const subcategoryVal = document.getElementById('te-subcategory')?.value || t.subcategory || null;
+  if (isEdit && !categoryVal) { showAlert('Please select a Task From.', 'error', 'te-alerts'); return; }
+  if (isEdit && !subcategoryVal) { showAlert('Please select a Task Type.', 'error', 'te-alerts'); return; }
   const body = {
     status: 'completed',
-    is_duty: document.getElementById('te-duty')?.classList.contains('active') ? 1 : 0,
-    category: document.getElementById('te-category')?.value || null,
-    subcategory: document.getElementById('te-subcategory')?.value || null,
-    outcome: document.getElementById('te-outcome')?.value || null,
+    is_duty: dutyEl ? (dutyEl.classList.contains('active') ? 1 : 0) : (t.is_duty ? 1 : 0),
+    category: categoryVal,
+    subcategory: subcategoryVal,
+    outcome,
     notes: document.getElementById('te-notes')?.value || null,
     start_time: start ? new Date(start).toISOString() : t.start_time,
     end_time: new Date(end).toISOString(),
@@ -851,8 +926,12 @@ async function submitTaskReview(taskId, isEdit) {
     await api('PATCH', `/api/tasks/${taskId}`, body);
     state.activeTask = null;
     await checkActiveTask();
-    showAlert('Task saved!', 'success', 'te-alerts');
-    setTimeout(() => renderAnalyticsSession(), 800);
+    if (dest === 'start') {
+      renderTaskStart();
+    } else {
+      showAlert('Task saved!', 'success', 'te-alerts');
+      setTimeout(() => renderAnalyticsSession(), 800);
+    }
   } catch(e) { showAlert(e.message, 'error', 'te-alerts'); }
 }
 
