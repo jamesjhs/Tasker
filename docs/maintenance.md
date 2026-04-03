@@ -1,6 +1,6 @@
 # Tasker — Maintenance and Troubleshooting Manual
 
-**Version 1.0.0 — April 2026**
+**Version 1.1.0 — April 2026**
 
 ---
 
@@ -157,9 +157,34 @@ sudo systemctl restart tasker
 
 All user management is done from the **Admin Panel**, accessible by logging in as the admin account from a mobile browser.
 
-### Adding a user
+### Registration settings
 
-Tap **➕ Add User**. The system generates a random username and a temporary password. A copy button and a pre-formatted invite message are displayed — share these with the new user through a secure channel (e.g. in person or via an encrypted messaging app). The user will be required to set a new password on their first login.
+The Admin Panel includes a **Registration Settings** section with two configurable policies:
+
+| Setting | Description |
+|---|---|
+| **Self-registration** | Controls whether the Register button is shown on the login page |
+| **User invitations** | Controls whether logged-in users can invite others via the Settings page |
+
+Each setting has three options:
+
+| Option | Behaviour |
+|---|---|
+| **Disabled** | The feature is hidden and unavailable |
+| **Administrator approval** (default) | Accounts are created but marked pending. The user sees their username but cannot log in until an admin approves the account in the **Pending User Approvals** section |
+| **Automatic approval** | Accounts are immediately active |
+
+### Adding a user (admin-created)
+
+Tap **➕ Add User**. The system generates a random username and a temporary password. A copy button and a pre-formatted invite message are displayed — share these with the new user through a secure channel (e.g. in person or via an encrypted messaging app). The user will be required to set a new password on their first login. Admin-created users are always immediately active.
+
+### Approving pending users
+
+When self-registration or user invitations are set to **Administrator approval**, new accounts appear in the **Pending User Approvals** section of the Admin Panel. Tap **✓ Approve** to activate the account, or **✗ Reject** to delete it.
+
+### User invitations
+
+If the **User invitations** setting is not Disabled, a **👤 Invite a User** button appears in the Settings page for logged-in users. This generates a temporary-password invite in the same way as admin-created accounts. If the setting is **Administrator approval**, the invited account will be pending until an admin approves it.
 
 ### Resetting a user's password
 
@@ -260,6 +285,7 @@ sudo journalctl -u tasker -n 50 --no-pager
 |---|---|---|
 | "Incorrect username or password" | Wrong credentials | Reset password via admin panel |
 | "This account has been locked" | Too many failed attempts | Unlock via admin panel |
+| "Your account is pending administrator approval" | Account created via self-registration or user invite with approval required | Approve the account in Admin Panel → Pending User Approvals |
 | "Not authenticated" after successful login | Session cookies not being set | Ensure `NODE_ENV=production` is set when using HTTPS; check `secure` cookie setting |
 | Login works on HTTP but not HTTPS | `secure` cookie flag requires HTTPS | Serve the app over HTTPS in production |
 

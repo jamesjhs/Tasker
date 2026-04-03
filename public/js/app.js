@@ -153,7 +153,7 @@ function renderBottomNav(active) {
       <span class="nav-icon">⚙️</span><span>Settings</span>
     </button>
   </nav>
-  <p style="text-align:center;font-size:.75rem;color:#9ca3af;padding:8px 0 16px">v1.0.0 &nbsp;·&nbsp; <a href="/policy" target="_blank" style="color:#9ca3af">Privacy Policy</a> &nbsp;·&nbsp; <a href="/help" target="_blank" style="color:#9ca3af">Help</a></p>`;
+  <p style="text-align:center;font-size:.75rem;color:#9ca3af;padding:8px 0 16px">v1.1.0 &nbsp;·&nbsp; <a href="/policy" target="_blank" style="color:#9ca3af">Privacy Policy</a> &nbsp;·&nbsp; <a href="/help" target="_blank" style="color:#9ca3af">Help</a></p>`;
 }
 
 // ── LOGIN ────────────────────────────────────────────────────────────────────
@@ -191,7 +191,7 @@ async function renderLogin() {
       ${showRegister ? `<button class="link-btn" onclick="renderRegister()">Don't have an account? Register</button>` : ''}
       <a href="/policy" target="_blank" style="font-size:.85rem;color:#6b7280">Data &amp; Use Policy</a>
     </div>
-    <p style="text-align:center;font-size:.75rem;color:#9ca3af;margin-top:24px;padding-bottom:16px">v1.0.0</p>
+    <p style="text-align:center;font-size:.75rem;color:#9ca3af;margin-top:24px;padding-bottom:16px">v1.1.0</p>
   </div>`;
   document.getElementById('l-user').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
   document.getElementById('l-pass').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
@@ -410,7 +410,7 @@ function renderHomeHTML() {
       </div>
     </div>` : `
     <button class="btn btn-primary btn-full" style="font-size:1.1rem;padding:18px" onclick="renderTaskStart()">
-      ▶ Start New Task
+      ▶ Log Task
     </button>`}
   </div>
   ${renderBottomNav('home')}`;
@@ -578,7 +578,7 @@ function renderTaskStart() {
   <div class="view">
     <div class="view-header">
       <button class="btn btn-secondary btn-sm" onclick="renderHome()">← Back</button>
-      <h1>Start Task</h1>
+      <h1>Log Task</h1>
     </div>
     <div id="ts-alerts"></div>
     <div class="form-group">
@@ -1406,7 +1406,7 @@ function renderAdminContent(stats, users, dropOpts, settings, pendingUsers) {
 
     <div class="divider"></div>
     <button class="btn btn-secondary btn-full" style="margin-bottom:16px" onclick="doLogout()">🚪 Log Out</button>
-    <p style="text-align:center;font-size:.75rem;color:#9ca3af;padding-bottom:80px">v1.0.0 &nbsp;·&nbsp; <a href="/policy" target="_blank" style="color:#9ca3af">Privacy Policy</a> &nbsp;·&nbsp; <a href="/help" target="_blank" style="color:#9ca3af">Help</a></p>
+    <p style="text-align:center;font-size:.75rem;color:#9ca3af;padding-bottom:80px">v1.1.0 &nbsp;·&nbsp; <a href="/policy" target="_blank" style="color:#9ca3af">Privacy Policy</a> &nbsp;·&nbsp; <a href="/help" target="_blank" style="color:#9ca3af">Help</a></p>
   </div>`;
 }
 
