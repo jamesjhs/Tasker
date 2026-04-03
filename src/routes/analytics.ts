@@ -1,11 +1,12 @@
 import { Router, Request, Response } from 'express';
 import { getDb } from '../db';
-import { requireAuth, requirePasswordChange } from '../middleware/index';
+import { requireAuth, requirePasswordChange, requireActivation } from '../middleware/index';
 import ExcelJS from 'exceljs';
 
 const router = Router();
 router.use(requireAuth);
 router.use(requirePasswordChange);
+router.use(requireActivation);
 
 function mins(start: string, end: string, interruptions: any[]): number {
   if (!start || !end) return 0;

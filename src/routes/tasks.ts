@@ -1,10 +1,11 @@
 import { Router, Request, Response } from 'express';
 import { getDb } from '../db';
-import { requireAuth, validateCsrf, requirePasswordChange, logEvent } from '../middleware/index';
+import { requireAuth, validateCsrf, requirePasswordChange, requireActivation, logEvent } from '../middleware/index';
 
 const router = Router();
 router.use(requireAuth);
 router.use(requirePasswordChange);
+router.use(requireActivation);
 
 router.get('/active', (req: Request, res: Response) => {
   const s = req.session as any;

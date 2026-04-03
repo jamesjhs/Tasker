@@ -58,11 +58,13 @@ router.post('/invite', requireAuth, validateCsrf, async (req: Request, res: Resp
   const username = generateUsername();
   const tempPassword = crypto.randomBytes(5).toString('hex') + '!';
   const hash = await bcrypt.hash(tempPassword, 12);
-  const isApproved = userInvite === 'auto' ? 1 : 0;
+  // User-invited accounts can always log in but require admin activation
+  // unless the mode is 'auto' (no admin action needed)
+  const pendingActivation = userInvite === 'auto' ? 0 : 1;
   try {
-    db.prepare('INSERT INTO users (username,password_hash,must_change_password,is_approved) VALUES (?,?,1,?)').run(username, hash, isApproved);
+    db.prepare('INSERT INTO users (username,password_hash,must_change_password,is_approved,pending_activation) VALUES (?,?,1,1,?)').run(username, hash, pendingActivation);
     logEvent('user_invited');
-    res.json({ username, tempPassword, pending: isApproved === 0, message: 'User invited. Share credentials securely.' });
+    res.json({ username, tempPassword, pendingActivation: pendingActivation === 1, message: 'User invited. Share credentials securely.' });
   } catch {
     res.status(500).json({ error: 'Invite failed. Please try again.' });
   }
@@ -103,12 +105,13 @@ router.post('/login', validateCsrf, async (req: Request, res: Response) => {
   s.userId = user.id;
   s.isAdmin = user.is_admin === 1;
   s.mustChangePassword = user.must_change_password === 1;
+  s.pendingActivation = user.must_change_password === 0 && user.pending_activation === 1;
   s.lastActivity = Date.now();
   s.sessionDate = new Date().toDateString();
   s.csrfToken = crypto.randomBytes(32).toString('hex');
   db.prepare('UPDATE users SET failed_login_attempts=0, is_locked=0 WHERE id=?').run(user.id);
   logEvent('user_login');
-  res.json({ success: true, isAdmin: user.is_admin === 1, mustChangePassword: user.must_change_password === 1 });
+  res.json({ success: true, isAdmin: user.is_admin === 1, mustChangePassword: user.must_change_password === 1, pendingActivation: user.must_change_password === 0 && user.pending_activation === 1 });
 });
 
 router.post('/logout', (req: Request, res: Response) => {
@@ -131,14 +134,20 @@ router.post('/change-password', requireAuth, validateCsrf, async (req: Request, 
   const hash = await bcrypt.hash(newPassword, 12);
   db.prepare('UPDATE users SET password_hash=?,must_change_password=0 WHERE id=?').run(hash, s.userId);
   s.mustChangePassword = false;
+  // Now that the password is changed, activation state becomes active in session
+  const updated = db.prepare('SELECT pending_activation FROM users WHERE id=?').get(s.userId) as any;
+  const pendingActivation = updated.pending_activation === 1;
+  s.pendingActivation = pendingActivation;
   logEvent('password_changed');
-  res.json({ success: true });
+  res.json({ success: true, pendingActivation });
 });
 
 router.get('/me', requireAuth, (req: Request, res: Response) => {
   const s = req.session as any;
-  const user = getDb().prepare('SELECT username,is_admin,must_change_password FROM users WHERE id=?').get(s.userId) as any;
-  res.json({ username: user.username, isAdmin: user.is_admin === 1, mustChangePassword: user.must_change_password === 1 });
+  const user = getDb().prepare('SELECT username,is_admin,must_change_password,pending_activation FROM users WHERE id=?').get(s.userId) as any;
+  const pendingActivation = user.must_change_password === 0 && user.pending_activation === 1;
+  s.pendingActivation = pendingActivation;
+  res.json({ username: user.username, isAdmin: user.is_admin === 1, mustChangePassword: user.must_change_password === 1, pendingActivation });
 });
 
 router.delete('/account', requireAuth, validateCsrf, async (req: Request, res: Response) => {

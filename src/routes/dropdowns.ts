@@ -1,11 +1,11 @@
 import { Router, Request, Response } from 'express';
 import { getDb } from '../db';
-import { requireAuth, requireAdmin, validateCsrf, requirePasswordChange } from '../middleware/index';
+import { requireAuth, requireAdmin, validateCsrf, requirePasswordChange, requireActivation } from '../middleware/index';
 
 const router = Router();
 const ALLOWED = ['category', 'subcategory', 'outcome'];
 
-router.get('/:field', requireAuth, requirePasswordChange, (req: Request, res: Response) => {
+router.get('/:field', requireAuth, requirePasswordChange, requireActivation, (req: Request, res: Response) => {
   const field = req.params['field'] as string;
   if (!ALLOWED.includes(field)) { res.status(400).json({ error: 'Invalid field.' }); return; }
   const opts = (getDb().prepare(
@@ -14,7 +14,7 @@ router.get('/:field', requireAuth, requirePasswordChange, (req: Request, res: Re
   res.json({ options: opts });
 });
 
-router.post('/propose', requireAuth, requirePasswordChange, validateCsrf, (req: Request, res: Response) => {
+router.post('/propose', requireAuth, requirePasswordChange, requireActivation, validateCsrf, (req: Request, res: Response) => {
   const s = req.session as any;
   const { field_name, value } = req.body as { field_name: string; value: string };
   if (!ALLOWED.includes(field_name)) { res.status(400).json({ error: 'Invalid field.' }); return; }
