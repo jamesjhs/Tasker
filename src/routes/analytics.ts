@@ -124,7 +124,7 @@ router.get('/export', async (req: Request, res: Response) => {
       'Task From': t.category || '',
       'Task Type': t.subcategory || '',
       'Outcome': t.outcome || '',
-      'Date Assigned': t.assigned_date ? new Date(t.assigned_date + 'T00:00:00') : '',
+      'Date Assigned': t.assigned_date ? new Date(/^\d{4}-\d{2}-\d{2}$/.test(t.assigned_date) ? t.assigned_date + 'T00:00:00' : t.assigned_date) : '',
       'Start Time': t.start_time ? new Date(t.start_time) : '',
       'End Time': t.end_time ? new Date(t.end_time) : '',
       'Duration (secs)': secs(t.start_time, t.end_time, interruptions),
