@@ -573,7 +573,7 @@ async function doDeleteAccount() {
 // ── TASK START ───────────────────────────────────────────────────────────────
 function renderTaskStart() {
   stopTimer(); clearCharts(); state.currentView = 'task-start';
-  state.taskForm = { is_duty: true };
+  state.taskForm = { is_duty: null };
   app().innerHTML = `
   <div class="view">
     <div class="view-header">
@@ -584,8 +584,8 @@ function renderTaskStart() {
     <div class="form-group">
       <label>Task type</label>
       <div class="toggle-group">
-        <button class="toggle-btn active" id="tb-duty" onclick="setDuty(true)">🏥 Duty</button>
         <button class="toggle-btn" id="tb-personal" onclick="setDuty(false)">👤 Personal</button>
+        <button class="toggle-btn" id="tb-duty" onclick="setDuty(true)">🏥 Duty</button>
       </div>
     </div>
     ${buildDropdownGroup('category','Task From', state.dropdowns.category, 'ts-cat')}
@@ -656,9 +656,10 @@ async function doStartTask() {
   const category = document.getElementById('ts-cat-sel')?.value || null;
   const subcategory = document.getElementById('ts-sub-sel')?.value || null;
   const assigned_date = document.getElementById('ts-assigned')?.value || new Date().toISOString().split('T')[0];
-  const is_duty = state.taskForm.is_duty !== false;
+  const is_duty = state.taskForm.is_duty;
   if (!category) { showAlert('Please select a Task From.', 'error', 'ts-alerts'); return; }
   if (!subcategory) { showAlert('Please select a Task Type.', 'error', 'ts-alerts'); return; }
+  if (is_duty === null) { showAlert('Please select Duty or Personal.', 'error', 'ts-alerts'); return; }
   try {
     const d = await api('POST', '/api/tasks/start', {
       is_duty, category: category || null, subcategory: subcategory || null,
