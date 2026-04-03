@@ -12,6 +12,7 @@
     "bcryptjs": "^3.0.3",
     "better-sqlite3": "^12.8.0",
     "better-sqlite3-session-store": "^0.1.0",
+    "dotenv": "^17.4.0",
     "exceljs": "^4.4.0",
     "express": "^5.0.1",
     "express-rate-limit": "^8.3.2",
