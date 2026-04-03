@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tasker — Help &amp; User Guide</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: system-ui,-apple-system,sans-serif; max-width: 700px; margin: 0 auto; padding: 24px 16px 60px; color: #1a1a2e; line-height: 1.7; background: #f0f4ff; }
+    h1 { color: #1a56db; font-size: 1.7rem; margin: 1.5rem 0 0.5rem; }
+    h2 { font-size: 1.15rem; margin: 2rem 0 0.5rem; color: #1a1a2e; border-bottom: 2px solid #e5e7eb; padding-bottom: 0.3rem; }
+    h3 { font-size: 1rem; margin: 1.2rem 0 0.4rem; color: #1e40af; }
+    p  { margin-bottom: 0.75rem; }
+    ul, ol { padding-left: 1.5rem; margin-bottom: 0.75rem; }
+    li { margin-bottom: 0.4rem; }
+    .warning-box { background: #fee2e2; border: 2px solid #dc2626; border-radius: 10px; padding: 1rem; margin: 1.25rem 0; color: #991b1b; font-weight: 600; }
+    .info-box { background: #dbeafe; border: 2px solid #1a56db; border-radius: 10px; padding: 1rem; margin: 1.25rem 0; color: #1e40af; }
+    .tip-box { background: #f0fdf4; border: 2px solid #16a34a; border-radius: 10px; padding: 1rem; margin: 1.25rem 0; color: #15803d; }
+    .back-link { display: inline-block; color: #1a56db; margin-bottom: 16px; text-decoration: none; font-weight: 600; }
+    .step { display: flex; gap: 12px; margin-bottom: 12px; align-items: flex-start; }
+    .step-num { background: #1a56db; color: #fff; font-weight: 700; border-radius: 50%; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; font-size: .9rem; margin-top: 2px; }
+    .step-body { flex: 1; }
+    small { color: #6b7280; }
+    .toc { background: #fff; border: 1px solid #e5e7eb; border-radius: 10px; padding: 1rem 1.25rem; margin: 1.5rem 0; }
+    .toc a { color: #1a56db; text-decoration: none; }
+    .toc a:hover { text-decoration: underline; }
+    .toc li { margin-bottom: 0.25rem; }
+  </style>
+</head>
+<body>
+  <a class="back-link" href="/" onclick="history.back();return false;">← Back</a>
+  <h1>❓ Tasker — Help &amp; User Guide</h1>
+  <p><small>Version 1.0.0 — April 2026</small></p>
+
+  <div class="info-box">
+    ℹ️ This guide explains how to use Tasker in plain language — no technical knowledge needed.
+  </div>
+
+  <nav class="toc">
+    <strong>Contents</strong>
+    <ol style="margin-top:8px">
+      <li><a href="#what-is-tasker">What is Tasker?</a></li>
+      <li><a href="#getting-started">Getting started — your account</a></li>
+      <li><a href="#logging-in">Logging in</a></li>
+      <li><a href="#recording-a-task">Recording a task</a></li>
+      <li><a href="#interruptions">Handling interruptions</a></li>
+      <li><a href="#completing-a-task">Completing a task</a></li>
+      <li><a href="#viewing-your-work">Viewing your work and charts</a></li>
+      <li><a href="#downloading">Downloading your data</a></li>
+      <li><a href="#settings">Settings and your account</a></li>
+      <li><a href="#privacy">Your privacy and data safety</a></li>
+      <li><a href="#faqs">Common questions</a></li>
+    </ol>
+  </nav>
+
+  <!-- ── 1 ─────────────────────────────────────────────────────────────────── -->
+  <h2 id="what-is-tasker">1. What is Tasker?</h2>
+  <p>Tasker is a simple tool that lets you time and record the tasks you do during your working day. It works like a stopwatch — you press start when you begin a task, and stop when you finish. At the end, you can see charts and a summary of how you spent your time.</p>
+  <p>Everything is kept anonymous. The system never asks for your name, and no patient information is ever stored. It runs on your personal phone and is designed to be quick and easy to use.</p>
+
+  <div class="warning-box">
+    ⚠️ <strong>IMPORTANT:</strong> Never type patient names, initials, NHS numbers, or any information that could identify a patient or a colleague into this app. Use it only to record <em>what type of task</em> you did, not <em>who</em> it involved.
+  </div>
+
+  <!-- ── 2 ─────────────────────────────────────────────────────────────────── -->
+  <h2 id="getting-started">2. Getting started — your account</h2>
+
+  <h3>Self-registration</h3>
+  <p>If the app allows self-registration, tap <strong>Don't have an account? Register</strong> on the login screen.</p>
+  <ol>
+    <li>Choose a password (at least 8 characters, with at least one special character such as <code>!</code>, <code>@</code>, or <code>#</code>).</li>
+    <li>Confirm your password by typing it again.</li>
+    <li>Tick the box to confirm you have read the Data &amp; Use Policy.</li>
+    <li>Tap <strong>Register</strong>.</li>
+  </ol>
+  <p>The app will give you a randomly generated username — two ordinary words joined together, like <strong>CalmRiver</strong> or <strong>BrightMoon</strong>. This username is not linked to your real identity.</p>
+
+  <div class="warning-box">
+    ⚠️ <strong>Write down your username immediately.</strong> It is shown only once and cannot be recovered if you lose it. No one — not even the administrator — can look it up for you.
+  </div>
+
+  <h3>Account set up by an administrator</h3>
+  <p>If your administrator creates your account for you, they will share a username and a temporary password with you via a secure message. When you first log in, the app will immediately ask you to set your own permanent password before you can do anything else.</p>
+
+  <!-- ── 3 ─────────────────────────────────────────────────────────────────── -->
+  <h2 id="logging-in">3. Logging in</h2>
+  <div class="step">
+    <div class="step-num">1</div>
+    <div class="step-body">Open the app on your phone and type your username in the <strong>Username</strong> box. (You can type it in upper or lower case — it does not matter.)</div>
+  </div>
+  <div class="step">
+    <div class="step-num">2</div>
+    <div class="step-body">Type your password in the <strong>Password</strong> box. Tap the eye icon (👁️) if you want to see what you are typing.</div>
+  </div>
+  <div class="step">
+    <div class="step-num">3</div>
+    <div class="step-body">Tap <strong>Log in</strong>.</div>
+  </div>
+
+  <div class="tip-box">
+    💡 <strong>Tip:</strong> Your session automatically ends after 30 minutes of no activity, and always ends at midnight. If you are part-way through a task when this happens, you can discard it and start again.
+  </div>
+
+  <h3>If your account is locked</h3>
+  <p>After several failed password attempts your account will be locked automatically. You will see a message saying so. Contact your administrator to unlock it — they can do this without seeing any of your data.</p>
+
+  <!-- ── 4 ─────────────────────────────────────────────────────────────────── -->
+  <h2 id="recording-a-task">4. Recording a task</h2>
+  <p>From the home screen, tap <strong>▶ Start New Task</strong>. You will be asked a few quick questions before the timer starts.</p>
+
+  <h3>Task type</h3>
+  <p>Choose whether this is a <strong>Duty</strong> task (something you are doing as part of your normal role) or a <strong>Personal</strong> task (something for yourself, such as a break or self-directed learning). Tap the relevant button — it will turn highlighted.</p>
+
+  <h3>Task From (category)</h3>
+  <p>Select where the task came from — for example, <em>Clinical</em>, <em>Administrative</em>, or <em>Teaching</em>. If the right option is not in the list, tap <strong>+ Add new option…</strong> and type it in. Your suggestion will be sent to the administrator for approval and immediately available for you to use.</p>
+
+  <h3>Task Type (subcategory)</h3>
+  <p>Select the type of activity — for example, <em>Direct patient care</em>, <em>Documentation</em>, or <em>Referral</em>. Again, you can suggest a new option if needed.</p>
+
+  <h3>Date assigned</h3>
+  <p>This is today's date by default. If the task was assigned on a different day (for example, you are catching up on something from yesterday), change it here.</p>
+
+  <h3>Starting the timer</h3>
+  <p>Once you have filled everything in, tap <strong>▶ Start Timer</strong>. The app moves to the timer screen and starts counting.</p>
+
+  <div class="tip-box">
+    💡 You can only have one task running at a time. If you already have one going, finish or discard it before starting a new one.
+  </div>
+
+  <!-- ── 5 ─────────────────────────────────────────────────────────────────── -->
+  <h2 id="interruptions">5. Handling interruptions</h2>
+  <p>If something interrupts you while a task is running, tap <strong>⏸️ Interrupted</strong>. A menu will appear with three choices:</p>
+
+  <ul>
+    <li><strong>▶ Resume — continue from here</strong>: Use this if the interruption is already over and you want to keep the timer going. The time you were away is <em>not</em> recorded.</li>
+    <li><strong>📝 Enter interruption times manually</strong>: Use this to record exactly when the interruption started and ended, so that time is subtracted from the task duration automatically.</li>
+    <li><strong>🗑 Discard this task</strong>: Use this if you want to throw away the task entirely and start fresh.</li>
+  </ul>
+
+  <p>You can record more than one interruption on a single task. Each one will show up in the task summary when you complete the task, and you can remove any you added by mistake.</p>
+
+  <!-- ── 6 ─────────────────────────────────────────────────────────────────── -->
+  <h2 id="completing-a-task">6. Completing a task</h2>
+  <p>When you have finished, tap <strong>⏹️ End Task</strong>. You will see a review screen where you can check and adjust the details before saving.</p>
+
+  <h3>What you can change on this screen</h3>
+  <ul>
+    <li><strong>Outcome</strong> — what happened at the end of the task (e.g. <em>Completed</em>, <em>Delegated</em>, <em>Deferred</em>). This is required.</li>
+    <li><strong>Start and end times</strong> — you can adjust these if the timer was not started or stopped at exactly the right moment.</li>
+    <li><strong>Notes</strong> — an optional free-text field. Use it only for task metadata (e.g. "reviewed three letters"). Never enter patient names or any identifying information here.</li>
+    <li><strong>Interruptions</strong> — you can remove any interruption entries that were added by mistake.</li>
+  </ul>
+
+  <h3>Saving</h3>
+  <p>You have two save buttons:</p>
+  <ul>
+    <li><strong>➕ Submit &amp; add another</strong> — saves this task and immediately takes you to start a new one.</li>
+    <li><strong>📊 Submit &amp; analytics</strong> — saves this task and shows you today's summary and charts.</li>
+  </ul>
+  <p>Tap the red bin icon (🗑) if you want to discard and delete the task instead.</p>
+
+  <!-- ── 7 ─────────────────────────────────────────────────────────────────── -->
+  <h2 id="viewing-your-work">7. Viewing your work and charts</h2>
+  <p>Tap <strong>📊 Analytics</strong> in the menu bar at the bottom to see your data.</p>
+
+  <h3>Today's session</h3>
+  <p>This shows everything you have recorded today:</p>
+  <ul>
+    <li>Totals — how many tasks, total minutes, duty vs personal split.</li>
+    <li>A chart showing how much time each category took.</li>
+    <li>A bar chart comparing duty and personal time.</li>
+    <li>A list of individual tasks, each with an edit button.</li>
+  </ul>
+
+  <h3>Long-term history</h3>
+  <p>Tap <strong>📅 Long-term History</strong> to see up to 30 days of tasks. You can filter by date range, task type, category, or outcome using the filter bar at the top, then tap <strong>Apply Filters</strong>.</p>
+  <p>When you have enough data across multiple days, a trend line appears on the chart showing whether your task volume is increasing or decreasing over time.</p>
+
+  <div class="info-box">
+    ℹ️ Task records are automatically deleted after 30 days. This happens silently in the background — you do not need to do anything.
+  </div>
+
+  <h3>Editing a past task</h3>
+  <p>Tap <strong>✏️ Edit</strong> on any task card to change its details. You can update the category, type, outcome, times, and notes.</p>
+
+  <!-- ── 8 ─────────────────────────────────────────────────────────────────── -->
+  <h2 id="downloading">8. Downloading your data</h2>
+  <p>On the Analytics screen, tap <strong>⬇️ Download Excel</strong>. The app will download a spreadsheet file (<code>.xlsx</code>) containing all your recorded tasks. You can open this in Microsoft Excel, Google Sheets, or Apple Numbers.</p>
+  <p>The file contains only your own data — no other user's information is included.</p>
+
+  <!-- ── 9 ─────────────────────────────────────────────────────────────────── -->
+  <h2 id="settings">9. Settings and your account</h2>
+  <p>Tap <strong>⚙️ Settings</strong> in the menu bar at the bottom.</p>
+
+  <h3>Change your password</h3>
+  <p>Tap <strong>🔑 Change Password</strong>. Enter your current password, then choose and confirm a new one. Passwords must be at least 8 characters long and include at least one special character.</p>
+
+  <h3>Log out</h3>
+  <p>Tap <strong>🚪 Log Out</strong> when you have finished using the app. This is especially important if you share your phone with others.</p>
+
+  <h3>Delete your account</h3>
+  <p>Tap <strong>🗑️ Delete My Account</strong> if you want to permanently remove your account and all your task data. You will need to confirm by typing your username and password. <strong>This cannot be undone.</strong></p>
+
+  <!-- ── 10 ────────────────────────────────────────────────────────────────── -->
+  <h2 id="privacy">10. Your privacy and data safety</h2>
+  <ul>
+    <li>Your username is a random pair of words — it is not linked to your name or any personal detail.</li>
+    <li>Your password is stored in a protected format that no one — including the administrator — can read.</li>
+    <li>Task records are automatically deleted after 30 days.</li>
+    <li>The administrator can see how many users are registered and how many events have been logged in total, but cannot see your task data, notes, timings, or analytics.</li>
+    <li>No data is shared with any outside organisation or system.</li>
+    <li>The app only works on mobile phones. Access from NHS computers and NHS networks is blocked.</li>
+  </ul>
+  <p>For full details, see the <a href="/policy" target="_blank">Data &amp; Use Policy</a>.</p>
+
+  <!-- ── 11 ────────────────────────────────────────────────────────────────── -->
+  <h2 id="faqs">11. Common questions</h2>
+
+  <h3>I have forgotten my username. What do I do?</h3>
+  <p>Unfortunately, usernames cannot be recovered — this is by design to protect your anonymity. If you cannot find the username you wrote down, contact your administrator. They can delete your old account and create a new one for you.</p>
+
+  <h3>I have forgotten my password. What do I do?</h3>
+  <p>Contact your administrator. They can reset your password and give you a temporary one. You will be asked to set a new password when you next log in.</p>
+
+  <h3>The app will not open on my phone.</h3>
+  <p>Make sure you are using a standard mobile browser (Safari on iPhone, Chrome on Android). The app does not work on desktop computers or from NHS Wi-Fi.</p>
+
+  <h3>My session ended and I lost an unfinished task.</h3>
+  <p>Sessions end automatically after 30 minutes of inactivity or at midnight. If this happens while a task is running, you can start a new task and adjust the start time manually on the review screen to reflect when you actually started.</p>
+
+  <h3>I accidentally typed patient information into the notes field.</h3>
+  <p>Contact your administrator immediately. They can delete your account and all associated data, which removes the information from the system permanently.</p>
+
+  <h3>The dropdown list does not have the option I need.</h3>
+  <p>Select <strong>+ Add new option…</strong> from the dropdown and type what you need. It will be sent to your administrator for review. In most cases it will be available straight away for your current task.</p>
+
+  <h3>Can I use Tasker on more than one phone?</h3>
+  <p>Yes — log in with the same username and password on any phone. Your account and task history will be the same on every device.</p>
+
+  <h3>Can the administrator see what I am doing?</h3>
+  <p>No. The administrator can see only the total number of users and a count of events. They cannot see your tasks, timings, notes, or how you use the app.</p>
+
+  <p style="margin-top: 2rem; font-size: .85rem; color: #6b7280;">
+    Tasker v1.0.0 — April 2026. For technical support, contact your administrator.
+  </p>
+</body>
+</html>
