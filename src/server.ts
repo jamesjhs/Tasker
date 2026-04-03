@@ -80,8 +80,8 @@ app.use('/api/analytics', apiLimiter, analyticsRouter);
 app.use('/api/dropdowns', apiLimiter, dropdownsRouter);
 app.use('/api/admin', apiLimiter, adminRouter);
 
-app.get('/policy', (_req, res) => res.sendFile(path.join(__dirname, '..', 'public', 'policy.html')));
-app.get('/{*path}', (_req, res) => res.sendFile(path.join(__dirname, '..', 'public', 'index.html')));
+app.get('/policy', apiLimiter, (_req, res) => res.sendFile(path.join(__dirname, '..', 'public', 'policy.html')));
+app.get('/{*path}', apiLimiter, (_req, res) => res.sendFile(path.join(__dirname, '..', 'public', 'index.html')));
 
 // ─── 30-day data retention job ────────────────────────────────────────────────
 function runRetention(): void {

@@ -66,10 +66,10 @@ router.get('/backup', (_req: Request, res: Response) => {
 
 router.post('/restore', validateCsrf, upload.single('db'), (req: Request, res: Response) => {
   if (!req.file) { res.status(400).json({ error: 'No file uploaded.' }); return; }
-  const uploadedPath = path.resolve(req.file.path);
+  // Resolve and validate the uploaded path is within the allowed restore directory
+  const uploadedPath = path.resolve(RESTORE_DIR, path.basename(req.file.path));
   const allowedDir = path.resolve(RESTORE_DIR);
   if (!uploadedPath.startsWith(allowedDir + path.sep)) {
-    try { fs.unlinkSync(uploadedPath); } catch { /* ignore */ }
     res.status(400).json({ error: 'Invalid upload path.' });
     return;
   }
