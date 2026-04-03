@@ -29,7 +29,7 @@ app.use(helmet({
       scriptSrc: ["'self'", "'unsafe-inline'", 'https://cdn.jsdelivr.net'],
       styleSrc: ["'self'", "'unsafe-inline'"],
       imgSrc: ["'self'", 'data:'],
-      connectSrc: ["'self'"],
+      connectSrc: ["'self'", 'https://cdn.jsdelivr.net'],
       workerSrc: ["'self'"],
       manifestSrc: ["'self'"],
     },
