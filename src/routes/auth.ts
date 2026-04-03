@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
-import { getDb } from '../db';
+import { getDb, getSetting } from '../db';
 import { generateUsername } from '../words';
 import { requireAuth, validateCsrf, logEvent } from '../middleware/index';
 
@@ -14,7 +14,18 @@ router.get('/csrf-token', (req: Request, res: Response) => {
   res.json({ token: s.csrfToken });
 });
 
+router.get('/registration-config', (_req: Request, res: Response) => {
+  const selfRegistration = getSetting('self_registration') || 'admin_approved';
+  const userInvite = getSetting('user_invite') || 'admin_approved';
+  res.json({ selfRegistration, userInvite });
+});
+
 router.post('/register', validateCsrf, async (req: Request, res: Response) => {
+  const selfRegistration = getSetting('self_registration') || 'admin_approved';
+  if (selfRegistration === 'disabled') {
+    res.status(403).json({ error: 'Self-registration is not enabled.' });
+    return;
+  }
   const { password } = req.body as { password: string };
   if (!password || !PASSWORD_RE.test(password)) {
     res.status(400).json({ error: 'Password must be at least 8 characters and include at least one special character.' });
@@ -23,12 +34,37 @@ router.post('/register', validateCsrf, async (req: Request, res: Response) => {
   const db = getDb();
   const username = generateUsername();
   const hash = await bcrypt.hash(password, 12);
+  const isApproved = selfRegistration === 'auto' ? 1 : 0;
   try {
-    db.prepare('INSERT INTO users (username,password_hash) VALUES (?,?)').run(username, hash);
+    db.prepare('INSERT INTO users (username,password_hash,is_approved) VALUES (?,?,?)').run(username, hash, isApproved);
     logEvent('user_registered');
-    res.json({ username, message: 'Registration successful. Save your username — it cannot be recovered.' });
+    if (isApproved) {
+      res.json({ username, message: 'Registration successful. Save your username — it cannot be recovered.' });
+    } else {
+      res.json({ username, pending: true, message: 'Registration submitted. Your account is awaiting administrator approval before you can log in.' });
+    }
   } catch {
     res.status(500).json({ error: 'Registration failed. Please try again.' });
+  }
+});
+
+router.post('/invite', requireAuth, validateCsrf, async (req: Request, res: Response) => {
+  const userInvite = getSetting('user_invite') || 'admin_approved';
+  if (userInvite === 'disabled') {
+    res.status(403).json({ error: 'User invitations are not enabled.' });
+    return;
+  }
+  const db = getDb();
+  const username = generateUsername();
+  const tempPassword = crypto.randomBytes(5).toString('hex') + '!';
+  const hash = await bcrypt.hash(tempPassword, 12);
+  const isApproved = userInvite === 'auto' ? 1 : 0;
+  try {
+    db.prepare('INSERT INTO users (username,password_hash,must_change_password,is_approved) VALUES (?,?,1,?)').run(username, hash, isApproved);
+    logEvent('user_invited');
+    res.json({ username, tempPassword, pending: isApproved === 0, message: 'User invited. Share credentials securely.' });
+  } catch {
+    res.status(500).json({ error: 'Invite failed. Please try again.' });
   }
 });
 
@@ -43,6 +79,10 @@ router.post('/login', validateCsrf, async (req: Request, res: Response) => {
     return;
   }
   const valid = await bcrypt.compare(password, user.password_hash);
+  if (user.is_approved === 0) {
+    res.status(403).json({ error: 'Your account is pending administrator approval. Please check back later.' });
+    return;
+  }
   if (user.is_locked) {
     res.status(403).json({ error: 'This account has been locked after too many failed login attempts. Please contact an administrator to unlock it.' });
     return;

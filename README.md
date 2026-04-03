@@ -1,6 +1,6 @@
 # Tasker
 
-**v1.0.0** — An anonymous, mobile-only task-logging PWA for healthcare staff. Built with TypeScript, Express 5, SQLite, and vanilla JS.
+**v1.1.0** — An anonymous, mobile-only task-logging PWA for healthcare staff. Built with TypeScript, Express 5, SQLite, and vanilla JS.
 
 ---
 
@@ -12,7 +12,9 @@
 - **Task tracking** — duty vs personal tasks, categories, subcategories, outcomes, interruption handling.
 - **Analytics** — session and 30-day history with Chart.js charts, filtering, and linear regression trendlines.
 - **Excel export** — users can download their own data as `.xlsx`.
-- **Admin panel** — user management (counts only, no data access), DB backup/restore, dropdown configuration.
+- **Admin panel** — user management (counts only, no data access), DB backup/restore, dropdown configuration, and registration settings.
+- **Configurable registration** — administrator controls three levels for self-registration and user invitations: disabled, administrator-approved (default), or automatic approval.
+- **User invitations** — logged-in users can invite others using the same temp-password flow as admins (subject to the configured policy).
 - **30-day data retention** — task data is automatically deleted after 30 days.
 
 ---
@@ -81,24 +83,28 @@ npm run build # compile TypeScript → dist/
 ```
 src/
   server.ts               Express 5 app, middleware wiring, SSL detection, 30-day retention job
-  db.ts                   SQLite schema + migrations + seed data, getDb(), replaceDb()
+  db.ts                   SQLite schema + migrations + seed data, getDb(), getSetting(), setSetting()
   words.ts                Memorable two-word username generator
   middleware/index.ts     NHS block, mobile-only, requireAuth, requireAdmin, CSRF, logEvent
   routes/
-    auth.ts               /api/auth/* — register, login, logout, change-password, me, account delete
+    auth.ts               /api/auth/* — register, login, logout, change-password, me, account delete, invite
     tasks.ts              /api/tasks/* — start, active, PATCH, GET
     analytics.ts          /api/analytics/* — session, history, export (xlsx)
     dropdowns.ts          /api/dropdowns/* — list, propose, admin CRUD
-    admin.ts              /api/admin/* — stats, users, backup, restore
+    admin.ts              /api/admin/* — stats, users, pending-users, approve, settings, backup, restore
 
 public/
   index.html              SPA shell
+  favicon.svg             SVG favicon (browser tab icon)
   manifest.json           PWA manifest
   sw.js                   Service worker (cache-first static, network-first API)
   policy.html             Data & Use Policy  (served at /policy)
   help.html               User guide         (served at /help)
   css/app.css             Mobile-first styles
   js/app.js               Complete SPA — views, Chart.js charts, regression trendlines
+  icons/
+    icon-192.png          PWA home-screen icon (192×192)
+    icon-512.png          PWA splash / store icon (512×512)
 
 docs/
   installation.md         Full installation guide (server, SSL, systemd, Nginx/Caddy)

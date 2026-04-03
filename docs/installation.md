@@ -1,6 +1,6 @@
 # Tasker — Installation Manual
 
-**Version 1.0.0 — April 2026**
+**Version 1.1.0 — April 2026**
 
 ---
 
@@ -66,7 +66,7 @@ Or upload a `.zip` / `.tar.gz` archive and extract:
 
 ```bash
 mkdir -p /opt/tasker
-tar -xzf tasker-1.0.0.tar.gz -C /opt/tasker --strip-components=1
+tar -xzf tasker-1.1.0.tar.gz -C /opt/tasker --strip-components=1
 cd /opt/tasker
 ```
 
