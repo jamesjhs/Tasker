@@ -54,6 +54,7 @@ function initSchema(db: Database.Database): void {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       is_duty INTEGER NOT NULL DEFAULT 0,
+      assigned_date TEXT,
       start_time TEXT NOT NULL,
       end_time TEXT,
       category TEXT,
@@ -90,6 +91,12 @@ function initSchema(db: Database.Database): void {
   }
   if (!userCols.includes('is_locked')) {
     db.exec('ALTER TABLE users ADD COLUMN is_locked INTEGER NOT NULL DEFAULT 0');
+  }
+
+  // Migrate existing databases: add assigned_date column if missing
+  const taskCols = (db.prepare("PRAGMA table_info(tasks)").all() as { name: string }[]).map(c => c.name);
+  if (!taskCols.includes('assigned_date')) {
+    db.exec('ALTER TABLE tasks ADD COLUMN assigned_date TEXT');
   }
 
   // Seed default dropdowns if empty

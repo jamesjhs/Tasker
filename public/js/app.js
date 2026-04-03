@@ -504,6 +504,10 @@ function renderTaskStart() {
     </div>
     ${buildDropdownGroup('category','Task From', state.dropdowns.category, 'ts-cat')}
     ${buildDropdownGroup('subcategory','Task Type', state.dropdowns.subcategory, 'ts-sub')}
+    <div class="form-group">
+      <label for="ts-assigned">Date assigned</label>
+      <input id="ts-assigned" class="input" type="date" value="${new Date().toISOString().split('T')[0]}">
+    </div>
     <button class="btn btn-primary btn-full" style="font-size:1.1rem;padding:18px" onclick="doStartTask()">▶ Start Timer</button>
   </div>`;
 }
@@ -565,10 +569,12 @@ async function submitNewOption(containerId, field) {
 async function doStartTask() {
   const category = document.getElementById('ts-cat-sel')?.value || null;
   const subcategory = document.getElementById('ts-sub-sel')?.value || null;
+  const assigned_date = document.getElementById('ts-assigned')?.value || new Date().toISOString().split('T')[0];
   const is_duty = state.taskForm.is_duty !== false;
   try {
     const d = await api('POST', '/api/tasks/start', {
       is_duty, category: category || null, subcategory: subcategory || null,
+      assigned_date,
       start_time: new Date().toISOString(),
     });
     if (!d) return;
@@ -809,10 +815,13 @@ function renderTaskReview(t, isEdit) {
       <div id="intr-list">${intrHtml}</div>
     </div>
     <div style="display:flex;gap:10px;margin-bottom:80px">
-      <button class="btn btn-primary" style="flex:1" onclick="submitTaskReview(${t.id}, ${isEdit})">
-        ${isEdit ? '💾 Save changes' : '✅ Submit task'}
-      </button>
-      ${!isEdit ? `<button class="btn btn-danger btn-sm" onclick="discardFromEnd(${t.id})">🗑</button>` : ''}
+      ${isEdit ? `
+        <button class="btn btn-primary" style="flex:1" onclick="submitTaskReview(${t.id}, true)">💾 Save changes</button>
+      ` : `
+        <button class="btn btn-secondary" style="flex:1" onclick="submitTaskReview(${t.id}, false, 'start')">➕ Submit &amp; add another</button>
+        <button class="btn btn-primary" style="flex:1" onclick="submitTaskReview(${t.id}, false, 'analytics')">📊 Submit &amp; analytics</button>
+        <button class="btn btn-danger btn-sm" onclick="discardFromEnd(${t.id})">🗑</button>
+      `}
     </div>
   </div>`;
 
@@ -888,7 +897,7 @@ function removeInterruption(idx) {
   renderTaskReview(t, window._reviewIsEdit);
 }
 
-async function submitTaskReview(taskId, isEdit) {
+async function submitTaskReview(taskId, isEdit, dest) {
   const t = window._reviewTask;
   const start = document.getElementById('te-start')?.value;
   const end = document.getElementById('te-end')?.value;
@@ -909,8 +918,12 @@ async function submitTaskReview(taskId, isEdit) {
     await api('PATCH', `/api/tasks/${taskId}`, body);
     state.activeTask = null;
     await checkActiveTask();
-    showAlert('Task saved!', 'success', 'te-alerts');
-    setTimeout(() => renderAnalyticsSession(), 800);
+    if (dest === 'start') {
+      renderTaskStart();
+    } else {
+      showAlert('Task saved!', 'success', 'te-alerts');
+      setTimeout(() => renderAnalyticsSession(), 800);
+    }
   } catch(e) { showAlert(e.message, 'error', 'te-alerts'); }
 }
 
