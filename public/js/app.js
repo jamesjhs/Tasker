@@ -71,15 +71,15 @@ async function init() {
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('/sw.js').catch(() => {});
   }
-  await refreshCsrf();
   try {
+    await refreshCsrf();
     const me = await fetch('/api/auth/me', { credentials: 'same-origin' });
     if (me.ok) {
       state.user = await me.json();
       if (state.user.mustChangePassword) { renderChangePassword(); return; }
       await loadDropdowns();
       await checkActiveTask();
-      state.user.isAdmin ? renderAdmin() : renderHome();
+      await (state.user.isAdmin ? renderAdmin() : renderHome());
     } else {
       renderLogin();
     }
@@ -316,12 +316,10 @@ async function doChangePassword(isForced) {
 }
 
 // ── HOME ─────────────────────────────────────────────────────────────────────
-async function renderHome() {
-  stopTimer(); clearCharts(); state.currentView = 'home';
-  await checkActiveTask();
+function renderHomeHTML() {
   const t = state.activeTask;
   const midnightWarn = checkMidnightWarn();
-  app().innerHTML = `
+  return `
   <div class="view">
     <div class="view-header">
       <h1>👋 Tasker</h1>
@@ -347,6 +345,13 @@ async function renderHome() {
     </button>`}
   </div>
   ${renderBottomNav('home')}`;
+}
+
+async function renderHome() {
+  stopTimer(); clearCharts(); state.currentView = 'home';
+  app().innerHTML = renderHomeHTML();
+  await checkActiveTask();
+  if (state.currentView === 'home') app().innerHTML = renderHomeHTML();
 }
 
 function checkMidnightWarn() {
@@ -387,7 +392,7 @@ function renderSettings() {
 async function doLogout() {
   try { await api('POST', '/api/auth/logout'); } catch(e){}
   state.user = null; state.activeTask = null; state.csrfToken = null;
-  await refreshCsrf();
+  try { await refreshCsrf(); } catch(e){}
   renderLogin();
 }
 
@@ -981,8 +986,12 @@ async function renderAdmin() {
       api('GET', '/api/admin/users'),
       api('GET', '/api/dropdowns/admin/all'),
     ]);
+    if (!stats || !users || !dropOpts) return;
     renderAdminContent(stats, users?.users || [], dropOpts?.options || []);
-  } catch(e) { showAlert(e.message); }
+  } catch(e) {
+    app().innerHTML = `<div class="view"><div id="admin-alerts"></div></div>`;
+    showAlert(e.message, 'error', 'admin-alerts');
+  }
 }
 
 function renderAdminContent(stats, users, dropOpts) {
