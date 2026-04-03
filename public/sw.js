@@ -5,13 +5,14 @@
 
 const CACHE_NAME = 'tasker-v1';
 
+// External CDN URLs (e.g. Chart.js from jsDelivr) are intentionally excluded
+// from precaching to avoid CSP connect-src violations during SW install.
 const STATIC_ASSETS = [
   '/',
   '/css/app.css',
   '/js/app.js',
   '/manifest.json',
   '/policy.html',
-  'https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js',
 ];
 
 self.addEventListener('install', event => {
