@@ -158,7 +158,6 @@ function renderBottomNav(active) {
 // ── LOGIN ────────────────────────────────────────────────────────────────────
 async function renderLogin() {
   stopTimer(); clearCharts(); state.currentView = 'login';
-  try { await refreshCsrf(); } catch(e) {}
   app().innerHTML = `
   <div class="view">
     <div style="text-align:center;padding-top:30px;margin-bottom:28px">
@@ -344,7 +343,6 @@ async function doChangePassword(isForced) {
   btn.disabled = true; btn.textContent = 'Saving…';
   try {
     await api('POST', '/api/auth/change-password', { currentPassword: oldPass, newPassword: newPass });
-    await refreshCsrf();
     if (state.user) state.user.mustChangePassword = false;
     await loadDropdowns();
     await checkActiveTask();
