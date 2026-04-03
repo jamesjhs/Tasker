@@ -67,23 +67,56 @@ async function refreshCsrf() {
 }
 
 // ── App init ─────────────────────────────────────────────────────────────────
+function setLoadingStatus(msg) {
+  const el = document.getElementById('loading-status');
+  if (el) el.textContent = msg;
+}
+
+function showLoadingError(msg) {
+  const errEl = document.getElementById('loading-error');
+  const actEl = document.getElementById('loading-actions');
+  const spinnerEl = document.querySelector('.loading-spinner');
+  if (errEl) { errEl.textContent = msg; errEl.hidden = false; }
+  if (actEl) { actEl.hidden = false; }
+  if (spinnerEl) { spinnerEl.classList.add('loading-spinner--error'); }
+}
+
 async function init() {
+  const errEl = document.getElementById('loading-error');
+  const actEl = document.getElementById('loading-actions');
+  const spinnerEl = document.querySelector('.loading-spinner');
+  if (errEl) { errEl.hidden = true; errEl.textContent = ''; }
+  if (actEl) { actEl.hidden = true; }
+  if (spinnerEl) { spinnerEl.classList.remove('loading-spinner--error'); }
+  setLoadingStatus('Starting…');
+
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('/sw.js').catch(() => {});
   }
   try {
+    setLoadingStatus('Fetching security token…');
     await refreshCsrf();
+
+    setLoadingStatus('Checking session…');
     const me = await fetch('/api/auth/me', { credentials: 'same-origin' });
     if (me.ok) {
       state.user = await me.json();
       if (state.user.mustChangePassword) { renderChangePassword(); return; }
+
+      setLoadingStatus('Loading dropdown options…');
       await loadDropdowns();
+
+      setLoadingStatus('Checking active task…');
       await checkActiveTask();
+
+      setLoadingStatus('Rendering…');
       await (state.user.isAdmin ? renderAdmin() : renderHome());
     } else {
       renderLogin();
     }
-  } catch(e) { renderLogin(); }
+  } catch(e) {
+    showLoadingError(`Initialization failed: ${e.message || e}`);
+  }
 }
 
 async function loadDropdowns() {
