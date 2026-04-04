@@ -229,7 +229,7 @@ async function renderLogin() {
     <div class="card">
       <div class="form-group">
         <label for="l-user">Username</label>
-        <input id="l-user" class="input" type="text" autocomplete="username" autocapitalize="off" placeholder="e.g. CalmRiver">
+        <input id="l-user" class="input" type="text" autocomplete="username" autocapitalize="off" placeholder="e.g. Qwerty">
       </div>
       <div class="form-group">
         <label for="l-pass">Password</label>
