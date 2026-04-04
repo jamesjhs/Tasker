@@ -292,6 +292,16 @@ function renderBottomNav(active) {
   <p style="text-align:center;font-size:.75rem;color:#9ca3af;padding:8px 0 16px">v1.3.0 &nbsp;·&nbsp; <a href="/policy" target="_blank" style="color:#9ca3af">Privacy Policy</a> &nbsp;·&nbsp; <a href="/help" target="_blank" style="color:#9ca3af">Help</a><br>© J Rowson ${new Date().getFullYear()} | <a href="https://jahosi.co.uk" target="_blank" style="color:#9ca3af">jahosi.co.uk</a></p>`;
 }
 
+// ── STATS CARDS ──────────────────────────────────────────────────────────────
+function renderStatsCards(stats, marginTop = '20px') {
+  if (!stats) return '';
+  return `
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:${marginTop}">
+      <div class="stat-card"><div class="stat-number">${stats.userCount}</div><div class="stat-label">Registered users</div></div>
+      <div class="stat-card"><div class="stat-number">${stats.taskCount}</div><div class="stat-label">Tasks logged</div></div>
+    </div>`;
+}
+
 // ── LOGIN ────────────────────────────────────────────────────────────────────
 async function renderLogin() {
   stopTimer(); stopActivityTracking(); clearCharts(); state.currentView = 'login';
@@ -306,12 +316,7 @@ async function renderLogin() {
     if (statsRes.ok) state.appStats = await statsRes.json();
   } catch(e) {}
   const showRegister = state.registrationConfig?.selfRegistration !== 'disabled';
-  const stats = state.appStats;
-  const statsHTML = stats ? `
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:20px">
-      <div class="stat-card"><div class="stat-number">${stats.userCount}</div><div class="stat-label">Registered users</div></div>
-      <div class="stat-card"><div class="stat-number">${stats.taskCount}</div><div class="stat-label">Tasks logged</div></div>
-    </div>` : '';
+  const statsHTML = renderStatsCards(state.appStats, '20px');
   app().innerHTML = `
   <div class="view" style="min-height:auto;padding-bottom:24px">
     <div style="text-align:center;padding-top:30px;margin-bottom:28px">
@@ -620,12 +625,7 @@ async function doChangePassword(isForced) {
 function renderHomeHTML() {
   const t = state.activeTask;
   const midnightWarn = checkMidnightWarn();
-  const stats = state.appStats;
-  const statsHTML = stats ? `
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:16px">
-      <div class="stat-card"><div class="stat-number">${stats.userCount}</div><div class="stat-label">Registered users</div></div>
-      <div class="stat-card"><div class="stat-number">${stats.taskCount}</div><div class="stat-label">Tasks logged</div></div>
-    </div>` : '';
+  const statsHTML = renderStatsCards(state.appStats, '16px');
   return `
   <div class="view">
     <div class="view-header">
@@ -662,7 +662,7 @@ async function renderHome() {
   stopTimer(); clearCharts(); state.currentView = 'home';
   pushHistory('home');
   app().innerHTML = renderHomeHTML();
-  const [, statsRes] = await Promise.all([
+  const [_activeTask, statsRes] = await Promise.all([
     checkActiveTask(),
     fetch('/api/auth/stats', { credentials: 'same-origin' }).catch(() => null),
   ]);
