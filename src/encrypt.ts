@@ -8,7 +8,7 @@ const PREFIX = 'enc:';
 function getKey(): Buffer | null {
   const raw = process.env['ENCRYPTION_KEY'];
   if (!raw) return null;
-  if (raw.length !== 64) {
+  if (raw.length !== 64 || !/^[0-9a-fA-F]{64}$/.test(raw)) {
     console.warn('[Tasker] ENCRYPTION_KEY must be a 64-character hex string (32 bytes). Field encryption disabled.');
     return null;
   }
@@ -28,20 +28,24 @@ export function encryptField(value: string | null | undefined): string | null {
 
 export function decryptField(value: string | null | undefined): string | null {
   if (value == null) return null;
-  if (!value.startsWith(PREFIX)) return value; // plaintext or no key configured
+  if (!value.startsWith(PREFIX)) return value; // plaintext — return as-is
   const key = getKey();
-  if (!key) return value; // key not available — return raw (encrypted) value
+  if (!key) {
+    // Value is encrypted but no key is configured — return null and warn
+    console.warn('[Tasker] Encrypted field found but ENCRYPTION_KEY is not set. Returning null.');
+    return null;
+  }
   const parts = value.slice(PREFIX.length).split(':');
-  if (parts.length !== 3) return value; // malformed — return as-is
+  if (parts.length !== 3) return null; // malformed — do not expose raw ciphertext
   try {
     const iv = Buffer.from(parts[0], 'base64');
     const tag = Buffer.from(parts[1], 'base64');
     const encrypted = Buffer.from(parts[2], 'base64');
-    if (iv.length !== IV_LEN || tag.length !== TAG_LEN) return value;
+    if (iv.length !== IV_LEN || tag.length !== TAG_LEN) return null;
     const decipher = crypto.createDecipheriv(ALGO, key, iv);
     decipher.setAuthTag(tag);
     return decipher.update(encrypted).toString('utf8') + decipher.final('utf8');
   } catch {
-    return value; // decryption failed — return raw value rather than crashing
+    return null; // decryption failed — do not expose raw ciphertext
   }
 }
