@@ -96,7 +96,7 @@ async function api(method, url, body, isFormData) {
     else { headers['Content-Type'] = 'application/json'; fetchBody = JSON.stringify(body || {}); }
   }
   const res = await fetch(url, { method, headers, body: fetchBody, credentials: 'same-origin' });
-  if (res.status === 401) { await renderLogin(); return null; }
+  if (res.status === 401 && url !== '/api/auth/login') { await renderLogin(); return null; }
   if (res.status === 429) {
     const retryAfter = res.headers.get('RateLimit-Reset') || res.headers.get('Retry-After');
     const wait = retryAfter ? ` Please wait ${Math.ceil((parseInt(retryAfter, 10) * 1000 - Date.now()) / 60000)} minute(s).` : ' Please wait a few minutes.';
