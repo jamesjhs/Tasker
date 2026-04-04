@@ -13,6 +13,7 @@ const state = {
   activeTask: null,     // current in_progress task
   timerInterval: null,
   activityInterval: null,
+  inactivityCheckInterval: null,
   interruptStart: null, // ISO string set when interrupt modal opens
   currentView: null,
   dropdowns: { category: [], subcategory: [], outcome: [] },
@@ -54,14 +55,52 @@ function getLastActive() {
   try { const v = localStorage.getItem('tasker_last_active'); return v ? parseInt(v, 10) : null; } catch(e) { return null; }
 }
 
+const ACTIVITY_EVENTS = ['click', 'touchstart', 'keydown', 'scroll'];
+
 function startActivityTracking() {
   stopActivityTracking();
+  updateLastActive();
   state.activityInterval = setInterval(updateLastActive, 60000);
+  ACTIVITY_EVENTS.forEach(evt => document.addEventListener(evt, updateLastActive, { passive: true }));
+  state.inactivityCheckInterval = setInterval(checkClientInactivity, 60000);
 }
 
 function stopActivityTracking() {
   if (state.activityInterval) { clearInterval(state.activityInterval); state.activityInterval = null; }
+  if (state.inactivityCheckInterval) { clearInterval(state.inactivityCheckInterval); state.inactivityCheckInterval = null; }
+  ACTIVITY_EVENTS.forEach(evt => document.removeEventListener(evt, updateLastActive));
 }
+
+async function forceSessionExpiry() {
+  stopActivityTracking();
+  try {
+    await fetch('/api/auth/logout', {
+      method: 'POST',
+      headers: { 'X-CSRF-Token': state.csrfToken || '' },
+      credentials: 'same-origin',
+    });
+  } catch(e) { console.warn('[Tasker] Logout request failed during session expiry:', e); }
+  state.user = null;
+  state.activeTask = null;
+  state.csrfToken = null;
+  state.registrationConfig = null;
+  try { await refreshCsrf(); } catch(e) {}
+  await renderLogin();
+  showAlert('Your session expired due to inactivity. Please log in again.', 'error', 'login-alerts');
+}
+
+function checkClientInactivity() {
+  if (!state.user) return;
+  const last = getLastActive();
+  if (last && Date.now() - last > INACTIVITY_MS) {
+    forceSessionExpiry();
+  }
+}
+
+// When the page becomes visible again, immediately check if the session has expired
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden) checkClientInactivity();
+});
 
 async function checkInactivityInterruption() {
   if (!state.activeTask) return false;
@@ -161,7 +200,7 @@ async function init() {
 
       setLoadingStatus('Checking active task…');
       await checkActiveTask();
-      if (state.activeTask) startActivityTracking();
+      startActivityTracking();
 
       setLoadingStatus('Rendering…');
       await (state.user.isAdmin ? renderAdmin() : renderHome());
@@ -206,12 +245,12 @@ function renderBottomNav(active) {
       <span class="nav-icon">⚙️</span><span>Settings</span>
     </button>
   </nav>
-  <p style="text-align:center;font-size:.75rem;color:#9ca3af;padding:8px 0 16px">v1.1.0 &nbsp;·&nbsp; <a href="/policy" target="_blank" style="color:#9ca3af">Privacy Policy</a> &nbsp;·&nbsp; <a href="/help" target="_blank" style="color:#9ca3af">Help</a></p>`;
+  <p style="text-align:center;font-size:.75rem;color:#9ca3af;padding:8px 0 16px">v1.1.0 &nbsp;·&nbsp; <a href="/policy" target="_blank" style="color:#9ca3af">Privacy Policy</a> &nbsp;·&nbsp; <a href="/help" target="_blank" style="color:#9ca3af">Help</a><br>© J Rowson ${new Date().getFullYear()} | <a href="https://jahosi.co.uk" target="_blank" style="color:#9ca3af">jahosi.co.uk</a></p>`;
 }
 
 // ── LOGIN ────────────────────────────────────────────────────────────────────
 async function renderLogin() {
-  stopTimer(); clearCharts(); state.currentView = 'login';
+  stopTimer(); stopActivityTracking(); clearCharts(); state.currentView = 'login';
   // Fetch registration config to decide whether to show Register button
   try {
     const cfgRes = await fetch('/api/auth/registration-config', { credentials: 'same-origin' });
@@ -229,7 +268,7 @@ async function renderLogin() {
     <div class="card">
       <div class="form-group">
         <label for="l-user">Username</label>
-        <input id="l-user" class="input" type="text" autocomplete="username" autocapitalize="off" placeholder="e.g. Qwerty">
+        <input id="l-user" class="input" type="text" autocomplete="username" autocapitalize="off" placeholder="Enter your username">
       </div>
       <div class="form-group">
         <label for="l-pass">Password</label>
@@ -244,7 +283,7 @@ async function renderLogin() {
       ${showRegister ? `<button class="link-btn" onclick="renderRegister()">Don't have an account? Register</button>` : ''}
       <a href="/policy" target="_blank" style="font-size:.85rem;color:#6b7280">Data &amp; Use Policy</a>
     </div>
-    <p style="text-align:center;font-size:.75rem;color:#9ca3af;margin-top:24px;padding-bottom:16px">v1.1.0</p>
+    <p style="text-align:center;font-size:.75rem;color:#9ca3af;margin-top:24px;padding-bottom:16px">v1.1.0<br>© J Rowson ${new Date().getFullYear()} | <a href="https://jahosi.co.uk" target="_blank" style="color:#9ca3af">jahosi.co.uk</a></p>
   </div>`;
   document.getElementById('l-user').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
   document.getElementById('l-pass').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
@@ -271,6 +310,7 @@ async function doLogin() {
     if (d.pendingActivation) { renderAwaitActivation(); return; }
     await loadDropdowns();
     await checkActiveTask();
+    startActivityTracking();
     renderPrivacySplash(() => { d.isAdmin ? renderAdmin() : renderHome(); });
   } catch(e) {
     btn.disabled = false; btn.textContent = 'Log in';
@@ -1593,7 +1633,7 @@ function renderAdminContent(stats, users, dropOpts, settings, pendingUsers, awai
 
     <div class="divider"></div>
     <button class="btn btn-secondary btn-full" style="margin-bottom:16px" onclick="doLogout()">🚪 Log Out</button>
-    <p style="text-align:center;font-size:.75rem;color:#9ca3af;padding-bottom:80px">v1.1.0 &nbsp;·&nbsp; <a href="/policy" target="_blank" style="color:#9ca3af">Privacy Policy</a> &nbsp;·&nbsp; <a href="/help" target="_blank" style="color:#9ca3af">Help</a></p>
+    <p style="text-align:center;font-size:.75rem;color:#9ca3af;padding-bottom:80px">v1.1.0 &nbsp;·&nbsp; <a href="/policy" target="_blank" style="color:#9ca3af">Privacy Policy</a> &nbsp;·&nbsp; <a href="/help" target="_blank" style="color:#9ca3af">Help</a><br>© J Rowson ${new Date().getFullYear()} | <a href="https://jahosi.co.uk" target="_blank" style="color:#9ca3af">jahosi.co.uk</a></p>
   </div>`;
 }
 

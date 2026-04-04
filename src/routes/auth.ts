@@ -56,7 +56,8 @@ router.post('/invite', requireAuth, validateCsrf, async (req: Request, res: Resp
   }
   const db = getDb();
   const username = generateUsername();
-  const tempPassword = crypto.randomBytes(5).toString('hex') + '!';
+  const TEMP_SYMBOLS = ['%', '#', '?'];
+  const tempPassword = crypto.randomBytes(5).toString('hex') + TEMP_SYMBOLS[crypto.randomInt(TEMP_SYMBOLS.length)];
   const hash = await bcrypt.hash(tempPassword, 12);
   // User-invited accounts can always log in but require admin activation
   // unless the mode is 'auto' (no admin action needed)
