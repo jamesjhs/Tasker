@@ -1,6 +1,6 @@
 # Tasker
 
-**v1.1.0** — An anonymous, mobile-only task-logging PWA for healthcare staff. Built with TypeScript, Express 5, SQLite, and vanilla JS.
+**v1.2.0** — An anonymous, mobile-only task-logging PWA for healthcare staff. Built with TypeScript, Express 5, SQLite, and vanilla JS.
 
 ---
 
@@ -16,6 +16,7 @@
 - **Configurable registration** — administrator controls three levels for self-registration and user invitations: disabled, administrator-approved (default), or automatic approval.
 - **User invitations** — logged-in users can invite others using the same temp-password flow as admins (subject to the configured policy).
 - **30-day data retention** — task data is automatically deleted after 30 days.
+- **Health-check endpoint** — `GET /readyz` returns a JSON status response for uptime/heartbeat monitoring (no authentication required).
 
 ---
 
@@ -82,7 +83,7 @@ npm run build # compile TypeScript → dist/
 
 ```
 src/
-  server.ts               Express 5 app, middleware wiring, SSL detection, 30-day retention job
+  server.ts               Express 5 app, middleware wiring, SSL detection, 30-day retention job, /readyz health check
   db.ts                   SQLite schema + migrations + seed data, getDb(), getSetting(), setSetting()
   words.ts                Memorable two-word username generator
   middleware/index.ts     NHS block, mobile-only, requireAuth, requireAdmin, CSRF, logEvent
@@ -119,6 +120,7 @@ docs/
 - Rate limiting: auth 20/15 min, API 200/min
 - bcrypt cost factor 12 for passwords
 - Account lockout after repeated failed login attempts
+- Friendly error messages on failed login (username/password invalid)
 - HTTP-only, SameSite=strict session cookies
 - 30-minute idle session timeout + midnight session expiry
 - Helmet.js security headers
@@ -126,10 +128,24 @@ docs/
 - Parameterised SQL queries throughout
 - Path validation on DB restore endpoint
 - Automatic HTTPS when certificates are present
+- `/readyz` health-check endpoint is unauthenticated but returns no sensitive data
 
 ---
 
 ## Data & Use Policy
 
 See [`/policy`](/policy) for the full Data and Use Policy.
+
+---
+
+## Changelog
+
+### v1.2.0 (April 2026)
+
+- **Health-check endpoint** — `GET /readyz` returns `{"ok":true,"service":"Tasker","version":"1.2.0","timestamp":"..."}` for uptime/heartbeat polling servers. No authentication required; exempt from mobile-only restriction.
+- **Login error messages** — failed login attempts (wrong username or password) now display the server's friendly error message in the login form instead of silently resetting the form.
+
+### v1.1.0
+
+- Initial public release with task logging, analytics, admin panel, Excel export, PWA support, and configurable registration.
 
