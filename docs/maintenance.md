@@ -1,6 +1,6 @@
 # Tasker — Maintenance and Troubleshooting Manual
 
-**Version 1.1.0 — April 2026**
+**Version 1.2.0 — April 2026**
 
 ---
 
@@ -12,10 +12,11 @@
 4. [Updating the application](#updating-the-application)
 5. [User management](#user-management)
 6. [Dropdown option management](#dropdown-option-management)
-7. [Log inspection](#log-inspection)
-8. [Troubleshooting guide](#troubleshooting-guide)
-9. [Security considerations](#security-considerations)
-10. [Data retention](#data-retention)
+7. [Health-check endpoint](#health-check-endpoint)
+8. [Log inspection](#log-inspection)
+9. [Troubleshooting guide](#troubleshooting-guide)
+10. [Security considerations](#security-considerations)
+11. [Data retention](#data-retention)
 
 ---
 
@@ -215,6 +216,31 @@ Users can suggest new options while recording tasks. These appear in the **Pendi
 ### Removing options
 
 Tap **✕** next to any existing option to delete it. Existing tasks that used that option are not affected — the option value is stored directly on the task record.
+
+---
+
+## Health-check endpoint
+
+Tasker exposes `GET /readyz` for uptime monitoring and heartbeat polling. No authentication is required and the endpoint is exempt from the mobile-only restriction.
+
+**Response format:**
+
+```json
+{
+  "ok": true,
+  "service": "Tasker",
+  "version": "1.2.0",
+  "timestamp": "2026-04-04T12:09:26.477Z"
+}
+```
+
+**Example curl check:**
+
+```bash
+curl -s https://yourdomain.example.com/readyz | python3 -m json.tool
+```
+
+Configure your polling/heartbeat server to `GET /readyz` and alert if the response is not HTTP 200 or `ok` is not `true`.
 
 ---
 

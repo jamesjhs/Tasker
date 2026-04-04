@@ -73,6 +73,13 @@ const apiLimiter = rateLimit({ windowMs: 60 * 1000, max: 200, standardHeaders: t
 // ─── NHS block on auth ────────────────────────────────────────────────────────
 app.use('/api/auth', nhsNetworkBlock);
 
+const APP_VERSION = '1.2.0';
+
+// ─── Health-check endpoint (exempt from mobile-only and auth) ─────────────────
+app.get('/readyz', (_req, res) => {
+  res.json({ ok: true, service: 'Tasker', version: APP_VERSION, timestamp: new Date().toISOString() });
+});
+
 // ─── Mobile-only BEFORE static files ─────────────────────────────────────────
 app.use(mobileOnly);
 
