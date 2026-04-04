@@ -10,7 +10,7 @@ const state = {
   csrfToken: null,
   user: null,           // { username, isAdmin, mustChangePassword }
   registrationConfig: null, // { selfRegistration, userInvite }
-  appStats: null,       // { userCount, taskCount }
+  appStats: null,       // { userCount, eventCount }
   activeTask: null,     // current in_progress task
   timerInterval: null,
   activityInterval: null,
@@ -298,7 +298,7 @@ function renderStatsCards(stats, marginTop = '20px') {
   return `
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:${marginTop}">
       <div class="stat-card"><div class="stat-number">${stats.userCount}</div><div class="stat-label">Registered users</div></div>
-      <div class="stat-card"><div class="stat-number">${stats.taskCount}</div><div class="stat-label">Tasks logged</div></div>
+      <div class="stat-card"><div class="stat-number">${stats.eventCount}</div><div class="stat-label">Events logged</div></div>
     </div>`;
 }
 
@@ -638,7 +638,7 @@ function renderHomeHTML() {
     <div class="card" style="border: 2px solid #f59e0b">
       <div class="card-title">⏸️ Task In Progress</div>
       <div style="display:flex;gap:8px;align-items:center;margin-bottom:6px;flex-wrap:wrap">
-        <span class="badge ${t.is_duty ? 'badge-duty' : 'badge-personal'}">${t.is_duty ? 'Duty' : 'Personal'}</span>
+        <span class="badge ${t.is_duty ? 'badge-duty' : 'badge-personal'}">${t.is_duty ? 'My Group' : 'Personal'}</span>
         ${t.category ? `<span style="font-size:.9rem;color:#374151;font-weight:600">${esc(t.category)}</span>` : ''}
         ${t.subcategory ? `<span style="font-size:.9rem;color:#6b7280">› ${esc(t.subcategory)}</span>` : ''}
       </div>
@@ -844,7 +844,7 @@ function renderTaskStart() {
       <label>Task type</label>
       <div class="toggle-group">
         <button class="toggle-btn" id="tb-personal" onclick="setDuty(false)">👤 Personal</button>
-        <button class="toggle-btn" id="tb-duty" onclick="setDuty(true)">🏥 Duty</button>
+        <button class="toggle-btn" id="tb-duty" onclick="setDuty(true)">🏥 My Group</button>
       </div>
     </div>
     ${buildDropdownGroup('category','Task From', state.dropdowns.category, 'ts-cat')}
@@ -918,7 +918,7 @@ async function doStartTask() {
   const is_duty = state.taskForm.is_duty;
   if (!category) { showAlert('Please select a Task From.', 'error', 'ts-alerts'); return; }
   if (!subcategory) { showAlert('Please select a Task Type.', 'error', 'ts-alerts'); return; }
-  if (is_duty === null) { showAlert('Please select Duty or Personal.', 'error', 'ts-alerts'); return; }
+  if (is_duty === null) { showAlert('Please select My Group or Personal.', 'error', 'ts-alerts'); return; }
   try {
     const d = await api('POST', '/api/tasks/start', {
       is_duty, category: category || null, subcategory: subcategory || null,
@@ -942,7 +942,7 @@ function renderTaskActive() {
   <div class="view">
     <div class="view-header">
       <h1>⏱️ Task Running</h1>
-      <span class="badge ${t.is_duty ? 'badge-duty' : 'badge-personal'}">${t.is_duty ? 'Duty' : 'Personal'}</span>
+      <span class="badge ${t.is_duty ? 'badge-duty' : 'badge-personal'}">${t.is_duty ? 'My Group' : 'Personal'}</span>
     </div>
     ${midWarn ? '<div class="midnight-warn">⚠️ Approaching midnight — your session will end at midnight!</div>' : ''}
     ${t.category ? `<p style="text-align:center;font-size:1rem;color:#374151;margin-bottom:4px">${esc(t.category)}${t.subcategory ? ' › ' + esc(t.subcategory) : ''}</p>` : ''}
@@ -1126,14 +1126,14 @@ function renderTaskReview(t, isEdit) {
 
   const taskSummaryHtml = !isEdit ? `
       <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:10px 0;border-bottom:1px solid #e5e7eb;margin-bottom:4px">
-        <span class="badge ${t.is_duty ? 'badge-duty' : 'badge-personal'}">${t.is_duty ? '🏥 Duty' : '👤 Personal'}</span>
+        <span class="badge ${t.is_duty ? 'badge-duty' : 'badge-personal'}">${t.is_duty ? '🏥 My Group' : '👤 Personal'}</span>
         ${t.category ? `<span style="font-weight:600;color:#374151">${esc(t.category)}</span>` : ''}
         ${t.subcategory ? `<span style="color:#6b7280">›</span><span style="color:#374151">${esc(t.subcategory)}</span>` : ''}
       </div>` : `
       <div class="form-group">
         <label>Task type</label>
         <div class="toggle-group">
-          <button class="toggle-btn ${t.is_duty ? 'active' : ''}" id="te-duty" onclick="setEditDuty(true)">🏥 Duty</button>
+          <button class="toggle-btn ${t.is_duty ? 'active' : ''}" id="te-duty" onclick="setEditDuty(true)">🏥 My Group</button>
           <button class="toggle-btn ${!t.is_duty ? 'active' : ''}" id="te-personal" onclick="setEditDuty(false)">👤 Personal</button>
         </div>
       </div>
@@ -1387,7 +1387,7 @@ function renderAnalyticsContent(data, mode) {
       <label>Type</label>
       <select id="h-duty" class="select">
         <option value="">All</option>
-        <option value="duty">Duty only</option>
+        <option value="duty">My Group only</option>
         <option value="personal">Personal only</option>
       </select>
     </div>
@@ -1413,7 +1413,7 @@ function renderAnalyticsContent(data, mode) {
     return `
     <div class="card task-card">
       <div class="task-card-row">
-        <span class="badge ${t.is_duty ? 'badge-duty' : 'badge-personal'}">${t.is_duty ? 'Duty' : 'Personal'}</span>
+        <span class="badge ${t.is_duty ? 'badge-duty' : 'badge-personal'}">${t.is_duty ? 'My Group' : 'Personal'}</span>
         <span class="task-card-meta">${formatTimeShort(t.start_time)} — ${formatTimeShort(t.end_time) || '?'} (${dur}m)</span>
       </div>
       <div class="task-card-title">${esc(t.category || 'Uncategorised')}${t.subcategory ? ' › ' + esc(t.subcategory) : ''}</div>
@@ -1441,7 +1441,7 @@ function renderAnalyticsContent(data, mode) {
     <div class="stat-grid">
       <div class="stat-card"><div class="stat-number">${s.total}</div><div class="stat-label">Total tasks</div></div>
       <div class="stat-card"><div class="stat-number">${s.totalMins}</div><div class="stat-label">Total mins</div></div>
-      <div class="stat-card"><div class="stat-number">${s.dutyCount}</div><div class="stat-label">Duty tasks</div></div>
+      <div class="stat-card"><div class="stat-number">${s.dutyCount}</div><div class="stat-label">My Group tasks</div></div>
       <div class="stat-card"><div class="stat-number">${s.personalCount}</div><div class="stat-label">Personal</div></div>
       <div class="stat-card"><div class="stat-number">${s.totalInterruptions || 0}</div><div class="stat-label">Interruptions</div></div>
     </div>
@@ -1452,7 +1452,7 @@ function renderAnalyticsContent(data, mode) {
       <div class="chart-container" style="height:240px"><canvas id="chart-cat"></canvas></div>
     </div>
     <div class="card">
-      <div class="card-title">Duty vs Personal</div>
+      <div class="card-title">My Group vs Personal</div>
       <div class="chart-container" style="height:200px"><canvas id="chart-split"></canvas></div>
     </div>
     ${isHistory && s.dates?.length > 1 ? `
@@ -1478,8 +1478,8 @@ function renderAnalyticsContent(data, mode) {
     const catMins = catLabels.map(k => s.byCategory[k].minutes);
     renderChart('chart-cat', 'doughnut', catLabels, [{ data: catMins, backgroundColor: COLORS }], { plugins: { legend: { position: 'bottom' } } });
 
-    // Duty vs personal bar
-    renderChart('chart-split', 'bar', ['Duty', 'Personal'],
+    // My Group vs personal bar
+    renderChart('chart-split', 'bar', ['My Group', 'Personal'],
       [{ label: 'Tasks', data: [s.dutyCount, s.personalCount], backgroundColor: ['#1a56db','#7c3aed'] }],
       { indexAxis: 'y', plugins: { legend: { display: false } } });
 
@@ -1581,6 +1581,7 @@ function renderAdminContent(stats, users, dropOpts, settings, pendingUsers, awai
     if (!dropByField[o.field_name]) dropByField[o.field_name] = [];
     dropByField[o.field_name].push(o);
   }
+  const dropFieldLabels = { category: 'Task from', subcategory: 'Task type', outcome: 'Outcome' };
   const dropSections = ['category','subcategory','outcome'].map(field => {
     const items = (dropByField[field] || []).map(o => `
     <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid #f3f4f6">
@@ -1589,7 +1590,7 @@ function renderAdminContent(stats, users, dropOpts, settings, pendingUsers, awai
     </div>`).join('');
     return `
     <div class="card">
-      <div class="card-title">${field.charAt(0).toUpperCase()+field.slice(1)} options</div>
+      <div class="card-title">${dropFieldLabels[field] || field.charAt(0).toUpperCase()+field.slice(1)} options</div>
       ${items || '<p style="font-size:.85rem;color:#6b7280">No options.</p>'}
       <div class="add-new-row" style="margin-top:10px">
         <input id="add-${field}" class="input" type="text" placeholder="New ${field}…">
