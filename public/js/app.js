@@ -4,12 +4,16 @@
 'use strict';
 
 // ── State ───────────────────────────────────────────────────────────────────
+const INACTIVITY_MS = 30 * 60 * 1000; // 30 minutes
+
 const state = {
   csrfToken: null,
   user: null,           // { username, isAdmin, mustChangePassword }
   registrationConfig: null, // { selfRegistration, userInvite }
   activeTask: null,     // current in_progress task
   timerInterval: null,
+  activityInterval: null,
+  interruptStart: null, // ISO string set when interrupt modal opens
   currentView: null,
   dropdowns: { category: [], subcategory: [], outcome: [] },
   taskForm: {},
@@ -39,6 +43,47 @@ function clearCharts() {
 
 function stopTimer() {
   if (state.timerInterval) { clearInterval(state.timerInterval); state.timerInterval = null; }
+}
+
+// ── Inactivity / activity tracking ──────────────────────────────────────────
+function updateLastActive() {
+  try { localStorage.setItem('tasker_last_active', Date.now().toString()); } catch(e) {}
+}
+
+function getLastActive() {
+  try { const v = localStorage.getItem('tasker_last_active'); return v ? parseInt(v, 10) : null; } catch(e) { return null; }
+}
+
+function startActivityTracking() {
+  stopActivityTracking();
+  state.activityInterval = setInterval(updateLastActive, 60000);
+}
+
+function stopActivityTracking() {
+  if (state.activityInterval) { clearInterval(state.activityInterval); state.activityInterval = null; }
+}
+
+async function checkInactivityInterruption() {
+  if (!state.activeTask) return false;
+  const last = getLastActive();
+  if (!last) return false;
+  const taskStart = new Date(state.activeTask.start_time).getTime();
+  const effectiveLast = Math.max(last, taskStart);
+  const gap = Date.now() - effectiveLast;
+  if (gap < INACTIVITY_MS) return false;
+  const t = state.activeTask;
+  const interruptions = [...(t.interruptions || []), {
+    start: new Date(effectiveLast).toISOString(),
+    end: new Date().toISOString(),
+  }];
+  try {
+    await api('PATCH', `/api/tasks/${t.id}`, { interruptions });
+    t.interruptions = interruptions;
+    return true;
+  } catch(e) {
+    console.error('[Tasker] Failed to record inactivity interruption:', e);
+  }
+  return false;
 }
 
 // ── API helper ──────────────────────────────────────────────────────────────
@@ -116,6 +161,7 @@ async function init() {
 
       setLoadingStatus('Checking active task…');
       await checkActiveTask();
+      if (state.activeTask) startActivityTracking();
 
       setLoadingStatus('Rendering…');
       await (state.user.isAdmin ? renderAdmin() : renderHome());
@@ -436,15 +482,18 @@ function renderHomeHTML() {
     <div id="home-alerts"></div>
     ${t ? `
     <div class="card" style="border: 2px solid #f59e0b">
-      <div class="card-title">⏸️ Active Task</div>
-      <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
+      <div class="card-title">⏸️ Task In Progress</div>
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:6px;flex-wrap:wrap">
         <span class="badge ${t.is_duty ? 'badge-duty' : 'badge-personal'}">${t.is_duty ? 'Duty' : 'Personal'}</span>
-        ${t.category ? `<span style="font-size:.9rem;color:#374151">${esc(t.category)}</span>` : ''}
+        ${t.category ? `<span style="font-size:.9rem;color:#374151;font-weight:600">${esc(t.category)}</span>` : ''}
+        ${t.subcategory ? `<span style="font-size:.9rem;color:#6b7280">› ${esc(t.subcategory)}</span>` : ''}
       </div>
-      <p style="font-size:.85rem;color:#6b7280">Started: ${formatTimeShort(t.start_time)}</p>
-      <div class="task-card-actions">
+      <p style="font-size:.85rem;color:#6b7280;margin-bottom:4px">Started: ${formatTimeShort(t.start_time)}</p>
+      ${t.interruptions?.length ? `<p style="font-size:.85rem;color:#d97706;margin-bottom:4px">⚠️ ${t.interruptions.length} interruption(s) recorded</p>` : ''}
+      ${t.notes ? `<p style="font-size:.85rem;color:#374151;margin-bottom:4px;font-style:italic">${esc(t.notes)}</p>` : ''}
+      <div style="display:flex;gap:8px;margin-top:12px">
         <button class="btn btn-primary" style="flex:1" onclick="renderTaskActive()">▶ Resume</button>
-        <button class="btn btn-danger btn-sm" onclick="discardActiveTask()">🗑 Discard</button>
+        <button class="btn btn-secondary" style="flex:1" onclick="discardActiveTask()">✕ Abandon</button>
       </div>
     </div>` : `
     <button class="btn btn-primary btn-full" style="font-size:1.1rem;padding:18px" onclick="renderTaskStart()">
@@ -458,6 +507,13 @@ async function renderHome() {
   stopTimer(); clearCharts(); state.currentView = 'home';
   app().innerHTML = renderHomeHTML();
   await checkActiveTask();
+  if (state.activeTask) {
+    await checkInactivityInterruption();
+    updateLastActive();
+    startActivityTracking();
+  } else {
+    stopActivityTracking();
+  }
   if (state.currentView === 'home') app().innerHTML = renderHomeHTML();
 }
 
@@ -469,10 +525,11 @@ function checkMidnightWarn() {
 
 async function discardActiveTask() {
   if (!state.activeTask) return;
-  if (!confirm('Discard this task? All data will be deleted.')) return;
+  if (!confirm('Abandon this task? All data will be deleted.')) return;
   try {
     await api('PATCH', `/api/tasks/${state.activeTask.id}`, { status: 'discarded' });
     state.activeTask = null;
+    stopActivityTracking();
     renderHome();
   } catch(e) { showAlert(e.message, 'error', 'home-alerts'); }
 }
@@ -504,6 +561,7 @@ function renderSettings() {
 
 async function doLogout() {
   try { await api('POST', '/api/auth/logout'); } catch(e){}
+  stopActivityTracking();
   state.user = null; state.activeTask = null; state.csrfToken = null;
   state.registrationConfig = null;
   try { await refreshCsrf(); } catch(e){}
@@ -782,7 +840,7 @@ function formatDatetimeLocal(iso) {
 // ── INTERRUPT MODAL ──────────────────────────────────────────────────────────
 function showInterruptModal() {
   stopTimer();
-  const interruptStart = new Date().toISOString();
+  state.interruptStart = new Date().toISOString();
   const modal = document.createElement('div');
   modal.className = 'modal-overlay';
   modal.id = 'intr-modal';
@@ -793,7 +851,7 @@ function showInterruptModal() {
     <button class="btn btn-primary btn-full" style="margin-bottom:10px" onclick="resumeTask()">
       ▶ Resume — continue from here
     </button>
-    <button class="btn btn-secondary btn-full" style="margin-bottom:10px" onclick="showManualInterruptForm('${interruptStart}')">
+    <button class="btn btn-secondary btn-full" style="margin-bottom:10px" onclick="showManualInterruptForm()">
       📝 Enter interruption times manually
     </button>
     <button class="btn btn-danger btn-full" onclick="discardFromModal()">
@@ -803,13 +861,28 @@ function showInterruptModal() {
   document.body.appendChild(modal);
 }
 
-function resumeTask() {
+async function resumeTask(saveAutoInterrupt = true) {
   const m = document.getElementById('intr-modal');
   if (m) m.remove();
+  const t = state.activeTask;
+  if (saveAutoInterrupt && t && state.interruptStart) {
+    const interruptions = [...(t.interruptions || []), {
+      start: state.interruptStart,
+      end: new Date().toISOString(),
+    }];
+    try {
+      await api('PATCH', `/api/tasks/${t.id}`, { interruptions });
+      t.interruptions = interruptions;
+    } catch(e) {
+      console.error('[Tasker] Failed to record interruption:', e);
+    }
+  }
+  state.interruptStart = null;
   renderTaskActive();
 }
 
-function showManualInterruptForm(interruptStart) {
+function showManualInterruptForm() {
+  const interruptStart = state.interruptStart || new Date().toISOString();
   const modal = document.getElementById('intr-modal');
   if (!modal) return;
   modal.querySelector('.modal-sheet').innerHTML = `
@@ -824,7 +897,7 @@ function showManualInterruptForm(interruptStart) {
     <input id="intr-end" class="input" type="datetime-local" value="${formatDatetimeLocal(new Date().toISOString())}">
   </div>
   <button class="btn btn-primary btn-full" onclick="saveInterruption()">Save &amp; Resume</button>
-  <button class="btn btn-secondary btn-full" style="margin-top:8px" onclick="resumeTask()">Cancel — resume without recording</button>`;
+  <button class="btn btn-secondary btn-full" style="margin-top:8px" onclick="resumeTask(false)">Cancel — resume without recording</button>`;
 }
 
 async function saveInterruption() {
@@ -839,6 +912,7 @@ async function saveInterruption() {
   try {
     await api('PATCH', `/api/tasks/${t.id}`, { interruptions });
     t.interruptions = interruptions;
+    state.interruptStart = null;
     const m = document.getElementById('intr-modal');
     if (m) m.remove();
     renderTaskActive();
@@ -850,6 +924,8 @@ async function discardFromModal() {
   try {
     await api('PATCH', `/api/tasks/${state.activeTask.id}`, { status: 'discarded' });
     state.activeTask = null;
+    state.interruptStart = null;
+    stopActivityTracking();
     const m = document.getElementById('intr-modal');
     if (m) m.remove();
     renderHome();
@@ -1050,6 +1126,7 @@ async function submitTaskReview(taskId, isEdit, dest) {
   try {
     await api('PATCH', `/api/tasks/${taskId}`, body);
     state.activeTask = null;
+    stopActivityTracking();
     await checkActiveTask();
     if (dest === 'start') {
       renderTaskStart();
@@ -1065,6 +1142,7 @@ async function discardFromEnd(taskId) {
   try {
     await api('PATCH', `/api/tasks/${taskId}`, { status: 'discarded' });
     state.activeTask = null;
+    stopActivityTracking();
     renderHome();
   } catch(e) { showAlert(e.message, 'error', 'te-alerts'); }
 }
@@ -1173,6 +1251,7 @@ function renderAnalyticsContent(data, mode) {
       </div>
       <div class="task-card-title">${esc(t.category || 'Uncategorised')}${t.subcategory ? ' › ' + esc(t.subcategory) : ''}</div>
       ${t.outcome ? `<div class="task-card-meta">Outcome: ${esc(t.outcome)}</div>` : ''}
+      ${t.interruptions?.length ? `<div class="task-card-meta">⚠️ ${t.interruptions.length} interruption(s)</div>` : ''}
       <div class="task-card-actions">
         <button class="btn btn-outline btn-sm" onclick="loadAndEditTask(${t.id})">✏️ Edit</button>
         <button class="btn btn-danger btn-sm" onclick="deleteTask(${t.id})">🗑️ Delete</button>
@@ -1197,6 +1276,7 @@ function renderAnalyticsContent(data, mode) {
       <div class="stat-card"><div class="stat-number">${s.totalMins}</div><div class="stat-label">Total mins</div></div>
       <div class="stat-card"><div class="stat-number">${s.dutyCount}</div><div class="stat-label">Duty tasks</div></div>
       <div class="stat-card"><div class="stat-number">${s.personalCount}</div><div class="stat-label">Personal</div></div>
+      <div class="stat-card"><div class="stat-number">${s.totalInterruptions || 0}</div><div class="stat-label">Interruptions</div></div>
     </div>
     ${regressionNote}
     ${s.total > 0 ? `
@@ -1637,4 +1717,29 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('loading-retry-btn')?.addEventListener('click', init);
   document.getElementById('loading-login-btn')?.addEventListener('click', renderLogin);
   init();
+});
+
+// ── Inactivity event hooks ────────────────────────────────────────────────────
+window.addEventListener('beforeunload', () => { updateLastActive(); });
+
+document.addEventListener('visibilitychange', async () => {
+  if (document.hidden) {
+    updateLastActive();
+  } else {
+    if (state.user && !state.user.isAdmin && state.activeTask) {
+      try {
+        const interrupted = await checkInactivityInterruption();
+        updateLastActive();
+        if (interrupted) {
+          if (state.currentView === 'home') {
+            app().innerHTML = renderHomeHTML();
+          } else if (state.currentView === 'task-active') {
+            renderTaskActive();
+          }
+        }
+      } catch(e) {
+        console.error('[Tasker] Visibility change error:', e);
+      }
+    }
+  }
 });

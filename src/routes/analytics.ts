@@ -75,9 +75,12 @@ function buildSummary(tasks: any[]) {
     };
   }
 
+  const totalInterruptions = tasks.reduce((s, t) => s + (t.interruptions?.length || 0), 0);
+
   return {
     total: tasks.length,
     totalMins,
+    totalInterruptions,
     dutyCount: duty.length,
     dutyMins: duty.reduce((s, t) => s + mins(t.start_time, t.end_time, t.interruptions), 0),
     personalCount: personal.length,
