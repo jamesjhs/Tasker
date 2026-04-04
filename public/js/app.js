@@ -225,7 +225,7 @@ async function init() {
   }
 
   setLoadingStatus('Checking for updates…');
-  if (await checkAssetVersion()) return;
+  if (await checkAssetVersion()) return; // Version mismatch — page will reload with fresh assets
 
   try {
     setLoadingStatus('Fetching security token…');
@@ -1886,7 +1886,8 @@ window.addEventListener('popstate', async (e) => {
   if (!view) return;
   // Redirect to appropriate landing page if auth state doesn't match the view
   if ((view === 'login' || view === 'register') && state.user) {
-    replaceHistory(state.user.isAdmin ? 'admin' : 'home');
+    const targetView = state.user.isAdmin ? 'admin' : 'home';
+    replaceHistory(targetView);
     await (state.user.isAdmin ? renderAdmin() : renderHome());
     return;
   }
