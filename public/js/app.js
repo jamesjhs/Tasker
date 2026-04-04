@@ -322,7 +322,7 @@ async function renderLogin() {
     <div style="text-align:center;padding-top:30px;margin-bottom:28px">
       <div style="font-size:3rem">📱</div>
       <h1 style="font-size:1.8rem;color:#1a56db;margin-top:8px">Tasker</h1>
-      <p style="color:#6b7280;font-size:.9rem;margin-top:4px">Anonymous task logger</p>
+      <p style="color:#6b7280;font-size:.9rem;margin-top:4px">Helping you analyse your admin workload</p>
     </div>
     <div id="login-alerts"></div>
     <div class="card">
