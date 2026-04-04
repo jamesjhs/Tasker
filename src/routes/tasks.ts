@@ -60,6 +60,12 @@ router.patch('/:id', validateCsrf, (req: Request, res: Response) => {
   if (notes != null && String(notes).length > 2000) {
     res.status(400).json({ error: 'Notes must not exceed 2000 characters.' }); return;
   }
+  // Validate temporal consistency when both times are present
+  const effectiveStart = start_time !== undefined ? start_time : task.start_time;
+  const effectiveEnd = end_time !== undefined ? end_time : task.end_time;
+  if (effectiveStart && effectiveEnd && new Date(effectiveStart) >= new Date(effectiveEnd)) {
+    res.status(400).json({ error: 'Start time must be before end time.' }); return;
+  }
   const cols: string[] = [];
   const vals: any[] = [];
   if (status !== undefined)       { cols.push('status=?');        vals.push(status); }

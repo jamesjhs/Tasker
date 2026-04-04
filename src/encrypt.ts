@@ -8,7 +8,7 @@ const PREFIX = 'enc:';
 function getKey(): Buffer | null {
   const raw = process.env['ENCRYPTION_KEY'];
   if (!raw) return null;
-  if (raw.length !== 64 || !/^[0-9a-fA-F]{64}$/.test(raw)) {
+  if (!/^[0-9a-fA-F]{64}$/.test(raw)) {
     console.warn('[Tasker] ENCRYPTION_KEY must be a 64-character hex string (32 bytes). Field encryption disabled.');
     return null;
   }
