@@ -22,6 +22,45 @@ const state = {
   charts: {},
 };
 
+// ── History management ────────────────────────────────────────────────────────
+let _popstateActive = false;
+
+function pushHistory(view) {
+  if (_popstateActive || window.history.state?.view === view) return;
+  window.history.pushState({ view }, '', window.location.pathname);
+}
+
+function replaceHistory(view) {
+  window.history.replaceState({ view }, '', window.location.pathname);
+}
+
+// ── Asset version check ───────────────────────────────────────────────────────
+async function checkAssetVersion() {
+  try {
+    const r = await fetch('/api/version', { cache: 'no-store', credentials: 'same-origin' });
+    if (!r.ok) return false;
+    const { version } = await r.json();
+    const stored = localStorage.getItem('tasker_app_version');
+    if (stored !== null && stored !== version) {
+      localStorage.setItem('tasker_app_version', version);
+      if ('caches' in window) {
+        const keys = await caches.keys();
+        await Promise.all(keys.map(k => caches.delete(k)));
+      }
+      if ('serviceWorker' in navigator) {
+        const regs = await navigator.serviceWorker.getRegistrations();
+        await Promise.all(regs.map(reg => reg.unregister()));
+      }
+      window.location.reload();
+      return true;
+    }
+    localStorage.setItem('tasker_app_version', version);
+    return false;
+  } catch (e) {
+    return false;
+  }
+}
+
 // ── DOM helpers ─────────────────────────────────────────────────────────────
 const app = () => document.getElementById('app');
 const esc = str => str == null ? '' : String(str)
@@ -184,6 +223,10 @@ async function init() {
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('/sw.js').catch(() => {});
   }
+
+  setLoadingStatus('Checking for updates…');
+  if (await checkAssetVersion()) return; // Version mismatch — page will reload with fresh assets
+
   try {
     setLoadingStatus('Fetching security token…');
     await refreshCsrf();
@@ -245,12 +288,13 @@ function renderBottomNav(active) {
       <span class="nav-icon">⚙️</span><span>Settings</span>
     </button>
   </nav>
-  <p style="text-align:center;font-size:.75rem;color:#9ca3af;padding:8px 0 16px">v1.1.0 &nbsp;·&nbsp; <a href="/policy" target="_blank" style="color:#9ca3af">Privacy Policy</a> &nbsp;·&nbsp; <a href="/help" target="_blank" style="color:#9ca3af">Help</a><br>© J Rowson ${new Date().getFullYear()} | <a href="https://jahosi.co.uk" target="_blank" style="color:#9ca3af">jahosi.co.uk</a></p>`;
+  <p style="text-align:center;font-size:.75rem;color:#9ca3af;padding:8px 0 16px">v1.3.0 &nbsp;·&nbsp; <a href="/policy" target="_blank" style="color:#9ca3af">Privacy Policy</a> &nbsp;·&nbsp; <a href="/help" target="_blank" style="color:#9ca3af">Help</a><br>© J Rowson ${new Date().getFullYear()} | <a href="https://jahosi.co.uk" target="_blank" style="color:#9ca3af">jahosi.co.uk</a></p>`;
 }
 
 // ── LOGIN ────────────────────────────────────────────────────────────────────
 async function renderLogin() {
   stopTimer(); stopActivityTracking(); clearCharts(); state.currentView = 'login';
+  replaceHistory('login');
   // Fetch registration config to decide whether to show Register button
   try {
     const cfgRes = await fetch('/api/auth/registration-config', { credentials: 'same-origin' });
@@ -283,7 +327,7 @@ async function renderLogin() {
       ${showRegister ? `<button class="link-btn" onclick="renderRegister()">Don't have an account? Register</button>` : ''}
       <a href="/policy" target="_blank" style="font-size:.85rem;color:#6b7280">Data &amp; Use Policy</a>
     </div>
-    <p style="text-align:center;font-size:.75rem;color:#9ca3af;margin-top:24px;padding-bottom:16px">v1.1.0<br>© J Rowson ${new Date().getFullYear()} | <a href="https://jahosi.co.uk" target="_blank" style="color:#9ca3af">jahosi.co.uk</a></p>
+    <p style="text-align:center;font-size:.75rem;color:#9ca3af;margin-top:24px;padding-bottom:16px">v1.3.0<br>© J Rowson ${new Date().getFullYear()} | <a href="https://jahosi.co.uk" target="_blank" style="color:#9ca3af">jahosi.co.uk</a></p>
   </div>`;
   document.getElementById('l-user').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
   document.getElementById('l-pass').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
@@ -368,6 +412,7 @@ function renderPrivacySplash(onContinue) {
 // ── REGISTER ─────────────────────────────────────────────────────────────────
 function renderRegister() {
   stopTimer(); clearCharts(); state.currentView = 'register';
+  pushHistory('register');
   app().innerHTML = `
   <div class="view">
     <div class="view-header">
@@ -467,6 +512,7 @@ function showRegisterSuccess(username) {
 // ── AWAIT ACTIVATION ─────────────────────────────────────────────────────────
 function renderAwaitActivation() {
   stopTimer(); clearCharts(); state.currentView = 'await-activation';
+  replaceHistory('await-activation');
   const username = state.user?.username || '';
   app().innerHTML = `
   <div class="view">
@@ -492,6 +538,7 @@ function renderAwaitActivation() {
 function renderChangePassword() {
   stopTimer(); clearCharts(); state.currentView = 'change-password';
   const isForced = state.user?.mustChangePassword;
+  if (isForced) { replaceHistory('change-password'); } else { pushHistory('change-password'); }
   app().innerHTML = `
   <div class="view">
     <div class="view-header">
@@ -594,6 +641,7 @@ function renderHomeHTML() {
 
 async function renderHome() {
   stopTimer(); clearCharts(); state.currentView = 'home';
+  pushHistory('home');
   app().innerHTML = renderHomeHTML();
   await checkActiveTask();
   if (state.activeTask) {
@@ -626,6 +674,7 @@ async function discardActiveTask() {
 // ── SETTINGS ─────────────────────────────────────────────────────────────────
 function renderSettings() {
   stopTimer(); clearCharts(); state.currentView = 'settings';
+  pushHistory('settings');
   const showInvite = state.registrationConfig?.userInvite !== 'disabled';
   app().innerHTML = `
   <div class="view">
@@ -710,6 +759,7 @@ function showInviteResult(username, tempPassword, pendingActivation) {
 
 function renderDeleteAccount() {
   stopTimer(); clearCharts(); state.currentView = 'delete-account';
+  pushHistory('delete-account');
   app().innerHTML = `
   <div class="view">
     <div class="view-header">
@@ -758,6 +808,7 @@ async function doDeleteAccount() {
 // ── TASK START ───────────────────────────────────────────────────────────────
 function renderTaskStart() {
   stopTimer(); clearCharts(); state.currentView = 'task-start';
+  pushHistory('task-start');
   state.taskForm = { is_duty: null };
   app().innerHTML = `
   <div class="view">
@@ -862,6 +913,7 @@ function renderTaskActive() {
   stopTimer(); clearCharts(); state.currentView = 'task-active';
   const t = state.activeTask;
   if (!t) { renderHome(); return; }
+  pushHistory('task-active');
   const midWarn = checkMidnightWarn();
   app().innerHTML = `
   <div class="view">
@@ -1038,6 +1090,7 @@ function renderTaskEdit(task) {
 
 function renderTaskReview(t, isEdit) {
   clearCharts(); state.currentView = isEdit ? 'task-edit' : 'task-end';
+  pushHistory(isEdit ? 'task-edit' : 'task-end');
   const interruptions = t.interruptions || [];
   const intrHtml = interruptions.length ? interruptions.map((i, idx) => `
   <div class="intr-item">
@@ -1257,6 +1310,7 @@ async function clearAllTasks() {
 // ── ANALYTICS — SESSION ──────────────────────────────────────────────────────
 async function renderAnalyticsSession() {
   stopTimer(); clearCharts(); state.currentView = 'analytics-session';
+  pushHistory('analytics-session');
   app().innerHTML = `<div class="view"><p class="loading">Loading analytics…</p></div>`;
   try {
     const d = await api('GET', '/api/analytics/session');
@@ -1267,6 +1321,7 @@ async function renderAnalyticsSession() {
 
 async function renderAnalyticsHistory() {
   stopTimer(); clearCharts(); state.currentView = 'analytics-history';
+  pushHistory('analytics-history');
   app().innerHTML = `<div class="view"><p class="loading">Loading history…</p></div>`;
   const params = buildHistoryParams();
   try {
@@ -1460,6 +1515,7 @@ async function downloadExport() {
 // ── ADMIN ────────────────────────────────────────────────────────────────────
 async function renderAdmin() {
   stopTimer(); clearCharts(); state.currentView = 'admin';
+  pushHistory('admin');
   app().innerHTML = `<div class="view"><p class="loading">Loading admin panel…</p></div>`;
   try {
     const [stats, users, dropOpts, settings, pendingUsers, awaitingUsers] = await Promise.all([
@@ -1633,7 +1689,7 @@ function renderAdminContent(stats, users, dropOpts, settings, pendingUsers, awai
 
     <div class="divider"></div>
     <button class="btn btn-secondary btn-full" style="margin-bottom:16px" onclick="doLogout()">🚪 Log Out</button>
-    <p style="text-align:center;font-size:.75rem;color:#9ca3af;padding-bottom:80px">v1.1.0 &nbsp;·&nbsp; <a href="/policy" target="_blank" style="color:#9ca3af">Privacy Policy</a> &nbsp;·&nbsp; <a href="/help" target="_blank" style="color:#9ca3af">Help</a><br>© J Rowson ${new Date().getFullYear()} | <a href="https://jahosi.co.uk" target="_blank" style="color:#9ca3af">jahosi.co.uk</a></p>
+    <p style="text-align:center;font-size:.75rem;color:#9ca3af;padding-bottom:80px">v1.3.0 &nbsp;·&nbsp; <a href="/policy" target="_blank" style="color:#9ca3af">Privacy Policy</a> &nbsp;·&nbsp; <a href="/help" target="_blank" style="color:#9ca3af">Help</a><br>© J Rowson ${new Date().getFullYear()} | <a href="https://jahosi.co.uk" target="_blank" style="color:#9ca3af">jahosi.co.uk</a></p>
   </div>`;
 }
 
@@ -1800,6 +1856,55 @@ async function deleteDropdown(id) {
     renderAdmin();
   } catch(e) { showAlert(e.message, 'error', 'admin-alerts'); }
 }
+
+// ── SPA back/forward navigation ───────────────────────────────────────────────
+const HISTORY_RENDER_MAP = {
+  'home':               () => renderHome(),
+  'login':              () => renderLogin(),
+  'register':           () => renderRegister(),
+  'settings':           () => renderSettings(),
+  'change-password':    () => renderChangePassword(),
+  'delete-account':     () => renderDeleteAccount(),
+  'task-start':         () => renderTaskStart(),
+  'task-active':        () => { if (state.activeTask) renderTaskActive(); else renderHome(); },
+  'task-end':           () => { if (state.activeTask) renderTaskEnd(); else renderHome(); },
+  'task-edit':          () => { if (state.editTask) renderTaskEdit(state.editTask); else renderAnalyticsSession(); },
+  'analytics-session':  () => renderAnalyticsSession(),
+  'analytics-history':  () => renderAnalyticsHistory(),
+  'admin':              () => renderAdmin(),
+  'await-activation':   () => renderAwaitActivation(),
+};
+
+const AUTH_REQUIRED_VIEWS = new Set([
+  'home', 'settings', 'change-password', 'delete-account',
+  'task-start', 'task-active', 'task-end', 'task-edit',
+  'analytics-session', 'analytics-history', 'admin', 'await-activation',
+]);
+
+window.addEventListener('popstate', async (e) => {
+  const view = e.state?.view;
+  if (!view) return;
+  // Redirect to appropriate landing page if auth state doesn't match the view
+  if ((view === 'login' || view === 'register') && state.user) {
+    const targetView = state.user.isAdmin ? 'admin' : 'home';
+    replaceHistory(targetView);
+    await (state.user.isAdmin ? renderAdmin() : renderHome());
+    return;
+  }
+  if (AUTH_REQUIRED_VIEWS.has(view) && !state.user) {
+    replaceHistory('login');
+    await renderLogin();
+    return;
+  }
+  const renderer = HISTORY_RENDER_MAP[view];
+  if (!renderer) return;
+  _popstateActive = true;
+  try {
+    await renderer();
+  } finally {
+    _popstateActive = false;
+  }
+});
 
 // ── Bootstrap ────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {

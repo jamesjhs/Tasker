@@ -94,6 +94,9 @@ app.use(express.static(path.join(__dirname, '..', 'public'), {
 }));
 
 // ─── API routes ───────────────────────────────────────────────────────────────
+app.get('/api/version', apiLimiter, (_req, res) => {
+  res.json({ version: APP_VERSION });
+});
 app.use('/api/auth', authLimiter, authRouter);
 app.use('/api/tasks', apiLimiter, tasksRouter);
 app.use('/api/analytics', apiLimiter, analyticsRouter);

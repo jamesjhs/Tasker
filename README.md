@@ -1,6 +1,6 @@
 # Tasker
 
-**v1.2.0** — An anonymous, mobile-only task-logging PWA for healthcare staff. Built with TypeScript, Express 5, SQLite, and vanilla JS.
+**v1.3.0** — An anonymous, mobile-only task-logging PWA for healthcare staff. Built with TypeScript, Express 5, SQLite, and vanilla JS.
 
 ---
 
@@ -17,6 +17,7 @@
 - **User invitations** — logged-in users can invite others using the same temp-password flow as admins (subject to the configured policy).
 - **30-day data retention** — task data is automatically deleted after 30 days.
 - **Health-check endpoint** — `GET /readyz` returns a JSON status response for uptime/heartbeat monitoring (no authentication required).
+- **Asset version endpoint** — `GET /api/version` returns `{"version":"1.3.0"}` for client-side cache-busting.
 
 ---
 
@@ -83,7 +84,7 @@ npm run build # compile TypeScript → dist/
 
 ```
 src/
-  server.ts               Express 5 app, middleware wiring, SSL detection, 30-day retention job, /readyz health check
+  server.ts               Express 5 app, middleware wiring, SSL detection, 30-day retention job, /readyz health check, /api/version endpoint
   db.ts                   SQLite schema + migrations + seed data, getDb(), getSetting(), setSetting()
   words.ts                Memorable two-word username generator
   middleware/index.ts     NHS block, mobile-only, requireAuth, requireAdmin, CSRF, logEvent
@@ -102,7 +103,7 @@ public/
   policy.html             Data & Use Policy  (served at /policy)
   help.html               User guide         (served at /help)
   css/app.css             Mobile-first styles
-  js/app.js               Complete SPA — views, Chart.js charts, regression trendlines
+  js/app.js               Complete SPA — views, Chart.js charts, regression trendlines, browser history navigation, asset version checking
   icons/
     icon-192.png          PWA home-screen icon (192×192)
     icon-512.png          PWA splash / store icon (512×512)
@@ -139,6 +140,12 @@ See [`/policy`](/policy) for the full Data and Use Policy.
 ---
 
 ## Changelog
+
+### v1.3.0 (April 2026)
+
+- **SPA back/forward navigation** — browser Back and Forward buttons now work correctly throughout the app. Every view transition records itself in the browser history stack (`history.pushState`); a `popstate` listener dispatches navigation events back to the correct render function with an auth guard.
+- **Asset version-gate reload** — on startup the app fetches `/api/version` (network-first, bypassing the service worker cache) and compares it to the version stored in `localStorage`. On a mismatch all service worker caches are cleared, the service worker is unregistered, and the page reloads to guarantee fresh `app.js`, `app.css`, and `index.html` are loaded.
+- **`GET /api/version`** — new lightweight endpoint returning `{ "version": "1.3.0" }`, rate-limited and guarded by the mobile-only middleware.
 
 ### v1.2.0 (April 2026)
 
