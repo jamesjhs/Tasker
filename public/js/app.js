@@ -271,11 +271,58 @@ async function doLogin() {
     if (d.pendingActivation) { renderAwaitActivation(); return; }
     await loadDropdowns();
     await checkActiveTask();
-    d.isAdmin ? renderAdmin() : renderHome();
+    renderPrivacySplash(() => { d.isAdmin ? renderAdmin() : renderHome(); });
   } catch(e) {
     btn.disabled = false; btn.textContent = 'Log in';
     showAlert(e.message, 'error', 'login-alerts');
   }
+}
+
+// ── PRIVACY SPLASH ───────────────────────────────────────────────────────────
+function renderPrivacySplash(onContinue) {
+  const overlay = document.createElement('div');
+  overlay.id = 'privacy-splash';
+  overlay.style.cssText = 'position:fixed;inset:0;background:#fff;z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;overflow-y:auto;padding:24px 20px 32px';
+  overlay.innerHTML = `
+  <div style="max-width:480px;width:100%">
+    <div style="text-align:center;margin-bottom:24px;padding-top:12px">
+      <div style="font-size:2.5rem">🔒</div>
+      <h1 style="font-size:1.4rem;color:#1a56db;margin:8px 0 4px">Data Privacy Notice</h1>
+      <p style="font-size:.85rem;color:#6b7280">Please read carefully before continuing</p>
+    </div>
+    <div style="background:#fef2f2;border:1px solid #fca5a5;border-radius:10px;padding:16px;margin-bottom:16px">
+      <p style="font-weight:700;color:#dc2626;margin:0 0 10px;font-size:.95rem">⛔ Prohibited — Never enter in any text field:</p>
+      <ul style="font-size:.85rem;color:#374151;margin:0;padding-left:20px;line-height:2">
+        <li>Patient names, initials, or any identifier</li>
+        <li>NHS numbers, dates of birth, or addresses</li>
+        <li>Anything that could identify a patient, colleague, or third party</li>
+        <li>Confidential clinical details</li>
+      </ul>
+    </div>
+    <div style="background:#eff6ff;border:1px solid #93c5fd;border-radius:10px;padding:16px;margin-bottom:16px">
+      <p style="font-weight:700;color:#1d4ed8;margin:0 0 10px;font-size:.95rem">🔒 Your Privacy</p>
+      <ul style="font-size:.85rem;color:#374151;margin:0;padding-left:20px;line-height:2">
+        <li>Your username is anonymous and cannot be linked to you</li>
+        <li>All data is automatically deleted after 30 days</li>
+        <li>Only you can see your task data</li>
+        <li>Use a personal device on a personal network only</li>
+      </ul>
+    </div>
+    <div style="background:#f0fdf4;border:1px solid #86efac;border-radius:10px;padding:14px;margin-bottom:24px">
+      <p style="font-size:.85rem;color:#374151;margin:0">By continuing, you confirm you have read this notice and will <strong>not enter any identifiable or prohibited information</strong> anywhere in this application.</p>
+    </div>
+    <button id="splash-continue-btn" style="width:100%;padding:16px;background:#1a56db;color:#fff;border:none;border-radius:10px;font-size:1rem;font-weight:700;cursor:pointer">
+      ✓ I Understand — Continue
+    </button>
+    <p style="text-align:center;font-size:.75rem;color:#9ca3af;margin-top:16px">
+      <a href="/policy" target="_blank" style="color:#9ca3af">View full Data &amp; Use Policy</a>
+    </p>
+  </div>`;
+  document.body.appendChild(overlay);
+  document.getElementById('splash-continue-btn').addEventListener('click', () => {
+    overlay.remove();
+    onContinue();
+  });
 }
 
 // ── REGISTER ─────────────────────────────────────────────────────────────────
@@ -461,7 +508,9 @@ async function doChangePassword(isForced) {
     await loadDropdowns();
     await checkActiveTask();
     showAlert('Password changed successfully!', 'success', 'cp-alerts');
-    setTimeout(() => { state.user?.isAdmin ? renderAdmin() : renderHome(); }, 1000);
+    setTimeout(() => {
+      renderPrivacySplash(() => { state.user?.isAdmin ? renderAdmin() : renderHome(); });
+    }, 800);
   } catch(e) {
     btn.disabled = false; btn.textContent = 'Save new password';
     showAlert(e.message, 'error', 'cp-alerts');

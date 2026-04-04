@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { getDb, DB_PATH, replaceDb, RESTORE_DIR, getSetting, setSetting } from '../db';
-import { requireAdmin, validateCsrf, logEvent } from '../middleware/index';
+import { requireAdmin, requireAuth, validateCsrf, logEvent } from '../middleware/index';
 import { generateUsername } from '../words';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
@@ -9,7 +9,7 @@ import path from 'path';
 import fs from 'fs';
 
 const router = Router();
-router.use(requireAdmin);
+router.use(requireAuth, requireAdmin);
 
 const upload = multer({ dest: RESTORE_DIR, limits: { fileSize: 100 * 1024 * 1024 } });
 const VALID_MODES = ['disabled', 'admin_approved', 'auto'];

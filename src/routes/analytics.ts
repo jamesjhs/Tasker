@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { getDb } from '../db';
 import { requireAuth, requirePasswordChange, requireActivation } from '../middleware/index';
+import { decryptField } from '../encrypt';
 import ExcelJS from 'exceljs';
 
 const router = Router();
@@ -94,7 +95,7 @@ router.get('/session', (req: Request, res: Response) => {
   const dateStr = new Date(s.sessionDate || new Date().toDateString()).toISOString().split('T')[0];
   const tasks = (getDb().prepare(
     `SELECT * FROM tasks WHERE user_id=? AND status='completed' AND date(start_time)=date(?) ORDER BY start_time`
-  ).all(s.userId, dateStr) as any[]).map(t => ({ ...t, interruptions: JSON.parse(t.interruptions || '[]') }));
+  ).all(s.userId, dateStr) as any[]).map(t => ({ ...t, interruptions: JSON.parse(t.interruptions || '[]'), notes: decryptField(t.notes) }));
   res.json({ tasks, summary: buildSummary(tasks) });
 });
 
@@ -109,7 +110,7 @@ router.get('/history', (req: Request, res: Response) => {
   if (category)              { q += ' AND category=?'; p.push(category); }
   if (outcome)               { q += ' AND outcome=?'; p.push(outcome); }
   q += ' ORDER BY start_time';
-  const tasks = (getDb().prepare(q).all(...p) as any[]).map(t => ({ ...t, interruptions: JSON.parse(t.interruptions || '[]') }));
+  const tasks = (getDb().prepare(q).all(...p) as any[]).map(t => ({ ...t, interruptions: JSON.parse(t.interruptions || '[]'), notes: decryptField(t.notes) }));
   res.json({ tasks, summary: buildSummary(tasks) });
 });
 
@@ -133,7 +134,7 @@ router.get('/export', async (req: Request, res: Response) => {
       'End Time': t.end_time ? new Date(t.end_time) : '',
       'Duration (secs)': secs(t.start_time, t.end_time, interruptions),
       'Interruptions': interruptions.length,
-      'Notes': t.notes || '',
+      'Notes': decryptField(t.notes) || '',
     };
   });
 
