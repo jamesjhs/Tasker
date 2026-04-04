@@ -10,6 +10,7 @@ const state = {
   csrfToken: null,
   user: null,           // { username, isAdmin, mustChangePassword }
   registrationConfig: null, // { selfRegistration, userInvite }
+  appStats: null,       // { userCount, taskCount }
   activeTask: null,     // current in_progress task
   timerInterval: null,
   activityInterval: null,
@@ -291,18 +292,33 @@ function renderBottomNav(active) {
   <p style="text-align:center;font-size:.75rem;color:#9ca3af;padding:8px 0 16px">v1.3.0 &nbsp;·&nbsp; <a href="/policy" target="_blank" style="color:#9ca3af">Privacy Policy</a> &nbsp;·&nbsp; <a href="/help" target="_blank" style="color:#9ca3af">Help</a><br>© J Rowson ${new Date().getFullYear()} | <a href="https://jahosi.co.uk" target="_blank" style="color:#9ca3af">jahosi.co.uk</a></p>`;
 }
 
+// ── STATS CARDS ──────────────────────────────────────────────────────────────
+function renderStatsCards(stats, marginTop = '20px') {
+  if (!stats) return '';
+  return `
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:${marginTop}">
+      <div class="stat-card"><div class="stat-number">${stats.userCount}</div><div class="stat-label">Registered users</div></div>
+      <div class="stat-card"><div class="stat-number">${stats.taskCount}</div><div class="stat-label">Tasks logged</div></div>
+    </div>`;
+}
+
 // ── LOGIN ────────────────────────────────────────────────────────────────────
 async function renderLogin() {
   stopTimer(); stopActivityTracking(); clearCharts(); state.currentView = 'login';
   replaceHistory('login');
-  // Fetch registration config to decide whether to show Register button
+  // Fetch registration config and public stats in parallel
   try {
-    const cfgRes = await fetch('/api/auth/registration-config', { credentials: 'same-origin' });
+    const [cfgRes, statsRes] = await Promise.all([
+      fetch('/api/auth/registration-config', { credentials: 'same-origin' }),
+      fetch('/api/auth/stats', { credentials: 'same-origin' }),
+    ]);
     if (cfgRes.ok) state.registrationConfig = await cfgRes.json();
+    if (statsRes.ok) state.appStats = await statsRes.json();
   } catch(e) {}
   const showRegister = state.registrationConfig?.selfRegistration !== 'disabled';
+  const statsHTML = renderStatsCards(state.appStats, '20px');
   app().innerHTML = `
-  <div class="view">
+  <div class="view" style="min-height:auto;padding-bottom:24px">
     <div style="text-align:center;padding-top:30px;margin-bottom:28px">
       <div style="font-size:3rem">📱</div>
       <h1 style="font-size:1.8rem;color:#1a56db;margin-top:8px">Tasker</h1>
@@ -327,7 +343,8 @@ async function renderLogin() {
       ${showRegister ? `<button class="link-btn" onclick="renderRegister()">Don't have an account? Register</button>` : ''}
       <a href="/policy" target="_blank" style="font-size:.85rem;color:#6b7280">Data &amp; Use Policy</a>
     </div>
-    <p style="text-align:center;font-size:.75rem;color:#9ca3af;margin-top:24px;padding-bottom:16px">v1.3.0<br>© J Rowson ${new Date().getFullYear()} | <a href="https://jahosi.co.uk" target="_blank" style="color:#9ca3af">jahosi.co.uk</a></p>
+    ${statsHTML}
+    <p style="text-align:center;font-size:.75rem;color:#9ca3af;margin-top:24px">v1.3.0<br>© J Rowson ${new Date().getFullYear()} | <a href="https://jahosi.co.uk" target="_blank" style="color:#9ca3af">jahosi.co.uk</a></p>
   </div>`;
   document.getElementById('l-user').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
   document.getElementById('l-pass').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
@@ -608,6 +625,7 @@ async function doChangePassword(isForced) {
 function renderHomeHTML() {
   const t = state.activeTask;
   const midnightWarn = checkMidnightWarn();
+  const statsHTML = renderStatsCards(state.appStats, '16px');
   return `
   <div class="view">
     <div class="view-header">
@@ -635,6 +653,7 @@ function renderHomeHTML() {
     <button class="btn btn-primary btn-full" style="font-size:1.1rem;padding:18px" onclick="renderTaskStart()">
       ▶ Log Task
     </button>`}
+    ${statsHTML}
   </div>
   ${renderBottomNav('home')}`;
 }
@@ -643,7 +662,11 @@ async function renderHome() {
   stopTimer(); clearCharts(); state.currentView = 'home';
   pushHistory('home');
   app().innerHTML = renderHomeHTML();
-  await checkActiveTask();
+  const [_activeTask, statsRes] = await Promise.all([
+    checkActiveTask(),
+    fetch('/api/auth/stats', { credentials: 'same-origin' }).catch(() => null),
+  ]);
+  if (statsRes?.ok) state.appStats = await statsRes.json();
   if (state.activeTask) {
     await checkInactivityInterruption();
     updateLastActive();
