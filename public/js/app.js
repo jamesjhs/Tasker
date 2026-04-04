@@ -51,6 +51,11 @@ async function api(method, url, body, isFormData) {
   }
   const res = await fetch(url, { method, headers, body: fetchBody, credentials: 'same-origin' });
   if (res.status === 401) { await renderLogin(); return null; }
+  if (res.status === 429) {
+    const retryAfter = res.headers.get('RateLimit-Reset') || res.headers.get('Retry-After');
+    const wait = retryAfter ? ` Please wait ${Math.ceil((parseInt(retryAfter, 10) * 1000 - Date.now()) / 60000)} minute(s).` : ' Please wait a few minutes.';
+    throw new Error(`Too many requests.${wait}`);
+  }
   if (!res.ok) {
     let msg = `Request failed (${res.status})`;
     try { const d = await res.json(); msg = d.error || msg; } catch(e){}
@@ -62,6 +67,7 @@ async function api(method, url, body, isFormData) {
 
 async function refreshCsrf() {
   const d = await fetch('/api/auth/csrf-token', { credentials: 'same-origin' });
+  if (!d.ok) return; // Don't overwrite existing token on error (e.g. 429)
   const j = await d.json();
   state.csrfToken = j.token;
 }
