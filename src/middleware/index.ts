@@ -24,7 +24,7 @@ export function nhsNetworkBlock(req: Request, res: Response, next: NextFunction)
 const STATIC_EXT = /\.(js|css|png|ico|json|webp|svg|woff2?|map|html)$/i;
 
 export function mobileOnly(req: Request, res: Response, next: NextFunction): void {
-  if (req.path.startsWith('/api/') || req.path === '/policy' || STATIC_EXT.test(req.path)) return next();
+  if (req.path.startsWith('/api/') || req.path === '/policy' || req.path === '/help' || STATIC_EXT.test(req.path)) return next();
   const ua = req.headers['user-agent'] || '';
   if (!/Mobile|Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(ua)) {
     res.status(200).send(`<!DOCTYPE html>
@@ -74,6 +74,16 @@ export function requirePasswordChange(req: Request, res: Response, next: NextFun
   const allowed = req.path.includes('/change-password') || req.path.includes('/logout');
   if (s?.mustChangePassword && !allowed) {
     res.status(403).json({ error: 'You must change your password before continuing', mustChangePassword: true });
+    return;
+  }
+  next();
+}
+
+export function requireActivation(req: Request, res: Response, next: NextFunction): void {
+  const s = req.session as any;
+  const allowed = req.path.includes('/logout');
+  if (s?.pendingActivation && !allowed) {
+    res.status(403).json({ error: 'Your account is awaiting administrator activation', pendingActivation: true });
     return;
   }
   next();

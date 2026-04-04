@@ -22,6 +22,15 @@ export function getDb(): Database.Database {
   return _db;
 }
 
+export function getSetting(key: string): string | null {
+  const row = getDb().prepare('SELECT value FROM settings WHERE key=?').get(key) as { value: string } | undefined;
+  return row ? row.value : null;
+}
+
+export function setSetting(key: string, value: string): void {
+  getDb().prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?,?)').run(key, value);
+}
+
 export function closeDb(): void {
   if (_db) { _db.close(); _db = null; }
 }
@@ -44,14 +53,24 @@ function initSchema(db: Database.Database): void {
       password_hash TEXT NOT NULL,
       must_change_password INTEGER NOT NULL DEFAULT 0,
       is_admin INTEGER NOT NULL DEFAULT 0,
+      is_approved INTEGER NOT NULL DEFAULT 1,
+      pending_activation INTEGER NOT NULL DEFAULT 0,
       mfa_enabled INTEGER NOT NULL DEFAULT 0,
+      failed_login_attempts INTEGER NOT NULL DEFAULT 0,
+      is_locked INTEGER NOT NULL DEFAULT 0,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS settings (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL
     );
 
     CREATE TABLE IF NOT EXISTS tasks (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       is_duty INTEGER NOT NULL DEFAULT 0,
+      assigned_date TEXT,
       start_time TEXT NOT NULL,
       end_time TEXT,
       category TEXT,
@@ -80,6 +99,32 @@ function initSchema(db: Database.Database): void {
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
   `);
+
+  // Migrate existing databases: add lockout columns if missing
+  const userCols = (db.prepare("PRAGMA table_info(users)").all() as { name: string }[]).map(c => c.name);
+  if (!userCols.includes('failed_login_attempts')) {
+    db.exec('ALTER TABLE users ADD COLUMN failed_login_attempts INTEGER NOT NULL DEFAULT 0');
+  }
+  if (!userCols.includes('is_locked')) {
+    db.exec('ALTER TABLE users ADD COLUMN is_locked INTEGER NOT NULL DEFAULT 0');
+  }
+  if (!userCols.includes('is_approved')) {
+    db.exec('ALTER TABLE users ADD COLUMN is_approved INTEGER NOT NULL DEFAULT 1');
+  }
+  if (!userCols.includes('pending_activation')) {
+    db.exec('ALTER TABLE users ADD COLUMN pending_activation INTEGER NOT NULL DEFAULT 0');
+  }
+
+  // Migrate existing databases: add assigned_date column if missing
+  const taskCols = (db.prepare("PRAGMA table_info(tasks)").all() as { name: string }[]).map(c => c.name);
+  if (!taskCols.includes('assigned_date')) {
+    db.exec('ALTER TABLE tasks ADD COLUMN assigned_date TEXT');
+  }
+
+  // Seed default registration settings if not present
+  const insOrIgnoreSetting = db.prepare('INSERT OR IGNORE INTO settings (key, value) VALUES (?,?)');
+  insOrIgnoreSetting.run('self_registration', 'admin_approved');
+  insOrIgnoreSetting.run('user_invite', 'admin_approved');
 
   // Seed default dropdowns if empty
   const count = (db.prepare('SELECT COUNT(*) as c FROM dropdown_options WHERE approved=1').get() as { c: number }).c;

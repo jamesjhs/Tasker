@@ -7,6 +7,7 @@
 const state = {
   csrfToken: null,
   user: null,           // { username, isAdmin, mustChangePassword }
+  registrationConfig: null, // { selfRegistration, userInvite }
   activeTask: null,     // current in_progress task
   timerInterval: null,
   currentView: null,
@@ -108,6 +109,7 @@ async function init() {
     if (me.ok) {
       state.user = await me.json();
       if (state.user.mustChangePassword) { renderChangePassword(); return; }
+      if (state.user.pendingActivation) { renderAwaitActivation(); return; }
 
       setLoadingStatus('Loading dropdown options…');
       await loadDropdowns();
@@ -118,7 +120,7 @@ async function init() {
       setLoadingStatus('Rendering…');
       await (state.user.isAdmin ? renderAdmin() : renderHome());
     } else {
-      renderLogin();
+      await renderLogin();
     }
   } catch(e) {
     showLoadingError(`Initialization failed: ${e.message || e}`);
@@ -157,12 +159,19 @@ function renderBottomNav(active) {
     <button class="nav-btn ${active==='settings'?'active':''}" onclick="renderSettings()">
       <span class="nav-icon">⚙️</span><span>Settings</span>
     </button>
-  </nav>`;
+  </nav>
+  <p style="text-align:center;font-size:.75rem;color:#9ca3af;padding:8px 0 16px">v1.1.0 &nbsp;·&nbsp; <a href="/policy" target="_blank" style="color:#9ca3af">Privacy Policy</a> &nbsp;·&nbsp; <a href="/help" target="_blank" style="color:#9ca3af">Help</a></p>`;
 }
 
 // ── LOGIN ────────────────────────────────────────────────────────────────────
 async function renderLogin() {
   stopTimer(); clearCharts(); state.currentView = 'login';
+  // Fetch registration config to decide whether to show Register button
+  try {
+    const cfgRes = await fetch('/api/auth/registration-config', { credentials: 'same-origin' });
+    if (cfgRes.ok) state.registrationConfig = await cfgRes.json();
+  } catch(e) {}
+  const showRegister = state.registrationConfig?.selfRegistration !== 'disabled';
   app().innerHTML = `
   <div class="view">
     <div style="text-align:center;padding-top:30px;margin-bottom:28px">
@@ -186,10 +195,12 @@ async function renderLogin() {
       <button class="btn btn-primary btn-full" id="l-btn" onclick="doLogin()">Log in</button>
     </div>
     <div style="text-align:center;margin-top:16px;display:flex;flex-direction:column;gap:10px">
-      <button class="link-btn" onclick="renderRegister()">Don't have an account? Register</button>
+      ${showRegister ? `<button class="link-btn" onclick="renderRegister()">Don't have an account? Register</button>` : ''}
       <a href="/policy" target="_blank" style="font-size:.85rem;color:#6b7280">Data &amp; Use Policy</a>
     </div>
+    <p style="text-align:center;font-size:.75rem;color:#9ca3af;margin-top:24px;padding-bottom:16px">v1.1.0</p>
   </div>`;
+  document.getElementById('l-user').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
   document.getElementById('l-pass').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
 }
 
@@ -208,9 +219,10 @@ async function doLogin() {
   try {
     const d = await api('POST', '/api/auth/login', { username, password });
     if (!d) return;
-    state.user = { username, isAdmin: d.isAdmin, mustChangePassword: d.mustChangePassword };
+    state.user = { username, isAdmin: d.isAdmin, mustChangePassword: d.mustChangePassword, pendingActivation: d.pendingActivation };
     await refreshCsrf();
     if (d.mustChangePassword) { renderChangePassword(); return; }
+    if (d.pendingActivation) { renderAwaitActivation(); return; }
     await loadDropdowns();
     await checkActiveTask();
     d.isAdmin ? renderAdmin() : renderHome();
@@ -270,12 +282,35 @@ async function doRegister() {
   try {
     const d = await api('POST', '/api/auth/register', { password: pass });
     if (!d) return;
-    showRegisterSuccess(d.username);
+    if (d.pending) {
+      showRegisterPending(d.username);
+    } else {
+      showRegisterSuccess(d.username);
+    }
   } catch(e) {
     btn.disabled = false; btn.textContent = 'Register';
     showAlert(e.message, 'error', 'reg-alerts');
   }
 }
+
+function showRegisterPending(username) {
+  app().innerHTML = `
+  <div class="view">
+    <h1 style="margin-bottom:16px;color:#d97706">⏳ Awaiting Approval</h1>
+    <div class="alert alert-warning">
+      ⚠️ <strong>Save your username now.</strong> It cannot be recovered if lost.
+    </div>
+    <div class="username-box">
+      <p style="font-size:.9rem;color:#374151;margin-bottom:4px">Your username is:</p>
+      <span class="username-text">${esc(username)}</span>
+      <button class="btn btn-outline btn-sm" style="margin-top:10px" onclick="navigator.clipboard?.writeText('${esc(username)}').then(()=>showAlert('Copied!','success'))">📋 Copy</button>
+    </div>
+    <div class="alert alert-info" style="margin-top:16px">
+      Your registration has been submitted and is awaiting administrator approval. 
+      You will be able to log in once your account has been approved.
+    </div>
+    <button class="btn btn-primary btn-full" onclick="renderLogin()">Go to Login</button>
+  </div>`;}
 
 function showRegisterSuccess(username) {
   app().innerHTML = `
@@ -296,6 +331,30 @@ function showRegisterSuccess(username) {
   </div>`;
 }
 
+// ── AWAIT ACTIVATION ─────────────────────────────────────────────────────────
+function renderAwaitActivation() {
+  stopTimer(); clearCharts(); state.currentView = 'await-activation';
+  const username = state.user?.username || '';
+  app().innerHTML = `
+  <div class="view">
+    <h1 style="margin-bottom:16px;color:#d97706">⏳ Awaiting Activation</h1>
+    <div class="alert alert-warning">
+      Your account has been created and your password is set.
+      An administrator needs to activate your account before you can start logging tasks.
+    </div>
+    ${username ? `<div class="username-box">
+      <p style="font-size:.9rem;color:#374151;margin-bottom:4px">Your username is:</p>
+      <span class="username-text">${esc(username)}</span>
+      <button class="btn btn-outline btn-sm" style="margin-top:10px" onclick="navigator.clipboard?.writeText('${esc(username)}').then(()=>showAlert('Copied!','success','await-alerts'))">📋 Copy</button>
+    </div>` : ''}
+    <div id="await-alerts"></div>
+    <div class="alert alert-info" style="margin-top:16px">
+      Please check back later. Once activated, log in again to access Tasker.
+    </div>
+    <button class="btn btn-secondary btn-full" style="margin-top:16px" onclick="doLogout()">🚪 Log Out</button>
+  </div>`;
+}
+
 // ── CHANGE PASSWORD ──────────────────────────────────────────────────────────
 function renderChangePassword() {
   stopTimer(); clearCharts(); state.currentView = 'change-password';
@@ -303,7 +362,7 @@ function renderChangePassword() {
   app().innerHTML = `
   <div class="view">
     <div class="view-header">
-      ${!isForced ? '<button class="btn btn-secondary btn-sm" onclick="renderHome()">← Back</button>' : ''}
+      ${!isForced ? `<button class="btn btn-secondary btn-sm" onclick="${state.user?.isAdmin ? 'renderAdmin' : 'renderHome'}()">← Back</button>` : ''}
       <h1>Change Password</h1>
     </div>
     ${isForced ? '<div class="alert alert-warning">⚠️ You must set a new password before continuing.</div>' : ''}
@@ -331,6 +390,10 @@ function renderChangePassword() {
       <button class="btn btn-primary btn-full" id="cp-btn" onclick="doChangePassword(${isForced})">Save new password</button>
     </div>
   </div>`;
+  const cpEnter = e => { if (e.key === 'Enter') doChangePassword(isForced); };
+  document.getElementById('cp-new').addEventListener('keydown', cpEnter);
+  document.getElementById('cp-new2').addEventListener('keydown', cpEnter);
+  if (!isForced) document.getElementById('cp-old')?.addEventListener('keydown', cpEnter);
 }
 
 async function doChangePassword(isForced) {
@@ -341,9 +404,14 @@ async function doChangePassword(isForced) {
   if (newPass !== newPass2) { showAlert('Passwords do not match.', 'error', 'cp-alerts'); return; }
   btn.disabled = true; btn.textContent = 'Saving…';
   try {
-    await api('POST', '/api/auth/change-password', { currentPassword: oldPass, newPassword: newPass });
-    await refreshCsrf();
+    const d = await api('POST', '/api/auth/change-password', { currentPassword: oldPass, newPassword: newPass });
     if (state.user) state.user.mustChangePassword = false;
+    if (d?.pendingActivation) {
+      if (state.user) state.user.pendingActivation = true;
+      showAlert('Password changed successfully!', 'success', 'cp-alerts');
+      setTimeout(() => renderAwaitActivation(), 1000);
+      return;
+    }
     await loadDropdowns();
     await checkActiveTask();
     showAlert('Password changed successfully!', 'success', 'cp-alerts');
@@ -380,7 +448,7 @@ function renderHomeHTML() {
       </div>
     </div>` : `
     <button class="btn btn-primary btn-full" style="font-size:1.1rem;padding:18px" onclick="renderTaskStart()">
-      ▶ Start New Task
+      ▶ Log Task
     </button>`}
   </div>
   ${renderBottomNav('home')}`;
@@ -412,17 +480,23 @@ async function discardActiveTask() {
 // ── SETTINGS ─────────────────────────────────────────────────────────────────
 function renderSettings() {
   stopTimer(); clearCharts(); state.currentView = 'settings';
+  const showInvite = state.registrationConfig?.userInvite !== 'disabled';
   app().innerHTML = `
   <div class="view">
     <div class="view-header">
       <h1>⚙️ Settings</h1>
     </div>
+    <div id="settings-alerts"></div>
     <div class="card">
       <p style="font-size:.9rem;color:#555;margin-bottom:14px">Logged in as: <strong>${esc(state.user?.username)}</strong></p>
       <div class="divider"></div>
       <button class="btn btn-outline btn-full" style="margin-bottom:10px" onclick="renderChangePassword()">🔑 Change Password</button>
+      ${showInvite ? `<button class="btn btn-outline btn-full" style="margin-bottom:10px" id="invite-btn" onclick="doInviteUser()">👤 Invite a User</button>` : ''}
       <button class="btn btn-secondary btn-full" style="margin-bottom:10px" onclick="window.open('/policy','_blank')">📄 Data &amp; Use Policy</button>
-      <button class="btn btn-danger btn-full" onclick="doLogout()">🚪 Log Out</button>
+      <button class="btn btn-secondary btn-full" style="margin-bottom:10px" onclick="window.open('/help','_blank')">❓ Help &amp; User Guide</button>
+      <button class="btn btn-danger btn-full" style="margin-bottom:10px" onclick="doLogout()">🚪 Log Out</button>
+      <div class="divider"></div>
+      <button class="btn btn-danger btn-full" onclick="renderDeleteAccount()">🗑️ Delete My Account</button>
     </div>
   </div>
   ${renderBottomNav('settings')}`;
@@ -431,35 +505,132 @@ function renderSettings() {
 async function doLogout() {
   try { await api('POST', '/api/auth/logout'); } catch(e){}
   state.user = null; state.activeTask = null; state.csrfToken = null;
+  state.registrationConfig = null;
   try { await refreshCsrf(); } catch(e){}
   renderLogin();
+}
+
+async function doInviteUser() {
+  const btn = document.getElementById('invite-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Creating invite…'; }
+  try {
+    const d = await api('POST', '/api/auth/invite', {});
+    if (!d) { if (btn) { btn.disabled = false; btn.textContent = '👤 Invite a User'; } return; }
+    if (btn) { btn.disabled = false; btn.textContent = '👤 Invite a User'; }
+    showInviteResult(d.username, d.tempPassword, d.pendingActivation);
+  } catch(e) {
+    if (btn) { btn.disabled = false; btn.textContent = '👤 Invite a User'; }
+    showAlert(e.message, 'error', 'settings-alerts');
+  }
+}
+
+function showInviteResult(username, tempPassword, pendingActivation) {
+  const alertsEl = document.getElementById('settings-alerts');
+  if (!alertsEl) return;
+  const loginUrl = window.location.origin;
+  const activationNote = pendingActivation ? '\n\n⏳ This account requires administrator activation. The user can log in and set their password, but will not have full access until an administrator activates their account.' : '';
+  const shareMsg = `You have been invited to use Tasker.\n\nUsername: ${username}\nTemporary password: ${tempPassword}\nLog in at: ${loginUrl}\n\nYou will be asked to set a new password when you first log in.${activationNote}`;
+  const div = document.createElement('div');
+  div.className = 'alert alert-success';
+  div.style.cssText = 'display:flex;flex-direction:column;gap:10px';
+  div.innerHTML = `
+    <div><strong>Invite created</strong>${pendingActivation ? ' <span style="color:#d97706">(awaiting activation)</span>' : ''}</div>
+    <div style="font-size:.85rem">Username: <strong>${esc(username)}</strong></div>
+    <div style="display:flex;align-items:center;gap:8px;background:#f0fdf4;border:1px solid #86efac;border-radius:6px;padding:8px 12px">
+      <code class="tmp-pw-code" style="flex:1;font-size:1rem;letter-spacing:.05em;word-break:break-all">${esc(tempPassword)}</code>
+      <button class="btn btn-outline btn-sm tmp-pw-copy">📋 Copy</button>
+    </div>
+    ${pendingActivation ? '<div class="alert alert-warning" style="margin:0">⏳ The user can log in and change their password, but will see an "awaiting activation" page until an administrator activates their account.</div>' : ''}
+    <div style="margin-top:4px">
+      <p style="font-size:.8rem;color:#374151;margin:0 0 6px">Share via a <strong>secure channel</strong> (e.g. encrypted messaging or in person):</p>
+      <div style="background:#f0fdf4;border:1px solid #86efac;border-radius:6px;padding:8px 12px">
+        <pre class="tmp-share-msg" style="font-size:.78rem;color:#374151;white-space:pre-wrap;word-break:break-word;margin:0">${esc(shareMsg)}</pre>
+      </div>
+      <button class="btn btn-outline btn-sm tmp-share-copy" style="margin-top:6px;width:100%">📤 Copy Invite Message</button>
+    </div>
+    <p style="font-size:.8rem;color:#dc2626;margin:0">⚠️ Share credentials only through a secure channel. They will not be shown again.</p>
+    <button class="btn btn-secondary btn-sm tmp-pw-dismiss">Dismiss</button>`;
+  const codeEl = div.querySelector('.tmp-pw-code');
+  div.querySelector('.tmp-pw-copy').addEventListener('click', function() {
+    copyToClipboard(this, codeEl.textContent || '', '✓ Copied!');
+  });
+  div.querySelector('.tmp-share-copy').addEventListener('click', function() {
+    copyToClipboard(this, shareMsg, '✓ Message copied!');
+  });
+  div.querySelector('.tmp-pw-dismiss').addEventListener('click', () => div.remove());
+  alertsEl.prepend(div);
+}
+
+function renderDeleteAccount() {
+  stopTimer(); clearCharts(); state.currentView = 'delete-account';
+  app().innerHTML = `
+  <div class="view">
+    <div class="view-header">
+      <button class="btn btn-secondary btn-sm" onclick="renderSettings()">← Back</button>
+      <h1>Delete Account</h1>
+    </div>
+    <div class="alert alert-warning" style="margin-bottom:16px">⚠️ <strong>This cannot be undone.</strong> All your tasks and data will be permanently deleted.</div>
+    <div id="da-alerts"></div>
+    <div class="card">
+      <div class="form-group">
+        <label for="da-user">Type your username to confirm</label>
+        <input id="da-user" class="input" type="text" autocomplete="off" autocapitalize="off" placeholder="${esc(state.user?.username)}">
+      </div>
+      <div class="form-group">
+        <label for="da-pass">Enter your password</label>
+        <div class="pw-field">
+          <input id="da-pass" class="input" type="password" autocomplete="current-password">
+          <button class="pw-toggle" type="button" onclick="togglePw('da-pass',this)">👁️</button>
+        </div>
+      </div>
+      <button class="btn btn-danger btn-full" id="da-btn" onclick="doDeleteAccount()">🗑️ Permanently Delete My Account</button>
+    </div>
+  </div>`;
+  const daEnter = e => { if (e.key === 'Enter') doDeleteAccount(); };
+  document.getElementById('da-user').addEventListener('keydown', daEnter);
+  document.getElementById('da-pass').addEventListener('keydown', daEnter);
+}
+
+async function doDeleteAccount() {
+  const btn = document.getElementById('da-btn');
+  const username = document.getElementById('da-user').value.trim();
+  const password = document.getElementById('da-pass').value;
+  if (!username || !password) { showAlert('Please enter your username and password.', 'error', 'da-alerts'); return; }
+  btn.disabled = true; btn.textContent = 'Deleting…';
+  try {
+    await api('DELETE', '/api/auth/account', { username, password });
+    state.user = null; state.activeTask = null; state.csrfToken = null;
+    try { await refreshCsrf(); } catch(e){}
+    renderLogin();
+  } catch(e) {
+    btn.disabled = false; btn.textContent = '🗑️ Permanently Delete My Account';
+    showAlert(e.message, 'error', 'da-alerts');
+  }
 }
 
 // ── TASK START ───────────────────────────────────────────────────────────────
 function renderTaskStart() {
   stopTimer(); clearCharts(); state.currentView = 'task-start';
-  state.taskForm = { is_duty: true };
+  state.taskForm = { is_duty: null };
   app().innerHTML = `
   <div class="view">
     <div class="view-header">
       <button class="btn btn-secondary btn-sm" onclick="renderHome()">← Back</button>
-      <h1>Start Task</h1>
+      <h1>Log Task</h1>
     </div>
     <div id="ts-alerts"></div>
     <div class="form-group">
       <label>Task type</label>
       <div class="toggle-group">
-        <button class="toggle-btn active" id="tb-duty" onclick="setDuty(true)">🏥 Duty</button>
         <button class="toggle-btn" id="tb-personal" onclick="setDuty(false)">👤 Personal</button>
+        <button class="toggle-btn" id="tb-duty" onclick="setDuty(true)">🏥 Duty</button>
       </div>
     </div>
-    ${buildDropdownGroup('category','Category', state.dropdowns.category, 'ts-cat')}
-    ${buildDropdownGroup('subcategory','Subcategory', state.dropdowns.subcategory, 'ts-sub')}
-    ${buildDropdownGroup('outcome','Outcome (optional)', state.dropdowns.outcome, 'ts-out')}
+    ${buildDropdownGroup('category','Task From', state.dropdowns.category, 'ts-cat')}
+    ${buildDropdownGroup('subcategory','Task Type', state.dropdowns.subcategory, 'ts-sub')}
     <div class="form-group">
-      <div class="warning-label">⚠️ DO NOT enter any patient names, initials, NHS numbers, or any information that could identify a patient or person.</div>
-      <label for="ts-notes">Notes (optional)</label>
-      <textarea id="ts-notes" class="textarea" placeholder="Optional notes about this task (no patient data)"></textarea>
+      <label for="ts-assigned">Date assigned</label>
+      <input id="ts-assigned" class="input" type="date" value="${new Date().toISOString().split('T')[0]}">
     </div>
     <button class="btn btn-primary btn-full" style="font-size:1.1rem;padding:18px" onclick="doStartTask()">▶ Start Timer</button>
   </div>`;
@@ -522,13 +693,15 @@ async function submitNewOption(containerId, field) {
 async function doStartTask() {
   const category = document.getElementById('ts-cat-sel')?.value || null;
   const subcategory = document.getElementById('ts-sub-sel')?.value || null;
-  const outcome = document.getElementById('ts-out-sel')?.value || null;
-  const notes = document.getElementById('ts-notes')?.value || null;
-  const is_duty = state.taskForm.is_duty !== false;
+  const assigned_date = document.getElementById('ts-assigned')?.value || new Date().toISOString().split('T')[0];
+  const is_duty = state.taskForm.is_duty;
+  if (!category) { showAlert('Please select a Task From.', 'error', 'ts-alerts'); return; }
+  if (!subcategory) { showAlert('Please select a Task Type.', 'error', 'ts-alerts'); return; }
+  if (is_duty === null) { showAlert('Please select Duty or Personal.', 'error', 'ts-alerts'); return; }
   try {
     const d = await api('POST', '/api/tasks/start', {
       is_duty, category: category || null, subcategory: subcategory || null,
-      outcome: outcome || null, notes: notes || null,
+      assigned_date,
       start_time: new Date().toISOString(),
     });
     if (!d) return;
@@ -710,6 +883,40 @@ function renderTaskReview(t, isEdit) {
     <button class="btn btn-danger btn-sm" onclick="removeInterruption(${idx})">✕</button>
   </div>`).join('') : '<p style="font-size:.85rem;color:#6b7280">No interruptions recorded.</p>';
 
+  const taskSummaryHtml = !isEdit ? `
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:10px 0;border-bottom:1px solid #e5e7eb;margin-bottom:4px">
+        <span class="badge ${t.is_duty ? 'badge-duty' : 'badge-personal'}">${t.is_duty ? '🏥 Duty' : '👤 Personal'}</span>
+        ${t.category ? `<span style="font-weight:600;color:#374151">${esc(t.category)}</span>` : ''}
+        ${t.subcategory ? `<span style="color:#6b7280">›</span><span style="color:#374151">${esc(t.subcategory)}</span>` : ''}
+      </div>` : `
+      <div class="form-group">
+        <label>Task type</label>
+        <div class="toggle-group">
+          <button class="toggle-btn ${t.is_duty ? 'active' : ''}" id="te-duty" onclick="setEditDuty(true)">🏥 Duty</button>
+          <button class="toggle-btn ${!t.is_duty ? 'active' : ''}" id="te-personal" onclick="setEditDuty(false)">👤 Personal</button>
+        </div>
+      </div>
+      ${buildReviewDropdown('category', 'Task From', state.dropdowns.category, t.category)}
+      ${buildReviewDropdown('subcategory', 'Task Type', state.dropdowns.subcategory, t.subcategory)}`;
+
+  const outcomeHtml = !isEdit
+    ? buildReviewOutcomeGroup(state.dropdowns.outcome, t.outcome)
+    : buildReviewDropdown('outcome', 'Outcome', state.dropdowns.outcome, t.outcome);
+
+  const notesHtml = !isEdit ? `
+      <details class="form-group">
+        <summary style="cursor:pointer;font-weight:600;color:#374151;padding:4px 0;user-select:none">Notes (optional)</summary>
+        <div style="margin-top:10px">
+          <div class="warning-label">⚠️ DO NOT enter any patient names, initials, or identifiable information.</div>
+          <textarea id="te-notes" class="textarea" style="margin-top:6px" placeholder="Optional notes (no patient data)">${esc(t.notes || '')}</textarea>
+        </div>
+      </details>` : `
+      <div class="form-group">
+        <div class="warning-label">⚠️ DO NOT enter any patient names, initials, or identifiable information.</div>
+        <label for="te-notes">Notes</label>
+        <textarea id="te-notes" class="textarea">${esc(t.notes || '')}</textarea>
+      </div>`;
+
   app().innerHTML = `
   <div class="view">
     <div class="view-header">
@@ -718,16 +925,8 @@ function renderTaskReview(t, isEdit) {
     </div>
     <div id="te-alerts"></div>
     <div class="card">
-      <div class="form-group">
-        <label>Task type</label>
-        <div class="toggle-group">
-          <button class="toggle-btn ${t.is_duty ? 'active' : ''}" id="te-duty" onclick="setEditDuty(true)">🏥 Duty</button>
-          <button class="toggle-btn ${!t.is_duty ? 'active' : ''}" id="te-personal" onclick="setEditDuty(false)">👤 Personal</button>
-        </div>
-      </div>
-      ${buildReviewDropdown('category', 'Category', state.dropdowns.category, t.category)}
-      ${buildReviewDropdown('subcategory', 'Subcategory', state.dropdowns.subcategory, t.subcategory)}
-      ${buildReviewDropdown('outcome', 'Outcome', state.dropdowns.outcome, t.outcome)}
+      ${taskSummaryHtml}
+      ${outcomeHtml}
       <div class="form-group">
         <label for="te-start">Start time</label>
         <input id="te-start" class="input" type="datetime-local" value="${formatDatetimeLocal(t.start_time)}">
@@ -736,21 +935,20 @@ function renderTaskReview(t, isEdit) {
         <label for="te-end">End time</label>
         <input id="te-end" class="input" type="datetime-local" value="${formatDatetimeLocal(t.end_time)}">
       </div>
-      <div class="form-group">
-        <div class="warning-label">⚠️ DO NOT enter any patient names, initials, or identifiable information.</div>
-        <label for="te-notes">Notes</label>
-        <textarea id="te-notes" class="textarea">${esc(t.notes || '')}</textarea>
-      </div>
+      ${notesHtml}
     </div>
     <div class="card">
       <div class="card-title">Interruptions</div>
       <div id="intr-list">${intrHtml}</div>
     </div>
     <div style="display:flex;gap:10px;margin-bottom:80px">
-      <button class="btn btn-primary" style="flex:1" onclick="submitTaskReview(${t.id}, ${isEdit})">
-        ${isEdit ? '💾 Save changes' : '✅ Submit task'}
-      </button>
-      ${!isEdit ? `<button class="btn btn-danger btn-sm" onclick="discardFromEnd(${t.id})">🗑</button>` : ''}
+      ${isEdit ? `
+        <button class="btn btn-primary" style="flex:1" onclick="submitTaskReview(${t.id}, true)">💾 Save changes</button>
+      ` : `
+        <button class="btn btn-secondary" style="flex:1" onclick="submitTaskReview(${t.id}, false, 'start')">➕ Submit &amp; add another</button>
+        <button class="btn btn-primary" style="flex:1" onclick="submitTaskReview(${t.id}, false, 'analytics')">📊 Submit &amp; analytics</button>
+        <button class="btn btn-danger btn-sm" onclick="discardFromEnd(${t.id})">🗑</button>
+      `}
     </div>
   </div>`;
 
@@ -770,6 +968,50 @@ function buildReviewDropdown(field, label, options, current) {
   </div>`;
 }
 
+function buildReviewOutcomeGroup(options, current) {
+  const opts = options.map(o => `<option value="${esc(o)}" ${o === current ? 'selected' : ''}>${esc(o)}</option>`).join('');
+  return `
+  <div class="form-group" id="te-out-group">
+    <label for="te-outcome">Outcome</label>
+    <select id="te-outcome" class="select" onchange="onOutcomeEndChange()">
+      <option value="">— Select —</option>${opts}
+      <option value="__new__">+ Add new outcome…</option>
+    </select>
+    <div id="te-out-new" style="display:none" class="add-new-row">
+      <input id="te-out-new-input" class="input" type="text" placeholder="Type new outcome…">
+      <button class="btn btn-outline btn-sm" onclick="submitNewOutcomeEnd()">Add</button>
+    </div>
+  </div>`;
+}
+
+function onOutcomeEndChange() {
+  const sel = document.getElementById('te-outcome');
+  const newDiv = document.getElementById('te-out-new');
+  if (sel.value === '__new__') {
+    newDiv.style.display = 'flex';
+    sel.value = '';
+  } else {
+    newDiv.style.display = 'none';
+  }
+}
+
+async function submitNewOutcomeEnd() {
+  const input = document.getElementById('te-out-new-input');
+  const val = input.value.trim();
+  if (!val) return;
+  try {
+    await api('POST', '/api/dropdowns/propose', { field_name: 'outcome', value: val });
+    const sel = document.getElementById('te-outcome');
+    const opt = document.createElement('option');
+    opt.value = val; opt.textContent = val;
+    sel.insertBefore(opt, sel.lastElementChild);
+    sel.value = val;
+    document.getElementById('te-out-new').style.display = 'none';
+    input.value = '';
+    showAlert('Outcome added — pending admin approval.', 'success', 'te-alerts');
+  } catch(e) { showAlert(e.message, 'error', 'te-alerts'); }
+}
+
 function setEditDuty(isDuty) {
   document.getElementById('te-duty').classList.toggle('active', isDuty);
   document.getElementById('te-personal').classList.toggle('active', !isDuty);
@@ -782,17 +1024,24 @@ function removeInterruption(idx) {
   renderTaskReview(t, window._reviewIsEdit);
 }
 
-async function submitTaskReview(taskId, isEdit) {
+async function submitTaskReview(taskId, isEdit, dest) {
   const t = window._reviewTask;
   const start = document.getElementById('te-start')?.value;
   const end = document.getElementById('te-end')?.value;
   if (!end) { showAlert('Please set an end time.', 'error', 'te-alerts'); return; }
+  const outcome = document.getElementById('te-outcome')?.value || null;
+  if (!outcome) { showAlert('Please select an Outcome.', 'error', 'te-alerts'); return; }
+  const dutyEl = document.getElementById('te-duty');
+  const categoryVal = document.getElementById('te-category')?.value || t.category || null;
+  const subcategoryVal = document.getElementById('te-subcategory')?.value || t.subcategory || null;
+  if (isEdit && !categoryVal) { showAlert('Please select a Task From.', 'error', 'te-alerts'); return; }
+  if (isEdit && !subcategoryVal) { showAlert('Please select a Task Type.', 'error', 'te-alerts'); return; }
   const body = {
     status: 'completed',
-    is_duty: document.getElementById('te-duty')?.classList.contains('active') ? 1 : 0,
-    category: document.getElementById('te-category')?.value || null,
-    subcategory: document.getElementById('te-subcategory')?.value || null,
-    outcome: document.getElementById('te-outcome')?.value || null,
+    is_duty: dutyEl ? (dutyEl.classList.contains('active') ? 1 : 0) : (t.is_duty ? 1 : 0),
+    category: categoryVal,
+    subcategory: subcategoryVal,
+    outcome,
     notes: document.getElementById('te-notes')?.value || null,
     start_time: start ? new Date(start).toISOString() : t.start_time,
     end_time: new Date(end).toISOString(),
@@ -802,8 +1051,12 @@ async function submitTaskReview(taskId, isEdit) {
     await api('PATCH', `/api/tasks/${taskId}`, body);
     state.activeTask = null;
     await checkActiveTask();
-    showAlert('Task saved!', 'success', 'te-alerts');
-    setTimeout(() => renderAnalyticsSession(), 800);
+    if (dest === 'start') {
+      renderTaskStart();
+    } else {
+      showAlert('Task saved!', 'success', 'te-alerts');
+      setTimeout(() => renderAnalyticsSession(), 800);
+    }
   } catch(e) { showAlert(e.message, 'error', 'te-alerts'); }
 }
 
@@ -814,6 +1067,24 @@ async function discardFromEnd(taskId) {
     state.activeTask = null;
     renderHome();
   } catch(e) { showAlert(e.message, 'error', 'te-alerts'); }
+}
+
+async function deleteTask(taskId) {
+  if (!confirm('Permanently delete this task? This cannot be undone.')) return;
+  try {
+    await api('DELETE', `/api/tasks/${taskId}`);
+    if (state.currentView === 'analytics-history') renderAnalyticsHistory();
+    else renderAnalyticsSession();
+  } catch(e) { showAlert(e.message); }
+}
+
+async function clearAllTasks() {
+  if (!confirm('Permanently delete all tasks? Active (in-progress) tasks will not be affected. This cannot be undone.')) return;
+  try {
+    await api('DELETE', '/api/tasks');
+    if (state.currentView === 'analytics-history') renderAnalyticsHistory();
+    else renderAnalyticsSession();
+  } catch(e) { showAlert(e.message); }
 }
 
 // ── ANALYTICS — SESSION ──────────────────────────────────────────────────────
@@ -904,6 +1175,7 @@ function renderAnalyticsContent(data, mode) {
       ${t.outcome ? `<div class="task-card-meta">Outcome: ${esc(t.outcome)}</div>` : ''}
       <div class="task-card-actions">
         <button class="btn btn-outline btn-sm" onclick="loadAndEditTask(${t.id})">✏️ Edit</button>
+        <button class="btn btn-danger btn-sm" onclick="deleteTask(${t.id})">🗑️ Delete</button>
       </div>
     </div>`;
   }).join('');
@@ -947,6 +1219,7 @@ function renderAnalyticsContent(data, mode) {
       <button class="btn btn-secondary" style="flex:1" onclick="downloadExport()">⬇️ Download Excel</button>
     </div>
     <div class="section-heading">Tasks</div>
+    ${tasks.length > 0 ? `<div style="display:flex;justify-content:flex-end;margin-bottom:8px"><button class="btn btn-danger btn-sm" onclick="clearAllTasks()">🗑️ Clear All</button></div>` : ''}
     ${taskCards || '<p style="color:#6b7280;font-size:.9rem">No tasks found.</p>'}
   </div>
   ${renderBottomNav('analytics')}`;
@@ -1020,20 +1293,23 @@ async function renderAdmin() {
   stopTimer(); clearCharts(); state.currentView = 'admin';
   app().innerHTML = `<div class="view"><p class="loading">Loading admin panel…</p></div>`;
   try {
-    const [stats, users, dropOpts] = await Promise.all([
+    const [stats, users, dropOpts, settings, pendingUsers, awaitingUsers] = await Promise.all([
       api('GET', '/api/admin/stats'),
       api('GET', '/api/admin/users'),
       api('GET', '/api/dropdowns/admin/all'),
+      api('GET', '/api/admin/settings'),
+      api('GET', '/api/admin/pending-users'),
+      api('GET', '/api/admin/awaiting-activation'),
     ]);
-    if (!stats || !users || !dropOpts) return;
-    renderAdminContent(stats, users?.users || [], dropOpts?.options || []);
+    if (!stats || !users || !dropOpts || !settings || !pendingUsers || !awaitingUsers) return;
+    renderAdminContent(stats, users?.users || [], dropOpts?.options || [], settings, pendingUsers?.users || [], awaitingUsers?.users || []);
   } catch(e) {
     app().innerHTML = `<div class="view"><div id="admin-alerts"></div></div>`;
     showAlert(e.message, 'error', 'admin-alerts');
   }
 }
 
-function renderAdminContent(stats, users, dropOpts) {
+function renderAdminContent(stats, users, dropOpts, settings, pendingUsers, awaitingUsers) {
   const pending = dropOpts.filter(o => !o.approved);
   const approved = dropOpts.filter(o => o.approved);
   const userCards = users.map(u => `
@@ -1042,8 +1318,10 @@ function renderAdminContent(stats, users, dropOpts) {
       <div>
         <span style="font-weight:700">${esc(u.username)}</span>
         ${u.must_change_password ? '<span class="badge badge-warn" style="margin-left:6px">Temp pw</span>' : ''}
+        ${u.is_locked ? '<span class="badge badge-danger" style="margin-left:6px">🔒 Locked</span>' : ''}
       </div>
-      <div style="display:flex;gap:6px">
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        ${u.is_locked ? `<button class="btn btn-outline btn-sm" onclick="unlockUser(${u.id}, '${esc(u.username)}')">🔓 Unlock</button>` : ''}
         <button class="btn btn-outline btn-sm" onclick="resetUserPw(${u.id}, '${esc(u.username)}')">🔑 Reset</button>
         <button class="btn btn-danger btn-sm" onclick="deleteUser(${u.id}, '${esc(u.username)}')">🗑</button>
       </div>
@@ -1086,6 +1364,41 @@ function renderAdminContent(stats, users, dropOpts) {
     </div>
   </div>`).join('') : '<p style="font-size:.85rem;color:#6b7280">No pending proposals.</p>';
 
+  const modeLabel = { disabled: 'Disabled', admin_approved: 'Administrator approval', auto: 'Automatic approval' };
+  const modeOpts = (field, current) => ['disabled','admin_approved','auto'].map(m =>
+    `<option value="${m}"${current===m?' selected':''}>${modeLabel[m]}</option>`
+  ).join('');
+
+  const pendingUserCards = pendingUsers.length ? pendingUsers.map(u => `
+  <div class="card" style="padding:12px">
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+      <div>
+        <span style="font-weight:700">${esc(u.username)}</span>
+        ${u.must_change_password ? '<span class="badge badge-warn" style="margin-left:6px">Temp pw</span>' : ''}
+        <span style="font-size:.75rem;color:#6b7280;display:block;margin-top:2px">Registered ${new Date(u.created_at+'Z').toLocaleDateString()}</span>
+      </div>
+      <div style="display:flex;gap:6px">
+        <button class="btn btn-primary btn-sm" onclick="approvePendingUser(${u.id})">✓ Approve</button>
+        <button class="btn btn-danger btn-sm" onclick="deleteUser(${u.id}, '${esc(u.username)}')">✗ Reject</button>
+      </div>
+    </div>
+  </div>`).join('') : '<p style="font-size:.85rem;color:#6b7280">No pending users.</p>';
+
+  const awaitingUserCards = awaitingUsers.length ? awaitingUsers.map(u => `
+  <div class="card" style="padding:12px">
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+      <div>
+        <span style="font-weight:700">${esc(u.username)}</span>
+        ${u.must_change_password ? '<span class="badge badge-warn" style="margin-left:6px">Temp pw</span>' : ''}
+        <span style="font-size:.75rem;color:#6b7280;display:block;margin-top:2px">Invited ${new Date(u.created_at+'Z').toLocaleDateString()}</span>
+      </div>
+      <div style="display:flex;gap:6px">
+        <button class="btn btn-primary btn-sm" onclick="activateUser(${u.id}, '${esc(u.username)}')">✓ Activate</button>
+        <button class="btn btn-danger btn-sm" onclick="deleteUser(${u.id}, '${esc(u.username)}')">✗ Reject</button>
+      </div>
+    </div>
+  </div>`).join('') : '<p style="font-size:.85rem;color:#6b7280">No users awaiting activation.</p>';
+
   app().innerHTML = `
   <div class="view">
     <div class="view-header">
@@ -1096,6 +1409,29 @@ function renderAdminContent(stats, users, dropOpts) {
       <div class="stat-card"><div class="stat-number">${stats?.userCount ?? '?'}</div><div class="stat-label">Registered users</div></div>
       <div class="stat-card"><div class="stat-number">${stats?.eventCount ?? '?'}</div><div class="stat-label">Events logged</div></div>
     </div>
+
+    <div class="section-heading">Registration Settings</div>
+    <div class="card">
+      <div class="form-group">
+        <label for="reg-self-mode" style="font-size:.9rem">Self-registration (from login page)</label>
+        <select id="reg-self-mode" class="input" style="margin-top:4px">
+          ${modeOpts('self_registration', settings?.selfRegistration)}
+        </select>
+      </div>
+      <div class="form-group" style="margin-top:10px">
+        <label for="reg-invite-mode" style="font-size:.9rem">User invitations (by logged-in users)</label>
+        <select id="reg-invite-mode" class="input" style="margin-top:4px">
+          ${modeOpts('user_invite', settings?.userInvite)}
+        </select>
+      </div>
+      <button class="btn btn-primary btn-full" style="margin-top:12px" id="reg-settings-btn" onclick="saveRegistrationSettings()">💾 Save Settings</button>
+    </div>
+
+    <div class="section-heading">Pending User Approvals ${pendingUsers.length ? `<span class="badge badge-warn" style="margin-left:6px">${pendingUsers.length}</span>` : ''}</div>
+    ${pendingUserCards}
+
+    <div class="section-heading">Awaiting Activation ${awaitingUsers.length ? `<span class="badge badge-warn" style="margin-left:6px">${awaitingUsers.length}</span>` : ''}</div>
+    ${awaitingUserCards}
 
     <div class="section-heading">Users</div>
     <button class="btn btn-primary btn-full" style="margin-bottom:14px" onclick="addUser()">➕ Add User</button>
@@ -1115,6 +1451,11 @@ function renderAdminContent(stats, users, dropOpts) {
       </div>
     </div>
 
+    <div class="section-heading">My Account</div>
+    <div class="card">
+      <button class="btn btn-outline btn-full" onclick="renderChangePassword()">🔑 Change My Password</button>
+    </div>
+
     <div class="section-heading">Dropdown Options</div>
     ${dropSections}
 
@@ -1122,8 +1463,85 @@ function renderAdminContent(stats, users, dropOpts) {
     ${pendingCards}
 
     <div class="divider"></div>
-    <button class="btn btn-secondary btn-full" style="margin-bottom:80px" onclick="doLogout()">🚪 Log Out</button>
+    <button class="btn btn-secondary btn-full" style="margin-bottom:16px" onclick="doLogout()">🚪 Log Out</button>
+    <p style="text-align:center;font-size:.75rem;color:#9ca3af;padding-bottom:80px">v1.1.0 &nbsp;·&nbsp; <a href="/policy" target="_blank" style="color:#9ca3af">Privacy Policy</a> &nbsp;·&nbsp; <a href="/help" target="_blank" style="color:#9ca3af">Help</a></p>
   </div>`;
+}
+
+function copyToClipboard(btn, text, successLabel) {
+  navigator.clipboard?.writeText(text).then(() => {
+    const orig = btn.textContent;
+    btn.textContent = successLabel;
+    setTimeout(() => { btn.textContent = orig; }, 2000);
+  }).catch(() => {});
+}
+
+function showTempPassword(label, username, tempPassword) {
+  const alertsEl = document.getElementById('admin-alerts');
+  if (!alertsEl) return;
+  const loginUrl = window.location.origin;
+  const shareMsg = `You have been invited to use Tasker.\n\nUsername: ${username}\nTemporary password: ${tempPassword}\nLog in at: ${loginUrl}\n\nYou will be asked to set a new password when you first log in.`;
+  const div = document.createElement('div');
+  div.className = 'alert alert-success';
+  div.style.cssText = 'display:flex;flex-direction:column;gap:10px';
+  div.innerHTML = `
+    <div><strong>${esc(label)}</strong></div>
+    <div style="font-size:.85rem">Username: <strong>${esc(username)}</strong></div>
+    <div style="display:flex;align-items:center;gap:8px;background:#f0fdf4;border:1px solid #86efac;border-radius:6px;padding:8px 12px">
+      <code class="tmp-pw-code" style="flex:1;font-size:1rem;letter-spacing:.05em;word-break:break-all">${esc(tempPassword)}</code>
+      <button class="btn btn-outline btn-sm tmp-pw-copy">📋 Copy</button>
+    </div>
+    <div style="margin-top:4px">
+      <p style="font-size:.8rem;color:#374151;margin:0 0 6px">Share this invite message with the user via a <strong>secure channel</strong> (e.g. encrypted messaging or in person):</p>
+      <div style="background:#f0fdf4;border:1px solid #86efac;border-radius:6px;padding:8px 12px">
+        <pre class="tmp-share-msg" style="font-size:.78rem;color:#374151;white-space:pre-wrap;word-break:break-word;margin:0">${esc(shareMsg)}</pre>
+      </div>
+      <button class="btn btn-outline btn-sm tmp-share-copy" style="margin-top:6px;width:100%">📤 Copy Invite Message</button>
+    </div>
+    <p style="font-size:.8rem;color:#dc2626;margin:0">⚠️ Share credentials only through a secure channel. They will not be shown again.</p>
+    <button class="btn btn-secondary btn-sm tmp-pw-dismiss">Dismiss</button>`;
+  const codeEl = div.querySelector('.tmp-pw-code');
+  div.querySelector('.tmp-pw-copy').addEventListener('click', function() {
+    copyToClipboard(this, codeEl.textContent || '', '✓ Copied!');
+  });
+  div.querySelector('.tmp-share-copy').addEventListener('click', function() {
+    copyToClipboard(this, shareMsg, '✓ Message copied!');
+  });
+  div.querySelector('.tmp-pw-dismiss').addEventListener('click', () => div.remove());
+  alertsEl.prepend(div);
+}
+
+async function saveRegistrationSettings() {
+  const btn = document.getElementById('reg-settings-btn');
+  const selfRegistration = document.getElementById('reg-self-mode')?.value;
+  const userInvite = document.getElementById('reg-invite-mode')?.value;
+  if (!selfRegistration || !userInvite) return;
+  if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+  try {
+    await api('POST', '/api/admin/settings', { selfRegistration, userInvite });
+    showAlert('Registration settings saved.', 'success', 'admin-alerts');
+  } catch(e) {
+    showAlert(e.message, 'error', 'admin-alerts');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '💾 Save Settings'; }
+  }
+}
+
+async function approvePendingUser(userId) {
+  try {
+    await api('POST', `/api/admin/users/${userId}/approve`, {});
+    showAlert('User approved and activated.', 'success', 'admin-alerts');
+    renderAdmin();
+  } catch(e) { showAlert(e.message, 'error', 'admin-alerts'); }
+}
+
+async function activateUser(userId, username) {
+  if (!confirm(`Activate account for ${username}?`)) return;
+  try {
+    await api('POST', `/api/admin/users/${userId}/activate`, {});
+    showAlert(`Account activated for ${username}.`, 'success', 'admin-alerts');
+    renderAdmin();
+  } catch(e) { showAlert(e.message, 'error', 'admin-alerts'); }
 }
 
 async function addUser() {
@@ -1132,8 +1550,8 @@ async function addUser() {
   try {
     const d = await api('POST', '/api/admin/users', {});
     if (!d) { btn.disabled = false; btn.textContent = '➕ Add User'; return; }
-    showAlert(`Created: ${d.username} / ${d.tempPassword} (share securely)`, 'success', 'admin-alerts');
-    renderAdmin();
+    await renderAdmin();
+    showTempPassword('New user created', d.username, d.tempPassword);
   } catch(e) {
     btn.disabled = false; btn.textContent = '➕ Add User';
     showAlert(e.message, 'error', 'admin-alerts');
@@ -1145,7 +1563,17 @@ async function resetUserPw(userId, username) {
   try {
     const d = await api('POST', `/api/admin/users/${userId}/reset-password`, {});
     if (!d) return;
-    showAlert(`New temp password for ${username}: ${d.tempPassword}`, 'success', 'admin-alerts');
+    await renderAdmin();
+    showTempPassword(`Temporary password for ${username}`, username, d.tempPassword);
+  } catch(e) { showAlert(e.message, 'error', 'admin-alerts'); }
+}
+
+async function unlockUser(userId, username) {
+  if (!confirm(`Unlock account for ${username}?`)) return;
+  try {
+    await api('POST', `/api/admin/users/${userId}/unlock`, {});
+    showAlert(`Account unlocked for ${username}.`, 'success', 'admin-alerts');
+    renderAdmin();
   } catch(e) { showAlert(e.message, 'error', 'admin-alerts'); }
 }
 
@@ -1205,4 +1633,8 @@ async function deleteDropdown(id) {
 }
 
 // ── Bootstrap ────────────────────────────────────────────────────────────────
-document.addEventListener('DOMContentLoaded', init);
+document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('loading-retry-btn')?.addEventListener('click', init);
+  document.getElementById('loading-login-btn')?.addEventListener('click', renderLogin);
+  init();
+});

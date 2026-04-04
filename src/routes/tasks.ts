@@ -1,10 +1,11 @@
 import { Router, Request, Response } from 'express';
 import { getDb } from '../db';
-import { requireAuth, validateCsrf, requirePasswordChange, logEvent } from '../middleware/index';
+import { requireAuth, validateCsrf, requirePasswordChange, requireActivation, logEvent } from '../middleware/index';
 
 const router = Router();
 router.use(requireAuth);
 router.use(requirePasswordChange);
+router.use(requireActivation);
 
 router.get('/active', (req: Request, res: Response) => {
   const s = req.session as any;
@@ -21,15 +22,15 @@ router.post('/start', validateCsrf, (req: Request, res: Response) => {
   const db = getDb();
   const active = db.prepare(`SELECT id FROM tasks WHERE user_id=? AND status='in_progress'`).get(s.userId);
   if (active) { res.status(409).json({ error: 'You already have an active task. Complete or discard it first.' }); return; }
-  const { is_duty, category, subcategory, outcome, notes, start_time } = req.body as any;
+  const { is_duty, category, subcategory, outcome, notes, start_time, assigned_date } = req.body as any;
   const now = start_time || new Date().toISOString();
   if (new Date(now).toDateString() !== new Date().toDateString()) {
     res.status(400).json({ error: 'Task start time must be today.' }); return;
   }
   const r = db.prepare(
-    `INSERT INTO tasks (user_id,is_duty,start_time,category,subcategory,outcome,notes,status)
-     VALUES (?,?,?,?,?,?,?,'in_progress')`
-  ).run(s.userId, is_duty ? 1 : 0, now, category || null, subcategory || null, outcome || null, notes || null);
+    `INSERT INTO tasks (user_id,is_duty,assigned_date,start_time,category,subcategory,outcome,notes,status)
+     VALUES (?,?,?,?,?,?,?,?,'in_progress')`
+  ).run(s.userId, is_duty ? 1 : 0, assigned_date || null, now, category || null, subcategory || null, outcome || null, notes || null);
   logEvent('task_started');
   res.json({ taskId: r.lastInsertRowid });
 });
@@ -86,6 +87,24 @@ router.get('/:id', (req: Request, res: Response) => {
   if (!task) { res.status(404).json({ error: 'Task not found.' }); return; }
   task.interruptions = JSON.parse(task.interruptions || '[]');
   res.json({ task });
+});
+
+router.delete('/', validateCsrf, (req: Request, res: Response) => {
+  const s = req.session as any;
+  const r = getDb().prepare(`DELETE FROM tasks WHERE user_id=? AND status!='in_progress'`).run(s.userId);
+  logEvent('tasks_cleared');
+  res.json({ deleted: r.changes, message: `${r.changes} task(s) deleted. Active tasks were not affected.` });
+});
+
+router.delete('/:id', validateCsrf, (req: Request, res: Response) => {
+  const s = req.session as any;
+  const db = getDb();
+  const taskId = Number(req.params['id']);
+  const task = db.prepare('SELECT id FROM tasks WHERE id=? AND user_id=?').get(taskId, s.userId) as any;
+  if (!task) { res.status(404).json({ error: 'Task not found.' }); return; }
+  db.prepare('DELETE FROM tasks WHERE id=? AND user_id=?').run(taskId, s.userId);
+  logEvent('task_deleted');
+  res.json({ success: true });
 });
 
 export default router;

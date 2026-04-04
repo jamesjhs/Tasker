@@ -1,11 +1,12 @@
 import { Router, Request, Response } from 'express';
 import { getDb } from '../db';
-import { requireAuth, requirePasswordChange } from '../middleware/index';
+import { requireAuth, requirePasswordChange, requireActivation } from '../middleware/index';
 import ExcelJS from 'exceljs';
 
 const router = Router();
 router.use(requireAuth);
 router.use(requirePasswordChange);
+router.use(requireActivation);
 
 function mins(start: string, end: string, interruptions: any[]): number {
   if (!start || !end) return 0;
@@ -14,6 +15,15 @@ function mins(start: string, end: string, interruptions: any[]): number {
     if (i.start && i.end) ms -= new Date(i.end).getTime() - new Date(i.start).getTime();
   }
   return Math.max(0, Math.round(ms / 60000));
+}
+
+function secs(start: string, end: string, interruptions: any[]): number {
+  if (!start || !end) return 0;
+  let ms = new Date(end).getTime() - new Date(start).getTime();
+  for (const i of interruptions) {
+    if (i.start && i.end) ms -= new Date(i.end).getTime() - new Date(i.start).getTime();
+  }
+  return Math.max(0, Math.round(ms / 1000));
 }
 
 function buildSummary(tasks: any[]) {
@@ -111,21 +121,34 @@ router.get('/export', async (req: Request, res: Response) => {
   ).all(s.userId) as any[]).map(t => {
     const interruptions = JSON.parse(t.interruptions || '[]');
     return {
-      'Task ID': t.id, 'Type': t.is_duty ? 'Duty' : 'Personal',
-      'Category': t.category || '', 'Subcategory': t.subcategory || '', 'Outcome': t.outcome || '',
-      'Start Time': t.start_time, 'End Time': t.end_time || '',
-      'Duration (mins)': mins(t.start_time, t.end_time, interruptions),
-      'Interruptions': interruptions.length, 'Notes': t.notes || '',
-      'Created': t.created_at, 'Updated': t.updated_at,
+      'Type': t.is_duty ? 'Duty' : 'Personal',
+      'Task From': t.category || '',
+      'Task Type': t.subcategory || '',
+      'Outcome': t.outcome || '',
+      'Date Assigned': t.assigned_date ? new Date(/^\d{4}-\d{2}-\d{2}$/.test(t.assigned_date) ? t.assigned_date + 'T00:00:00' : t.assigned_date) : '',
+      'Start Time': t.start_time ? new Date(t.start_time) : '',
+      'End Time': t.end_time ? new Date(t.end_time) : '',
+      'Duration (secs)': secs(t.start_time, t.end_time, interruptions),
+      'Interruptions': interruptions.length,
+      'Notes': t.notes || '',
     };
   });
 
   const wb = new ExcelJS.Workbook();
   const ws = wb.addWorksheet('Tasks');
-  if (tasks.length > 0) {
-    ws.columns = Object.keys(tasks[0]).map(k => ({ header: k, key: k, width: 20 }));
-    ws.addRows(tasks);
-  }
+  ws.columns = [
+    { header: 'Type',            key: 'Type',            width: 12 },
+    { header: 'Task From',       key: 'Task From',       width: 22 },
+    { header: 'Task Type',       key: 'Task Type',       width: 22 },
+    { header: 'Outcome',         key: 'Outcome',         width: 16 },
+    { header: 'Date Assigned',   key: 'Date Assigned',   width: 16, style: { numFmt: 'yyyy-mm-dd' } },
+    { header: 'Start Time',      key: 'Start Time',      width: 20, style: { numFmt: 'yyyy-mm-dd hh:mm' } },
+    { header: 'End Time',        key: 'End Time',        width: 20, style: { numFmt: 'yyyy-mm-dd hh:mm' } },
+    { header: 'Duration (secs)', key: 'Duration (secs)', width: 16 },
+    { header: 'Interruptions',   key: 'Interruptions',   width: 14 },
+    { header: 'Notes',           key: 'Notes',           width: 32 },
+  ];
+  ws.addRows(tasks);
   res.setHeader('Content-Disposition', 'attachment; filename="tasker-export.xlsx"');
   res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
   await wb.xlsx.write(res);
