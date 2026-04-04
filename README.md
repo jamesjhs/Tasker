@@ -6,7 +6,7 @@
 
 ## Features
 
-- **Anonymous by design** — usernames are auto-generated memorable word pairs (e.g. `CalmRiver`). No real names, emails, or patient data stored.
+- **Anonymous by design** — usernames are auto-generated memorable word pairs. No real names, emails, or patient data stored.
 - **Mobile-only** — desktop browsers are blocked. Access from NHS networks is blocked.
 - **PWA** — installable on mobile, works offline for cached assets.
 - **Task tracking** — duty vs personal tasks, categories, subcategories, outcomes, interruption handling.

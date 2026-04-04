@@ -2,28 +2,29 @@ import { getDb } from './db';
 import crypto from 'crypto';
 
 const ADJ = [
-  'Amber','Azure','Bold','Brave','Bright','Calm','Clear','Cool','Crisp','Dark',
-  'Dawn','Deep','Deft','Fair','Firm','Fleet','Free','Fresh','Gentle','Gold',
-  'Grand','Green','Grey','High','Jade','Just','Keen','Kind','Late','Light',
-  'Long','Mint','Mist','Moon','Moss','Neat','Noble','North','Oak','Open',
-  'Peak','Pine','Plain','Proud','Pure','Quick','Quiet','Rain','Rapid','Rare',
-  'Rich','Rosy','Round','Royal','Ruby','Safe','Salt','Sharp','Silver','Slim',
-  'Smart','Snow','Soft','Solid','South','Star','Steel','Still','Stone','Storm',
-  'Strong','Sun','Sure','Tall','Tame','Teal','True','Twin','Vale','Vast',
-  'Warm','West','Wide','Wild','Wise','Young','Zen',
+  'Airy','Amber','Azure','Bold','Brave','Bright','Brisk','Calm','Clear','Cool',
+  'Crisp','Dark','Dawn','Deep','Deft','Dusk','Fair','Firm','Fleet','Free',
+  'Fresh','Gentle','Gilt','Gold','Grand','Green','Grey','High','Jade','Just',
+  'Keen','Kind','Late','Light','Long','Mint','Mist','Moon','Moss','Neat',
+  'Noble','North','Oak','Open','Pale','Peak','Pine','Plain','Prime','Proud',
+  'Pure','Quick','Quiet','Rain','Rapid','Rare','Rich','Rosy','Round','Royal',
+  'Ruby','Safe','Salt','Sandy','Shady','Sharp','Silver','Slim','Smart','Snow',
+  'Soft','Solid','South','Spare','Star','Steel','Still','Stone','Storm','Stout',
+  'Strong','Sun','Sunny','Sure','Tall','Tame','Teal','True','Twin','Vale',
+  'Vast','Vivid','Warm','Wary','West','Wide','Wild','Wise','Young','Zen',
 ];
 
 const NOUN = [
-  'Anchor','Arrow','Ash','Bark','Bear','Bird','Blade','Bloom','Bolt','Brook',
-  'Cedar','Cloud','Cove','Creek','Crow','Deer','Dell','Dove','Drake','Dune',
-  'Eagle','Echo','Elm','Fern','Finch','Flame','Flask','Fleet','Flint','Flow',
-  'Fog','Ford','Fox','Frost','Gate','Glen','Grove','Hawk','Heath','Hill',
-  'Horn','Isle','Ivy','Kite','Lake','Lark','Leaf','Lily','Loch','Lynx',
-  'Marsh','Meadow','Mill','Mint','Moon','Moss','Moth','Oak','Path','Peak',
-  'Pine','Pool','Pond','Rain','Reed','Ridge','River','Rock','Rose','Rush',
-  'Sage','Sand','Seed','Shore','Slope','Snow','Spring','Star','Stone','Storm',
-  'Stream','Swift','Thorn','Tide','Trail','Tree','Vale','Vine','Wave','Well',
-  'Wren','Yew',
+  'Anchor','Arrow','Ash','Bark','Bear','Bird','Birch','Blade','Blaze','Bloom',
+  'Bolt','Brook','Cedar','Cliff','Cloud','Cove','Creek','Crest','Crow','Deer',
+  'Dell','Dove','Drake','Dune','Eagle','Echo','Elm','Fern','Finch','Flame',
+  'Flask','Fleet','Flint','Flow','Fog','Ford','Fox','Frost','Gate','Glen',
+  'Grove','Hawk','Heath','Heron','Hill','Horn','Isle','Ivy','Kite','Lake',
+  'Lark','Leaf','Lily','Loch','Lynx','Marsh','Meadow','Mill','Mint','Moon',
+  'Moss','Moth','Oak','Path','Peak','Pine','Pool','Pond','Rain','Reed',
+  'Ridge','River','Robin','Rock','Rose','Rush','Sage','Sand','Seed','Shore',
+  'Slope','Snow','Spring','Star','Stone','Storm','Stream','Swift','Tern','Thorn',
+  'Tide','Trail','Tree','Vale','Vine','Wave','Well','Willow','Wren','Yew',
 ];
 
 function pick(arr: string[]): string {

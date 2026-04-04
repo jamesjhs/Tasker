@@ -13,6 +13,7 @@ const state = {
   activeTask: null,     // current in_progress task
   timerInterval: null,
   activityInterval: null,
+  inactivityCheckInterval: null,
   interruptStart: null, // ISO string set when interrupt modal opens
   currentView: null,
   dropdowns: { category: [], subcategory: [], outcome: [] },
@@ -54,14 +55,52 @@ function getLastActive() {
   try { const v = localStorage.getItem('tasker_last_active'); return v ? parseInt(v, 10) : null; } catch(e) { return null; }
 }
 
+const ACTIVITY_EVENTS = ['click', 'touchstart', 'keydown', 'scroll'];
+
 function startActivityTracking() {
   stopActivityTracking();
+  updateLastActive();
   state.activityInterval = setInterval(updateLastActive, 60000);
+  ACTIVITY_EVENTS.forEach(evt => document.addEventListener(evt, updateLastActive, { passive: true }));
+  state.inactivityCheckInterval = setInterval(checkClientInactivity, 60000);
 }
 
 function stopActivityTracking() {
   if (state.activityInterval) { clearInterval(state.activityInterval); state.activityInterval = null; }
+  if (state.inactivityCheckInterval) { clearInterval(state.inactivityCheckInterval); state.inactivityCheckInterval = null; }
+  ACTIVITY_EVENTS.forEach(evt => document.removeEventListener(evt, updateLastActive));
 }
+
+async function forceSessionExpiry() {
+  stopActivityTracking();
+  try {
+    await fetch('/api/auth/logout', {
+      method: 'POST',
+      headers: { 'X-CSRF-Token': state.csrfToken || '' },
+      credentials: 'same-origin',
+    });
+  } catch(e) { console.warn('[Tasker] Logout request failed during session expiry:', e); }
+  state.user = null;
+  state.activeTask = null;
+  state.csrfToken = null;
+  state.registrationConfig = null;
+  try { await refreshCsrf(); } catch(e) {}
+  await renderLogin();
+  showAlert('Your session expired due to inactivity. Please log in again.', 'error', 'login-alerts');
+}
+
+function checkClientInactivity() {
+  if (!state.user) return;
+  const last = getLastActive();
+  if (last && Date.now() - last > INACTIVITY_MS) {
+    forceSessionExpiry();
+  }
+}
+
+// When the page becomes visible again, immediately check if the session has expired
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden) checkClientInactivity();
+});
 
 async function checkInactivityInterruption() {
   if (!state.activeTask) return false;
@@ -161,7 +200,7 @@ async function init() {
 
       setLoadingStatus('Checking active task…');
       await checkActiveTask();
-      if (state.activeTask) startActivityTracking();
+      startActivityTracking();
 
       setLoadingStatus('Rendering…');
       await (state.user.isAdmin ? renderAdmin() : renderHome());
@@ -211,7 +250,7 @@ function renderBottomNav(active) {
 
 // ── LOGIN ────────────────────────────────────────────────────────────────────
 async function renderLogin() {
-  stopTimer(); clearCharts(); state.currentView = 'login';
+  stopTimer(); stopActivityTracking(); clearCharts(); state.currentView = 'login';
   // Fetch registration config to decide whether to show Register button
   try {
     const cfgRes = await fetch('/api/auth/registration-config', { credentials: 'same-origin' });
@@ -229,7 +268,7 @@ async function renderLogin() {
     <div class="card">
       <div class="form-group">
         <label for="l-user">Username</label>
-        <input id="l-user" class="input" type="text" autocomplete="username" autocapitalize="off" placeholder="e.g. Qwerty">
+        <input id="l-user" class="input" type="text" autocomplete="username" autocapitalize="off" placeholder="Enter your username">
       </div>
       <div class="form-group">
         <label for="l-pass">Password</label>
@@ -271,6 +310,7 @@ async function doLogin() {
     if (d.pendingActivation) { renderAwaitActivation(); return; }
     await loadDropdowns();
     await checkActiveTask();
+    startActivityTracking();
     renderPrivacySplash(() => { d.isAdmin ? renderAdmin() : renderHome(); });
   } catch(e) {
     btn.disabled = false; btn.textContent = 'Log in';
