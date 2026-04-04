@@ -54,7 +54,7 @@ export function requireAuth(req: Request, res: Response, next: NextFunction): vo
     res.status(401).json({ error: 'Session expired due to inactivity' });
     return;
   }
-  if (s.sessionDate && s.sessionDate !== new Date().toDateString()) {
+  if (s.sessionDate && s.sessionDate !== new Date().toISOString().split('T')[0]) {
     req.session.destroy(() => {});
     res.status(401).json({ error: 'Session ended at midnight. Please log in again.' });
     return;
