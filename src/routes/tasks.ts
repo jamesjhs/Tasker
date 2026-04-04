@@ -63,7 +63,7 @@ router.patch('/:id', validateCsrf, (req: Request, res: Response) => {
   // Validate temporal consistency when both times are present
   const effectiveStart = start_time !== undefined ? start_time : task.start_time;
   const effectiveEnd = end_time !== undefined ? end_time : task.end_time;
-  if (effectiveStart && effectiveEnd && new Date(effectiveStart) >= new Date(effectiveEnd)) {
+  if (effectiveStart && effectiveEnd && new Date(effectiveStart) > new Date(effectiveEnd)) {
     res.status(400).json({ error: 'Start time must be before end time.' }); return;
   }
   const cols: string[] = [];

@@ -92,9 +92,9 @@ function buildSummary(tasks: any[]) {
 
 router.get('/session', (req: Request, res: Response) => {
   const s = req.session as any;
-  const dateStr = new Date(s.sessionDate || new Date().toDateString()).toISOString().split('T')[0];
+  const dateStr = s.sessionDate || new Date().toISOString().split('T')[0];
   const tasks = (getDb().prepare(
-    `SELECT * FROM tasks WHERE user_id=? AND status='completed' AND date(start_time)=date(?) ORDER BY start_time`
+    `SELECT * FROM tasks WHERE user_id=? AND status='completed' AND date(start_time)=? ORDER BY start_time`
   ).all(s.userId, dateStr) as any[]).map(t => ({ ...t, interruptions: JSON.parse(t.interruptions || '[]'), notes: decryptField(t.notes) }));
   res.json({ tasks, summary: buildSummary(tasks) });
 });

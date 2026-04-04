@@ -107,7 +107,7 @@ router.post('/login', validateCsrf, async (req: Request, res: Response) => {
   s.mustChangePassword = user.must_change_password === 1;
   s.pendingActivation = user.must_change_password === 0 && user.pending_activation === 1;
   s.lastActivity = Date.now();
-  s.sessionDate = new Date().toDateString();
+  s.sessionDate = new Date().toISOString().split('T')[0];
   s.csrfToken = crypto.randomBytes(32).toString('hex');
   db.prepare('UPDATE users SET failed_login_attempts=0, is_locked=0 WHERE id=?').run(user.id);
   logEvent('user_login');
