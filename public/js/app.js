@@ -291,7 +291,7 @@ function renderBottomNav(active) {
       <span class="nav-icon">⚙️</span><span>Settings</span>
     </button>
   </nav>
-  <p style="text-align:center;font-size:.75rem;color:#9ca3af;padding:8px 0 16px">v1.3.0 &nbsp;·&nbsp; <a href="/policy" target="_blank" style="color:#9ca3af">Privacy Policy</a> &nbsp;·&nbsp; <a href="/help" target="_blank" style="color:#9ca3af">Help</a><br>© J Rowson ${new Date().getFullYear()} | <a href="https://jahosi.co.uk" target="_blank" style="color:#9ca3af">jahosi.co.uk</a></p>`;
+  <p style="text-align:center;font-size:.75rem;color:#9ca3af;padding:8px 0 16px">v1.4.0 &nbsp;·&nbsp; <a href="/policy" target="_blank" style="color:#9ca3af">Privacy Policy</a> &nbsp;·&nbsp; <a href="/help" target="_blank" style="color:#9ca3af">Help</a><br>© J Rowson ${new Date().getFullYear()} | <a href="https://jahosi.co.uk" target="_blank" style="color:#9ca3af">jahosi.co.uk</a></p>`;
 }
 
 // ── STATS CARDS ──────────────────────────────────────────────────────────────
@@ -308,6 +308,10 @@ function renderStatsCards(stats, marginTop = '20px') {
 async function renderLogin() {
   stopTimer(); stopActivityTracking(); clearCharts(); state.currentView = 'login';
   replaceHistory('login');
+  // Force a refresh of the local SW cache so stale assets can't cause CSRF token mismatches
+  if ('caches' in window) {
+    caches.keys().then(keys => Promise.all(keys.map(k => caches.delete(k)))).catch(() => {});
+  }
   // Fetch registration config and public stats in parallel
   try {
     const [cfgRes, statsRes] = await Promise.all([
@@ -346,7 +350,7 @@ async function renderLogin() {
       <a href="/policy" target="_blank" style="font-size:.85rem;color:#6b7280">Data &amp; Use Policy</a>
     </div>
     ${statsHTML}
-    <p style="text-align:center;font-size:.75rem;color:#9ca3af;margin-top:24px">v1.3.0<br>© J Rowson ${new Date().getFullYear()} | <a href="https://jahosi.co.uk" target="_blank" style="color:#9ca3af">jahosi.co.uk</a></p>
+    <p style="text-align:center;font-size:.75rem;color:#9ca3af;margin-top:24px">v1.4.0<br>© J Rowson ${new Date().getFullYear()} | <a href="https://jahosi.co.uk" target="_blank" style="color:#9ca3af">jahosi.co.uk</a></p>
   </div>`;
   document.getElementById('l-user').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
   document.getElementById('l-pass').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
@@ -1750,7 +1754,7 @@ function renderAdminContent(stats, users, dropOpts, settings, pendingUsers, awai
 
     <div class="divider"></div>
     <button class="btn btn-secondary btn-full" style="margin-bottom:16px" onclick="doLogout()">🚪 Log Out</button>
-    <p style="text-align:center;font-size:.75rem;color:#9ca3af;padding-bottom:80px">v1.3.0 &nbsp;·&nbsp; <a href="/policy" target="_blank" style="color:#9ca3af">Privacy Policy</a> &nbsp;·&nbsp; <a href="/help" target="_blank" style="color:#9ca3af">Help</a><br>© J Rowson ${new Date().getFullYear()} | <a href="https://jahosi.co.uk" target="_blank" style="color:#9ca3af">jahosi.co.uk</a></p>
+    <p style="text-align:center;font-size:.75rem;color:#9ca3af;padding-bottom:80px">v1.4.0 &nbsp;·&nbsp; <a href="/policy" target="_blank" style="color:#9ca3af">Privacy Policy</a> &nbsp;·&nbsp; <a href="/help" target="_blank" style="color:#9ca3af">Help</a><br>© J Rowson ${new Date().getFullYear()} | <a href="https://jahosi.co.uk" target="_blank" style="color:#9ca3af">jahosi.co.uk</a></p>
   </div>`;
 }
 
