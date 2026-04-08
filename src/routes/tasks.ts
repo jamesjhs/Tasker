@@ -8,6 +8,36 @@ router.use(requireAuth);
 router.use(requirePasswordChange);
 router.use(requireActivation);
 
+router.get('/recent-count', (req: Request, res: Response) => {
+  const s = req.session as any;
+  const row = getDb().prepare(
+    `SELECT COUNT(*) AS count FROM tasks WHERE user_id=? AND status='completed' AND end_time >= datetime('now','-7 days')`
+  ).get(s.userId) as any;
+  res.json({ count: row?.count ?? 0 });
+});
+
+router.get('/pending-count', (req: Request, res: Response) => {
+  const s = req.session as any;
+  const log = getDb().prepare(
+    `SELECT count, logged_at FROM pending_task_logs WHERE user_id=? ORDER BY logged_at DESC LIMIT 1`
+  ).get(s.userId) as any;
+  res.json(log || null);
+});
+
+router.post('/pending-count', validateCsrf, (req: Request, res: Response) => {
+  const s = req.session as any;
+  const count = Number(req.body?.count);
+  if (!Number.isInteger(count) || count < 0 || count > 9999) {
+    res.status(400).json({ error: 'Count must be an integer between 0 and 9999.' }); return;
+  }
+  const now = new Date().toISOString();
+  getDb().prepare(
+    `INSERT INTO pending_task_logs (user_id, count, logged_at) VALUES (?,?,?)`
+  ).run(s.userId, count, now);
+  logEvent('pending_count_logged');
+  res.json({ count, logged_at: now });
+});
+
 router.get('/active', (req: Request, res: Response) => {
   const s = req.session as any;
   const task = getDb().prepare(
@@ -46,7 +76,7 @@ router.patch('/:id', validateCsrf, (req: Request, res: Response) => {
   const taskId = Number(req.params['id']);
   const task = db.prepare('SELECT * FROM tasks WHERE id=? AND user_id=?').get(taskId, s.userId) as any;
   if (!task) { res.status(404).json({ error: 'Task not found.' }); return; }
-  const { status, end_time, start_time, category, subcategory, outcome, notes, interruptions, is_duty } = req.body as any;
+  const { status, end_time, start_time, category, subcategory, outcome, notes, interruptions, is_duty, assigned_date } = req.body as any;
   // Only enforce today's date for end_time when the task is still in-progress (i.e. being completed now)
   if (end_time && task.status === 'in_progress' && new Date(end_time).toDateString() !== new Date().toDateString()) {
     res.status(400).json({ error: 'Task end time must be today.' }); return;
@@ -76,6 +106,7 @@ router.patch('/:id', validateCsrf, (req: Request, res: Response) => {
   if (outcome !== undefined)      { cols.push('outcome=?');       vals.push(outcome); }
   if (notes !== undefined)        { cols.push('notes=?');         vals.push(encryptField(notes)); }
   if (is_duty !== undefined)      { cols.push('is_duty=?');       vals.push(is_duty ? 1 : 0); }
+  if (assigned_date !== undefined){ cols.push('assigned_date=?'); vals.push(assigned_date || null); }
   if (interruptions !== undefined){ cols.push('interruptions=?'); vals.push(JSON.stringify(interruptions)); }
   cols.push(`updated_at=datetime('now')`);
   vals.push(taskId, s.userId);

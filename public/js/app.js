@@ -21,6 +21,8 @@ const state = {
   taskForm: {},
   editTask: null,
   charts: {},
+  pendingTaskLog: null,  // { count, logged_at } — most recent pending task snapshot
+  recentHandledCount: null,  // number — tasks completed in the last 7 days
 };
 
 // ── History management ────────────────────────────────────────────────────────
@@ -654,6 +656,16 @@ function renderHomeHTML() {
       ▶ Log Task
     </button>`}
     ${statsHTML}
+    <div class="card" style="margin-top:16px">
+      <div class="card-title">📋 Pending Tasks</div>
+      ${state.pendingTaskLog ? `<p style="font-size:.85rem;color:#6b7280;margin-bottom:8px">Last logged: <strong>${state.pendingTaskLog.count}</strong> (${formatDateShort(state.pendingTaskLog.logged_at)} ${formatTimeShort(state.pendingTaskLog.logged_at)})</p>` : ''}
+      ${state.recentHandledCount !== null ? `<p style="font-size:.85rem;color:#6b7280;margin-bottom:8px">Tasks handled (last 7 days): <strong>${state.recentHandledCount}</strong></p>` : ''}
+      <div style="display:flex;gap:8px;align-items:center">
+        <input id="pending-count-input" class="input" type="number" min="0" max="9999" placeholder="Enter count…" style="flex:1">
+        <button class="btn btn-primary" onclick="doLogPendingCount()">Log</button>
+      </div>
+      <div id="pending-count-alerts" style="margin-top:8px"></div>
+    </div>
   </div>
   ${renderBottomNav('home')}`;
 }
@@ -662,11 +674,15 @@ async function renderHome() {
   stopTimer(); clearCharts(); state.currentView = 'home';
   pushHistory('home');
   app().innerHTML = renderHomeHTML();
-  const [_activeTask, statsRes] = await Promise.all([
+  const [_activeTask, statsRes, pendingRes, recentRes] = await Promise.all([
     checkActiveTask(),
     fetch('/api/auth/stats', { credentials: 'same-origin' }).catch(() => null),
+    fetch('/api/tasks/pending-count', { credentials: 'same-origin' }).catch(() => null),
+    fetch('/api/tasks/recent-count', { credentials: 'same-origin' }).catch(() => null),
   ]);
   if (statsRes?.ok) state.appStats = await statsRes.json();
+  if (pendingRes?.ok) state.pendingTaskLog = await pendingRes.json();
+  if (recentRes?.ok) { const r = await recentRes.json(); state.recentHandledCount = r?.count ?? null; }
   if (state.activeTask) {
     await checkInactivityInterruption();
     updateLastActive();
@@ -692,6 +708,22 @@ async function discardActiveTask() {
     stopActivityTracking();
     renderHome();
   } catch(e) { showAlert(e.message, 'error', 'home-alerts'); }
+}
+
+async function doLogPendingCount() {
+  const input = document.getElementById('pending-count-input');
+  const val = input?.value.trim();
+  const count = parseInt(val, 10);
+  if (val === '' || isNaN(count) || count < 0 || count > 9999) {
+    showAlert('Please enter a valid number (0–9999).', 'error', 'pending-count-alerts'); return;
+  }
+  try {
+    const d = await api('POST', '/api/tasks/pending-count', { count });
+    if (!d) return;
+    state.pendingTaskLog = d;
+    if (input) input.value = '';
+    showAlert('Pending task count logged.', 'success', 'pending-count-alerts');
+  } catch(e) { showAlert(e.message, 'error', 'pending-count-alerts'); }
 }
 
 // ── SETTINGS ─────────────────────────────────────────────────────────────────
@@ -1176,6 +1208,10 @@ function renderTaskReview(t, isEdit) {
         <label for="te-end">End time</label>
         <input id="te-end" class="input" type="datetime-local" value="${formatDatetimeLocal(t.end_time)}">
       </div>
+      <div class="form-group">
+        <label for="te-assigned">Date assigned</label>
+        <input id="te-assigned" class="input" type="date" value="${t.assigned_date || new Date().toISOString().split('T')[0]}">
+      </div>
       ${notesHtml}
     </div>
     <div class="card">
@@ -1287,6 +1323,7 @@ async function submitTaskReview(taskId, isEdit, dest) {
     start_time: start ? new Date(start).toISOString() : t.start_time,
     end_time: new Date(end).toISOString(),
     interruptions: t.interruptions || [],
+    assigned_date: document.getElementById('te-assigned')?.value || t.assigned_date || null,
   };
   try {
     await api('PATCH', `/api/tasks/${taskId}`, body);
