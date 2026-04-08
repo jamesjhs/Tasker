@@ -169,8 +169,13 @@ router.get('/export', async (req: Request, res: Response) => {
   ]);
   ws2.getCell('B2').numFmt = 'yyyy-mm-dd hh:mm';
 
-  res.setHeader('Content-Disposition', 'attachment; filename="tasker-export.xlsx"');
+  const now = new Date();
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const stamp = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}${pad(now.getHours())}${pad(now.getMinutes())}`;
+  const filename = `Tasker-${stamp}.xlsx`;
+  res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
   res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  res.setHeader('Last-Modified', now.toUTCString());
   await wb.xlsx.write(res);
   res.end();
 });

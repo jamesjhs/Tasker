@@ -1,13 +1,12 @@
 # Tasker
 
-**v1.3.0** — An anonymous, mobile-only task-logging PWA for healthcare staff. Built with TypeScript, Express 5, SQLite, and vanilla JS.
+**v1.4.0** — An anonymous task-logging PWA for healthcare staff. Built with TypeScript, Express 5, SQLite, and vanilla JS.
 
 ---
 
 ## Features
 
 - **Anonymous by design** — usernames are auto-generated memorable word pairs. No real names, emails, or patient data stored.
-- **Mobile-only** — desktop browsers are blocked. Access from NHS networks is blocked.
 - **PWA** — installable on mobile, works offline for cached assets.
 - **Task tracking** — duty vs personal tasks, categories, subcategories, outcomes, interruption handling.
 - **Analytics** — session and 30-day history with Chart.js charts, filtering, and linear regression trendlines.
@@ -17,7 +16,7 @@
 - **User invitations** — logged-in users can invite others using the same temp-password flow as admins (subject to the configured policy).
 - **30-day data retention** — task data is automatically deleted after 30 days.
 - **Health-check endpoint** — `GET /readyz` returns a JSON status response for uptime/heartbeat monitoring (no authentication required).
-- **Asset version endpoint** — `GET /api/version` returns `{"version":"1.3.0"}` for client-side cache-busting.
+- **Asset version endpoint** — `GET /api/version` returns `{"version":"1.4.0"}` for client-side cache-busting.
 
 ---
 
@@ -87,7 +86,7 @@ src/
   server.ts               Express 5 app, middleware wiring, SSL detection, 30-day retention job, /readyz health check, /api/version endpoint
   db.ts                   SQLite schema + migrations + seed data, getDb(), getSetting(), setSetting()
   words.ts                Memorable two-word username generator
-  middleware/index.ts     NHS block, mobile-only, requireAuth, requireAdmin, CSRF, logEvent
+  middleware/index.ts     requireAuth, requireAdmin, CSRF, logEvent
   routes/
     auth.ts               /api/auth/* — register, login, logout, change-password, me, account delete, invite
     tasks.ts              /api/tasks/* — start, active, PATCH, GET
@@ -125,7 +124,6 @@ docs/
 - HTTP-only, SameSite=strict session cookies
 - 30-minute idle session timeout + midnight session expiry
 - Helmet.js security headers
-- NHS network IP range blocking (HSCN/N3)
 - Parameterised SQL queries throughout
 - Path validation on DB restore endpoint
 - Automatic HTTPS when certificates are present
@@ -141,15 +139,15 @@ See [`/policy`](/policy) for the full Data and Use Policy.
 
 ## Changelog
 
-### v1.3.0 (April 2026)
+### v1.4.0 (April 2026)
 
 - **SPA back/forward navigation** — browser Back and Forward buttons now work correctly throughout the app. Every view transition records itself in the browser history stack (`history.pushState`); a `popstate` listener dispatches navigation events back to the correct render function with an auth guard.
 - **Asset version-gate reload** — on startup the app fetches `/api/version` (network-first, bypassing the service worker cache) and compares it to the version stored in `localStorage`. On a mismatch all service worker caches are cleared, the service worker is unregistered, and the page reloads to guarantee fresh `app.js`, `app.css`, and `index.html` are loaded.
-- **`GET /api/version`** — new lightweight endpoint returning `{ "version": "1.3.0" }`, rate-limited and guarded by the mobile-only middleware.
+- **`GET /api/version`** — new lightweight endpoint returning `{ "version": "1.4.0" }`, rate-limited.
 
 ### v1.2.0 (April 2026)
 
-- **Health-check endpoint** — `GET /readyz` returns `{"ok":true,"service":"Tasker","version":"1.2.0","timestamp":"..."}` for uptime/heartbeat polling servers. No authentication required; exempt from mobile-only restriction.
+- **Health-check endpoint** — `GET /readyz` returns `{"ok":true,"service":"Tasker","version":"1.2.0","timestamp":"..."}` for uptime/heartbeat polling servers. No authentication required.
 - **Login error messages** — failed login attempts (wrong username or password) now display the server's friendly error message in the login form instead of silently resetting the form.
 
 ### v1.1.0
