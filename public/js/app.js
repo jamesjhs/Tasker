@@ -10,7 +10,7 @@ const state = {
   csrfToken: null,
   user: null,           // { username, isAdmin, mustChangePassword, userGroupId, userGroupName }
   registrationConfig: null, // { selfRegistration, userInvite }
-  appStats: null,       // { userCount, eventCount }
+  appStats: null,       // { userCount, taskCount }
   activeTask: null,     // current in_progress task
   timerInterval: null,
   activityInterval: null,
@@ -333,7 +333,7 @@ function renderStatsCards(stats, marginTop = '20px') {
   return `
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:${marginTop}">
       <div class="stat-card"><div class="stat-number">${stats.userCount}</div><div class="stat-label">Registered users</div></div>
-      <div class="stat-card"><div class="stat-number">${stats.eventCount}</div><div class="stat-label">Events logged</div></div>
+      <div class="stat-card"><div class="stat-number">${stats.taskCount}</div><div class="stat-label">Tasks logged</div></div>
     </div>`;
 }
 
@@ -487,10 +487,13 @@ async function renderGroupSelection(onContinue) {
   app().innerHTML = `
   <div class="view">
     <h1 style="margin-bottom:8px;color:#1a56db">👥 Choose Your Group</h1>
-    <p style="font-size:.9rem;color:#6b7280;margin-bottom:16px">
+    <p style="font-size:.9rem;color:#6b7280;margin-bottom:12px">
       Your group determines which task origin, type and outcome options appear in your dropdown lists.
       You can change this later in Settings.
     </p>
+    <div class="alert alert-info" style="margin-bottom:16px;font-size:.85rem">
+      🔒 <strong>Your privacy:</strong> Your group selection is used only to personalise your dropdown options and for aggregate audit purposes. It does not make your account identifiable and is not visible to administrators.
+    </div>
     <div id="group-alerts"></div>
     ${groupOpts || '<div class="alert alert-info">No user groups have been set up yet. Ask your administrator.</div>'}
     <div style="display:flex;gap:10px;margin-top:8px">
@@ -1825,12 +1828,10 @@ function renderAdminContent(stats, users, dropOpts, settings, pendingUsers, awai
         <span style="font-weight:700">${esc(u.username)}</span>
         ${u.must_change_password ? '<span class="badge badge-warn" style="margin-left:6px">Temp pw</span>' : ''}
         ${u.is_locked ? '<span class="badge badge-danger" style="margin-left:6px">🔒 Locked</span>' : ''}
-        <span style="font-size:.75rem;color:${u.user_group_name ? '#1a56db' : '#9ca3af'};margin-left:6px">${u.user_group_name ? '👥 ' + esc(u.user_group_name) : 'No group'}</span>
       </div>
       <div style="display:flex;gap:6px;flex-wrap:wrap">
         ${u.is_locked ? `<button class="btn btn-outline btn-sm" onclick="unlockUser(${u.id}, '${esc(u.username)}')">🔓 Unlock</button>` : ''}
         <button class="btn btn-outline btn-sm" onclick="resetUserPw(${u.id}, '${esc(u.username)}')">🔑 Reset</button>
-        <button class="btn btn-outline btn-sm" onclick="showAdminSetUserGroup(${u.id}, '${esc(u.username)}', ${u.user_group_id ?? 'null'})">👥 Group</button>
         <button class="btn btn-danger btn-sm" onclick="deleteUser(${u.id}, '${esc(u.username)}')">🗑</button>
       </div>
     </div>
@@ -1934,7 +1935,7 @@ function renderAdminContent(stats, users, dropOpts, settings, pendingUsers, awai
     <div id="admin-alerts"></div>
     <div class="stat-grid">
       <div class="stat-card"><div class="stat-number">${stats?.userCount ?? '?'}</div><div class="stat-label">Registered users</div></div>
-      <div class="stat-card"><div class="stat-number">${stats?.eventCount ?? '?'}</div><div class="stat-label">Events logged</div></div>
+      <div class="stat-card"><div class="stat-number">${stats?.taskCount ?? '?'}</div><div class="stat-label">Tasks logged</div></div>
     </div>
 
     <div class="section-heading">Registration Settings</div>
@@ -1969,7 +1970,7 @@ function renderAdminContent(stats, users, dropOpts, settings, pendingUsers, awai
 
       <div>
         <div class="section-heading">User Groups</div>
-        <p style="font-size:.85rem;color:#6b7280;margin-bottom:10px">Groups control which dropdown options users see. Assign users to groups using the 👥 button above.</p>
+        <p style="font-size:.85rem;color:#6b7280;margin-bottom:10px">Groups control which dropdown options users see. Users select their own group for privacy reasons.</p>
         <button class="btn btn-primary btn-full" style="margin-bottom:14px" onclick="addUserGroup()">➕ Add User Group</button>
         ${groupCards || '<p style="font-size:.85rem;color:#6b7280;margin-bottom:14px">No user groups yet.</p>'}
       </div>
@@ -2266,41 +2267,6 @@ async function saveGroupDropdowns(groupId) {
     await api('PUT', `/api/admin/user-groups/${groupId}/dropdowns`, { option_ids });
     showAlert('Group options saved.', 'success', 'admin-alerts');
     document.getElementById('group-dd-modal')?.remove();
-  } catch(e) { showAlert(e.message, 'error', 'admin-alerts'); }
-}
-
-function showAdminSetUserGroup(userId, username, currentGroupId) {
-  const modal = document.createElement('div');
-  modal.className = 'modal-overlay';
-  modal.id = 'admin-group-modal';
-  modal.innerHTML = `<div class="modal-sheet">
-    <div class="modal-body"><div class="modal-title">👥 Assign Group — ${esc(username)}</div><p class="loading">Loading…</p></div>
-    <div class="modal-footer"><button class="btn btn-secondary btn-full" onclick="document.getElementById('admin-group-modal')?.remove()">Cancel</button></div>
-  </div>`;
-  document.body.appendChild(modal);
-  api('GET', '/api/admin/user-groups').then(d => {
-    const groups = d?.groups || [];
-    const opts = groups.map(g => `
-      <button onclick="adminSetUserGroup(${userId}, ${g.id})" style="display:block;width:100%;padding:12px;border:2px solid ${g.id === currentGroupId ? '#1a56db' : '#e5e7eb'};background:${g.id === currentGroupId ? '#eff6ff' : '#fff'};border-radius:8px;margin-bottom:8px;text-align:left;cursor:pointer">
-        <span style="font-weight:600">${esc(g.name)}</span>
-        <span style="font-size:.75rem;color:#6b7280;margin-left:6px">${g.user_count} user${g.user_count !== 1 ? 's' : ''}</span>
-      </button>`).join('');
-    modal.querySelector('.modal-body').innerHTML = `
-      <div class="modal-title">👥 Assign Group — ${esc(username)}</div>
-      ${opts || '<p style="font-size:.85rem;color:#6b7280">No groups available. Create a group first.</p>'}
-      ${currentGroupId ? `<button class="btn btn-secondary btn-full" style="margin-top:8px" onclick="adminSetUserGroup(${userId}, null)">✕ Remove from group</button>` : ''}`;
-    modal.querySelector('.modal-footer').innerHTML = `<button class="btn btn-outline btn-full" onclick="document.getElementById('admin-group-modal')?.remove()">Cancel</button>`;
-  }).catch(e => {
-    modal.querySelector('.modal-body').innerHTML = `<div class="alert alert-error">${esc(e.message)}</div>`;
-  });
-}
-
-async function adminSetUserGroup(userId, groupId) {
-  try {
-    await api('PATCH', `/api/admin/users/${userId}/group`, { groupId: groupId ?? null });
-    document.getElementById('admin-group-modal')?.remove();
-    showAlert('User group updated.', 'success', 'admin-alerts');
-    renderAdmin();
   } catch(e) { showAlert(e.message, 'error', 'admin-alerts'); }
 }
 

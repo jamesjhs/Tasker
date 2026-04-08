@@ -19,8 +19,8 @@ router.get('/stats', (_req: Request, res: Response) => {
   const userCount = (db.prepare('SELECT COUNT(*) as c FROM users WHERE is_admin=0 AND is_approved=1 AND pending_activation=0').get() as any).c;
   const pendingCount = (db.prepare('SELECT COUNT(*) as c FROM users WHERE is_admin=0 AND is_approved=0').get() as any).c;
   const awaitingActivationCount = (db.prepare('SELECT COUNT(*) as c FROM users WHERE is_admin=0 AND is_approved=1 AND pending_activation=1').get() as any).c;
-  const eventCount = (db.prepare('SELECT COUNT(*) as c FROM events').get() as any).c;
-  res.json({ userCount, pendingCount, awaitingActivationCount, eventCount });
+  const taskCount = (db.prepare('SELECT COUNT(*) as c FROM tasks WHERE status=\'completed\'').get() as any).c;
+  res.json({ userCount, pendingCount, awaitingActivationCount, taskCount });
 });
 
 router.get('/settings', (_req: Request, res: Response) => {
@@ -43,10 +43,9 @@ router.post('/settings', validateCsrf, (req: Request, res: Response) => {
 
 router.get('/users', (_req: Request, res: Response) => {
   const users = getDb().prepare(
-    `SELECT u.id, u.username, u.must_change_password, u.is_locked, u.created_at,
-            ug.id as user_group_id, ug.name as user_group_name
-     FROM users u LEFT JOIN user_groups ug ON ug.id = u.user_group_id
-     WHERE u.is_admin=0 AND u.is_approved=1 AND u.pending_activation=0 ORDER BY u.username`
+    `SELECT id, username, must_change_password, is_locked, created_at
+     FROM users
+     WHERE is_admin=0 AND is_approved=1 AND pending_activation=0 ORDER BY username`
   ).all();
   res.json({ users });
 });
@@ -119,21 +118,6 @@ router.post('/users/:id/activate', validateCsrf, (req: Request, res: Response) =
   if (!user) { res.status(404).json({ error: 'User awaiting activation not found.' }); return; }
   getDb().prepare('UPDATE users SET pending_activation=0 WHERE id=?').run(userId);
   logEvent('admin_user_activated');
-  res.json({ success: true });
-});
-
-router.patch('/users/:id/group', validateCsrf, (req: Request, res: Response) => {
-  const userId = Number(req.params['id']);
-  const { groupId } = req.body as { groupId: number | null };
-  const db = getDb();
-  const user = db.prepare('SELECT id FROM users WHERE id=? AND is_admin=0').get(userId);
-  if (!user) { res.status(404).json({ error: 'User not found.' }); return; }
-  if (groupId !== null && groupId !== undefined) {
-    const group = db.prepare('SELECT id FROM user_groups WHERE id=?').get(groupId);
-    if (!group) { res.status(400).json({ error: 'User group not found.' }); return; }
-  }
-  db.prepare('UPDATE users SET user_group_id=? WHERE id=?').run(groupId ?? null, userId);
-  logEvent('admin_user_group_changed');
   res.json({ success: true });
 });
 

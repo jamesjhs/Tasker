@@ -23,8 +23,8 @@ router.get('/registration-config', (_req: Request, res: Response) => {
 router.get('/stats', (_req: Request, res: Response) => {
   const db = getDb();
   const userCount = (db.prepare('SELECT COUNT(*) as c FROM users WHERE is_admin=0 AND is_approved=1 AND pending_activation=0').get() as any).c;
-  const eventCount = (db.prepare('SELECT COUNT(*) as c FROM events').get() as any).c;
-  res.json({ userCount, eventCount });
+  const taskCount = (db.prepare('SELECT COUNT(*) as c FROM tasks WHERE status=\'completed\'').get() as any).c;
+  res.json({ userCount, taskCount });
 });
 
 router.post('/register', validateCsrf, async (req: Request, res: Response) => {
