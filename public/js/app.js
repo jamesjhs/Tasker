@@ -70,6 +70,19 @@ const esc = str => str == null ? '' : String(str)
   .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
   .replace(/"/g,'&quot;').replace(/'/g,'&#039;');
 
+function isMobileDevice() {
+  return /Mobile|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+}
+
+function getAppVersion() {
+  return localStorage.getItem('tasker_app_version') || '…';
+}
+
+function renderFooter() {
+  const v = getAppVersion();
+  return `<p style="text-align:center;font-size:.75rem;color:#9ca3af;padding:8px 0 16px">v${v} &nbsp;·&nbsp; <a href="/policy" target="_blank" style="color:#9ca3af">Privacy Policy</a> &nbsp;·&nbsp; <a href="/help" target="_blank" style="color:#9ca3af">Help</a><br>© J Rowson ${new Date().getFullYear()} | <a href="https://jahosi.co.uk" target="_blank" style="color:#9ca3af">jahosi.co.uk</a></p>`;
+}
+
 function showAlert(msg, type = 'error', parentId = null) {
   const el = document.createElement('div');
   el.className = `alert alert-${type}`;
@@ -309,7 +322,7 @@ function renderBottomNav(active) {
       <span class="nav-icon">⚙️</span><span>Settings</span>
     </button>
   </nav>
-  <p style="text-align:center;font-size:.75rem;color:#9ca3af;padding:8px 0 16px">v1.4.0 &nbsp;·&nbsp; <a href="/policy" target="_blank" style="color:#9ca3af">Privacy Policy</a> &nbsp;·&nbsp; <a href="/help" target="_blank" style="color:#9ca3af">Help</a><br>© J Rowson ${new Date().getFullYear()} | <a href="https://jahosi.co.uk" target="_blank" style="color:#9ca3af">jahosi.co.uk</a></p>`;
+  ${renderFooter()}`;
 }
 
 // ── STATS CARDS ──────────────────────────────────────────────────────────────
@@ -368,7 +381,7 @@ async function renderLogin() {
       <a href="/policy" target="_blank" style="font-size:.85rem;color:#6b7280">Data &amp; Use Policy</a>
     </div>
     ${statsHTML}
-    <p style="text-align:center;font-size:.75rem;color:#9ca3af;margin-top:24px">v1.4.0<br>© J Rowson ${new Date().getFullYear()} | <a href="https://jahosi.co.uk" target="_blank" style="color:#9ca3af">jahosi.co.uk</a></p>
+    ${renderFooter()}
   </div>`;
   document.getElementById('l-user').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
   document.getElementById('l-pass').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
@@ -1395,9 +1408,13 @@ async function renderAnalyticsSession() {
   pushHistory('analytics-session');
   app().innerHTML = `<div class="view"><p class="loading">Loading analytics…</p></div>`;
   try {
-    const d = await api('GET', '/api/analytics/session');
+    const [d, pendingRes] = await Promise.all([
+      api('GET', '/api/analytics/session'),
+      fetch('/api/tasks/pending-count', { credentials: 'same-origin' }).catch(() => null),
+    ]);
     if (!d) return;
-    renderAnalyticsContent(d, 'session');
+    const pendingLog = pendingRes?.ok ? await pendingRes.json() : null;
+    renderAnalyticsContent(d, 'session', pendingLog);
   } catch(e) { showAlert(e.message); }
 }
 
@@ -1407,9 +1424,13 @@ async function renderAnalyticsHistory() {
   app().innerHTML = `<div class="view"><p class="loading">Loading history…</p></div>`;
   const params = buildHistoryParams();
   try {
-    const d = await api('GET', '/api/analytics/history' + params);
+    const [d, pendingRes] = await Promise.all([
+      api('GET', '/api/analytics/history' + params),
+      fetch('/api/tasks/pending-count', { credentials: 'same-origin' }).catch(() => null),
+    ]);
     if (!d) return;
-    renderAnalyticsContent(d, 'history');
+    const pendingLog = pendingRes?.ok ? await pendingRes.json() : null;
+    renderAnalyticsContent(d, 'history', pendingLog);
   } catch(e) { showAlert(e.message); }
 }
 
@@ -1428,9 +1449,13 @@ function buildHistoryParams() {
   return parts.length ? '?' + parts.join('&') : '';
 }
 
-function renderAnalyticsContent(data, mode) {
+function renderAnalyticsContent(data, mode, pendingLog) {
   const { tasks, summary: s } = data;
   const isHistory = mode === 'history';
+  const pendingCount = pendingLog?.count ?? null;
+  const pendingLabel = pendingLog
+    ? `${pendingLog.count} <span style="font-size:.65rem;display:block;color:#6b7280;margin-top:2px">(${formatDateShort(pendingLog.logged_at)})</span>`
+    : '—';
 
   const filterBar = isHistory ? `
   <div class="filter-bar" style="margin-bottom:16px">
@@ -1503,6 +1528,7 @@ function renderAnalyticsContent(data, mode) {
       <div class="stat-card"><div class="stat-number">${s.dutyCount}</div><div class="stat-label">My Group tasks</div></div>
       <div class="stat-card"><div class="stat-number">${s.personalCount}</div><div class="stat-label">Personal</div></div>
       <div class="stat-card"><div class="stat-number">${s.totalInterruptions || 0}</div><div class="stat-label">Interruptions</div></div>
+      <div class="stat-card"><div class="stat-number" style="font-size:${pendingCount !== null ? '2rem' : '1.5rem'}">${pendingLabel}</div><div class="stat-label">Pending tasks</div></div>
     </div>
     ${regressionNote}
     ${s.total > 0 ? `
@@ -1522,7 +1548,7 @@ function renderAnalyticsContent(data, mode) {
     ` : '<div class="card"><p style="color:#6b7280;text-align:center;padding:20px">No completed tasks yet.</p></div>'}
     <div style="display:flex;gap:10px;margin-bottom:12px;flex-wrap:wrap">
       ${!isHistory ? '<button class="btn btn-outline" style="flex:1" onclick="renderAnalyticsHistory()">📅 Long-term History</button>' : ''}
-      <button class="btn btn-secondary" style="flex:1" onclick="downloadExport()">⬇️ Download Excel</button>
+      ${isMobileDevice() ? '<button class="btn btn-secondary" style="flex:1" onclick="downloadExport()">⬇️ Download Excel</button>' : ''}
     </div>
     <div class="section-heading">Tasks</div>
     ${tasks.length > 0 ? `<div style="display:flex;justify-content:flex-end;margin-bottom:8px"><button class="btn btn-danger btn-sm" onclick="clearAllTasks()">🗑️ Clear All</button></div>` : ''}
@@ -1591,6 +1617,10 @@ async function loadAndEditTask(taskId) {
 }
 
 async function downloadExport() {
+  if (!isMobileDevice()) {
+    showAlert('Excel export is only available on mobile devices.', 'error');
+    return;
+  }
   window.location.href = '/api/analytics/export';
 }
 
@@ -1772,7 +1802,7 @@ function renderAdminContent(stats, users, dropOpts, settings, pendingUsers, awai
 
     <div class="divider"></div>
     <button class="btn btn-secondary btn-full" style="margin-bottom:16px" onclick="doLogout()">🚪 Log Out</button>
-    <p style="text-align:center;font-size:.75rem;color:#9ca3af;padding-bottom:80px">v1.4.0 &nbsp;·&nbsp; <a href="/policy" target="_blank" style="color:#9ca3af">Privacy Policy</a> &nbsp;·&nbsp; <a href="/help" target="_blank" style="color:#9ca3af">Help</a><br>© J Rowson ${new Date().getFullYear()} | <a href="https://jahosi.co.uk" target="_blank" style="color:#9ca3af">jahosi.co.uk</a></p>
+    ${renderFooter()}
   </div>`;
 }
 
