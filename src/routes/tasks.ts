@@ -76,7 +76,7 @@ router.patch('/:id', validateCsrf, (req: Request, res: Response) => {
   const taskId = Number(req.params['id']);
   const task = db.prepare('SELECT * FROM tasks WHERE id=? AND user_id=?').get(taskId, s.userId) as any;
   if (!task) { res.status(404).json({ error: 'Task not found.' }); return; }
-  const { status, end_time, start_time, category, subcategory, outcome, notes, interruptions, is_duty } = req.body as any;
+  const { status, end_time, start_time, category, subcategory, outcome, notes, interruptions, is_duty, assigned_date } = req.body as any;
   // Only enforce today's date for end_time when the task is still in-progress (i.e. being completed now)
   if (end_time && task.status === 'in_progress' && new Date(end_time).toDateString() !== new Date().toDateString()) {
     res.status(400).json({ error: 'Task end time must be today.' }); return;
@@ -106,6 +106,7 @@ router.patch('/:id', validateCsrf, (req: Request, res: Response) => {
   if (outcome !== undefined)      { cols.push('outcome=?');       vals.push(outcome); }
   if (notes !== undefined)        { cols.push('notes=?');         vals.push(encryptField(notes)); }
   if (is_duty !== undefined)      { cols.push('is_duty=?');       vals.push(is_duty ? 1 : 0); }
+  if (assigned_date !== undefined){ cols.push('assigned_date=?'); vals.push(assigned_date || null); }
   if (interruptions !== undefined){ cols.push('interruptions=?'); vals.push(JSON.stringify(interruptions)); }
   cols.push(`updated_at=datetime('now')`);
   vals.push(taskId, s.userId);

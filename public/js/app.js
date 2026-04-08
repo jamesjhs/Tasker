@@ -1208,6 +1208,10 @@ function renderTaskReview(t, isEdit) {
         <label for="te-end">End time</label>
         <input id="te-end" class="input" type="datetime-local" value="${formatDatetimeLocal(t.end_time)}">
       </div>
+      <div class="form-group">
+        <label for="te-assigned">Date assigned</label>
+        <input id="te-assigned" class="input" type="date" value="${t.assigned_date || new Date().toISOString().split('T')[0]}">
+      </div>
       ${notesHtml}
     </div>
     <div class="card">
@@ -1319,6 +1323,7 @@ async function submitTaskReview(taskId, isEdit, dest) {
     start_time: start ? new Date(start).toISOString() : t.start_time,
     end_time: new Date(end).toISOString(),
     interruptions: t.interruptions || [],
+    assigned_date: document.getElementById('te-assigned')?.value || t.assigned_date || null,
   };
   try {
     await api('PATCH', `/api/tasks/${taskId}`, body);
