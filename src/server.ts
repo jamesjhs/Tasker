@@ -10,7 +10,6 @@ import https from 'https';
 import http from 'http';
 import Database from 'better-sqlite3';
 import { getDb } from './db';
-import { nhsNetworkBlock, mobileOnly } from './middleware/index';
 import authRouter from './routes/auth';
 import tasksRouter from './routes/tasks';
 import analyticsRouter from './routes/analytics';
@@ -72,16 +71,10 @@ app.use(session({
 const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 20, skipSuccessfulRequests: true, standardHeaders: true, legacyHeaders: false });
 const apiLimiter = rateLimit({ windowMs: 60 * 1000, max: 200, standardHeaders: true, legacyHeaders: false });
 
-// ─── NHS block on auth ────────────────────────────────────────────────────────
-app.use('/api/auth', nhsNetworkBlock);
-
-// ─── Health-check endpoint (exempt from mobile-only and auth) ─────────────────
+// ─── Health-check endpoint (exempt from auth) ─────────────────────────────────
 app.get('/readyz', (_req, res) => {
   res.json({ ok: true, service: 'Tasker', version: APP_VERSION, timestamp: new Date().toISOString() });
 });
-
-// ─── Mobile-only BEFORE static files ─────────────────────────────────────────
-app.use(mobileOnly);
 
 // ─── Static files ─────────────────────────────────────────────────────────────
 app.use(express.static(path.join(__dirname, '..', 'public'), {

@@ -98,6 +98,13 @@ function initSchema(db: Database.Database): void {
       event_type TEXT NOT NULL,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
+
+    CREATE TABLE IF NOT EXISTS pending_task_logs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      count INTEGER NOT NULL,
+      logged_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
   `);
 
   // Migrate existing databases: add lockout columns if missing

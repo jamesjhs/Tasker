@@ -8,6 +8,28 @@ router.use(requireAuth);
 router.use(requirePasswordChange);
 router.use(requireActivation);
 
+router.get('/pending-count', (req: Request, res: Response) => {
+  const s = req.session as any;
+  const log = getDb().prepare(
+    `SELECT count, logged_at FROM pending_task_logs WHERE user_id=? ORDER BY logged_at DESC LIMIT 1`
+  ).get(s.userId) as any;
+  res.json(log || null);
+});
+
+router.post('/pending-count', validateCsrf, (req: Request, res: Response) => {
+  const s = req.session as any;
+  const count = Number(req.body?.count);
+  if (!Number.isInteger(count) || count < 0 || count > 9999) {
+    res.status(400).json({ error: 'Count must be an integer between 0 and 9999.' }); return;
+  }
+  const now = new Date().toISOString();
+  getDb().prepare(
+    `INSERT INTO pending_task_logs (user_id, count, logged_at) VALUES (?,?,?)`
+  ).run(s.userId, count, now);
+  logEvent('pending_count_logged');
+  res.json({ count, logged_at: now });
+});
+
 router.get('/active', (req: Request, res: Response) => {
   const s = req.session as any;
   const task = getDb().prepare(
