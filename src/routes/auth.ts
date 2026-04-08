@@ -119,7 +119,17 @@ router.post('/login', validateCsrf, async (req: Request, res: Response) => {
   s.csrfToken = crypto.randomBytes(32).toString('hex');
   db.prepare('UPDATE users SET failed_login_attempts=0, is_locked=0 WHERE id=?').run(user.id);
   logEvent('user_login');
-  res.json({ success: true, isAdmin: user.is_admin === 1, mustChangePassword: user.must_change_password === 1, pendingActivation: user.must_change_password === 0 && user.pending_activation === 1 });
+  const groupInfo = db.prepare(
+    'SELECT u.user_group_id, ug.name as user_group_name FROM users u LEFT JOIN user_groups ug ON ug.id=u.user_group_id WHERE u.id=?'
+  ).get(user.id) as { user_group_id: number | null; user_group_name: string | null } | undefined;
+  res.json({
+    success: true,
+    isAdmin: user.is_admin === 1,
+    mustChangePassword: user.must_change_password === 1,
+    pendingActivation: user.must_change_password === 0 && user.pending_activation === 1,
+    userGroupId: groupInfo?.user_group_id ?? null,
+    userGroupName: groupInfo?.user_group_name ?? null,
+  });
 });
 
 router.post('/logout', (req: Request, res: Response) => {
@@ -152,10 +162,40 @@ router.post('/change-password', requireAuth, validateCsrf, async (req: Request, 
 
 router.get('/me', requireAuth, (req: Request, res: Response) => {
   const s = req.session as any;
-  const user = getDb().prepare('SELECT username,is_admin,must_change_password,pending_activation FROM users WHERE id=?').get(s.userId) as any;
+  const user = getDb().prepare(
+    `SELECT u.username, u.is_admin, u.must_change_password, u.pending_activation,
+            u.user_group_id, ug.name as user_group_name
+     FROM users u LEFT JOIN user_groups ug ON ug.id=u.user_group_id
+     WHERE u.id=?`
+  ).get(s.userId) as any;
   const pendingActivation = user.must_change_password === 0 && user.pending_activation === 1;
   s.pendingActivation = pendingActivation;
-  res.json({ username: user.username, isAdmin: user.is_admin === 1, mustChangePassword: user.must_change_password === 1, pendingActivation });
+  res.json({
+    username: user.username,
+    isAdmin: user.is_admin === 1,
+    mustChangePassword: user.must_change_password === 1,
+    pendingActivation,
+    userGroupId: user.user_group_id ?? null,
+    userGroupName: user.user_group_name ?? null,
+  });
+});
+
+router.get('/user-groups', requireAuth, (_req: Request, res: Response) => {
+  const groups = getDb().prepare('SELECT id, name FROM user_groups ORDER BY name').all();
+  res.json({ groups });
+});
+
+router.post('/set-group', requireAuth, validateCsrf, (req: Request, res: Response) => {
+  const s = req.session as any;
+  const { groupId } = req.body as { groupId: number | null };
+  const db = getDb();
+  if (groupId !== null && groupId !== undefined) {
+    const group = db.prepare('SELECT id FROM user_groups WHERE id=?').get(groupId);
+    if (!group) { res.status(400).json({ error: 'User group not found.' }); return; }
+  }
+  db.prepare('UPDATE users SET user_group_id=? WHERE id=?').run(groupId ?? null, s.userId);
+  logEvent('user_group_set');
+  res.json({ success: true });
 });
 
 router.delete('/account', requireAuth, validateCsrf, async (req: Request, res: Response) => {

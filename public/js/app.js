@@ -8,7 +8,7 @@ const INACTIVITY_MS = 30 * 60 * 1000; // 30 minutes
 
 const state = {
   csrfToken: null,
-  user: null,           // { username, isAdmin, mustChangePassword }
+  user: null,           // { username, isAdmin, mustChangePassword, userGroupId, userGroupName }
   registrationConfig: null, // { selfRegistration, userInvite }
   appStats: null,       // { userCount, eventCount }
   activeTask: null,     // current in_progress task
@@ -27,6 +27,7 @@ const state = {
 
 // ── History management ────────────────────────────────────────────────────────
 let _popstateActive = false;
+let _groupSelectionCb = null; // callback after group selection completes
 
 function pushHistory(view) {
   if (_popstateActive || window.history.state?.view === view) return;
@@ -402,14 +403,18 @@ async function doLogin() {
   try {
     const d = await api('POST', '/api/auth/login', { username, password });
     if (!d) return;
-    state.user = { username, isAdmin: d.isAdmin, mustChangePassword: d.mustChangePassword, pendingActivation: d.pendingActivation };
+    state.user = { username, isAdmin: d.isAdmin, mustChangePassword: d.mustChangePassword, pendingActivation: d.pendingActivation, userGroupId: d.userGroupId ?? null, userGroupName: d.userGroupName ?? null };
     await refreshCsrf();
     if (d.mustChangePassword) { renderChangePassword(); return; }
     if (d.pendingActivation) { renderAwaitActivation(); return; }
     await loadDropdowns();
     await checkActiveTask();
     startActivityTracking();
-    renderPrivacySplash(() => { d.isAdmin ? renderAdmin() : renderHome(); });
+    renderPrivacySplash(async () => {
+      if (d.isAdmin) { renderAdmin(); return; }
+      if (!state.user.userGroupId) { await renderGroupSelection(() => renderHome()); return; }
+      renderHome();
+    });
   } catch(e) {
     btn.disabled = false; btn.textContent = 'Log in';
     showAlert(e.message, 'error', 'login-alerts');
@@ -460,6 +465,78 @@ function renderPrivacySplash(onContinue) {
   document.getElementById('splash-continue-btn').addEventListener('click', () => {
     overlay.remove();
     onContinue();
+  });
+}
+
+// ── GROUP SELECTION ───────────────────────────────────────────────────────────
+async function renderGroupSelection(onContinue) {
+  _groupSelectionCb = onContinue;
+  stopTimer(); clearCharts(); state.currentView = 'group-selection';
+  replaceHistory('group-selection');
+  app().innerHTML = `<div class="view"><p class="loading">Loading groups…</p></div>`;
+  let groups = [];
+  try {
+    const d = await api('GET', '/api/auth/user-groups');
+    groups = d?.groups || [];
+  } catch(e) {}
+  const groupOpts = groups.map(g => `
+    <div class="card" id="gsel-${g.id}" onclick="selectGroupOption(${g.id})" style="padding:14px;cursor:pointer;border:2px solid #e5e7eb;margin-bottom:8px">
+      <span style="font-weight:600;font-size:1rem">${esc(g.name)}</span>
+    </div>`).join('');
+  app().innerHTML = `
+  <div class="view">
+    <h1 style="margin-bottom:8px;color:#1a56db">👥 Choose Your Group</h1>
+    <p style="font-size:.9rem;color:#6b7280;margin-bottom:16px">
+      Your group determines which task origin, type and outcome options appear in your dropdown lists.
+      You can change this later in Settings.
+    </p>
+    <div id="group-alerts"></div>
+    ${groupOpts || '<div class="alert alert-info">No user groups have been set up yet. Ask your administrator.</div>'}
+    <div style="display:flex;gap:10px;margin-top:8px">
+      <button class="btn btn-primary btn-full" id="gsel-btn" onclick="doSetGroup()" ${groups.length ? '' : 'disabled'}>✓ Continue with selected group</button>
+    </div>
+    <button class="btn btn-secondary btn-full" style="margin-top:8px" onclick="skipGroupSelection()">Skip for now</button>
+  </div>`;
+}
+
+function selectGroupOption(id) {
+  document.querySelectorAll('[id^="gsel-"]').forEach(el => {
+    el.style.borderColor = el.id === `gsel-${id}` ? '#1a56db' : '#e5e7eb';
+    el.style.background = el.id === `gsel-${id}` ? '#eff6ff' : '';
+  });
+  state._pendingGroupId = id;
+}
+
+async function doSetGroup() {
+  const groupId = state._pendingGroupId ?? null;
+  if (!groupId) { showAlert('Please select a group.', 'error', 'group-alerts'); return; }
+  const btn = document.getElementById('gsel-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+  try {
+    await api('POST', '/api/auth/set-group', { groupId });
+    if (state.user) {
+      const groupEl = document.getElementById(`gsel-${groupId}`);
+      state.user.userGroupId = groupId;
+      state.user.userGroupName = groupEl?.querySelector('span')?.textContent || null;
+    }
+    state._pendingGroupId = null;
+    await loadDropdowns();
+    if (_groupSelectionCb) { const cb = _groupSelectionCb; _groupSelectionCb = null; cb(); }
+  } catch(e) {
+    if (btn) { btn.disabled = false; btn.textContent = '✓ Continue with selected group'; }
+    showAlert(e.message, 'error', 'group-alerts');
+  }
+}
+
+function skipGroupSelection() {
+  state._pendingGroupId = null;
+  if (_groupSelectionCb) { const cb = _groupSelectionCb; _groupSelectionCb = null; cb(); }
+}
+
+function setGroupFromSettings() {
+  renderGroupSelection(async () => {
+    await loadDropdowns();
+    renderSettings();
   });
 }
 
@@ -766,6 +843,7 @@ function renderSettings() {
   stopTimer(); clearCharts(); state.currentView = 'settings';
   pushHistory('settings');
   const showInvite = state.registrationConfig?.userInvite !== 'disabled';
+  const groupName = state.user?.userGroupName;
   app().innerHTML = `
   <div class="view">
     <div class="view-header">
@@ -774,6 +852,11 @@ function renderSettings() {
     <div id="settings-alerts"></div>
     <div class="card">
       <p style="font-size:.9rem;color:#555;margin-bottom:14px">Logged in as: <strong>${esc(state.user?.username)}</strong></p>
+      <div class="divider"></div>
+      <div style="margin-bottom:14px">
+        <p style="font-size:.85rem;color:#374151;margin-bottom:6px">👥 My User Group: <strong>${groupName ? esc(groupName) : 'Not set'}</strong></p>
+        <button class="btn btn-outline btn-full" onclick="setGroupFromSettings()">${groupName ? '🔄 Change Group' : '👥 Select Group'}</button>
+      </div>
       <div class="divider"></div>
       <button class="btn btn-outline btn-full" style="margin-bottom:10px" onclick="renderChangePassword()">🔑 Change Password</button>
       ${showInvite ? `<button class="btn btn-outline btn-full" style="margin-bottom:10px" id="invite-btn" onclick="doInviteUser()">👤 Invite a User</button>` : ''}
@@ -1629,23 +1712,24 @@ async function renderAdmin() {
   pushHistory('admin');
   app().innerHTML = `<div class="view"><p class="loading">Loading admin panel…</p></div>`;
   try {
-    const [stats, users, dropOpts, settings, pendingUsers, awaitingUsers] = await Promise.all([
+    const [stats, users, dropOpts, settings, pendingUsers, awaitingUsers, userGroups] = await Promise.all([
       api('GET', '/api/admin/stats'),
       api('GET', '/api/admin/users'),
       api('GET', '/api/dropdowns/admin/all'),
       api('GET', '/api/admin/settings'),
       api('GET', '/api/admin/pending-users'),
       api('GET', '/api/admin/awaiting-activation'),
+      api('GET', '/api/admin/user-groups'),
     ]);
-    if (!stats || !users || !dropOpts || !settings || !pendingUsers || !awaitingUsers) return;
-    renderAdminContent(stats, users?.users || [], dropOpts?.options || [], settings, pendingUsers?.users || [], awaitingUsers?.users || []);
+    if (!stats || !users || !dropOpts || !settings || !pendingUsers || !awaitingUsers || !userGroups) return;
+    renderAdminContent(stats, users?.users || [], dropOpts?.options || [], settings, pendingUsers?.users || [], awaitingUsers?.users || [], userGroups?.groups || []);
   } catch(e) {
     app().innerHTML = `<div class="view"><div id="admin-alerts"></div></div>`;
     showAlert(e.message, 'error', 'admin-alerts');
   }
 }
 
-function renderAdminContent(stats, users, dropOpts, settings, pendingUsers, awaitingUsers) {
+function renderAdminContent(stats, users, dropOpts, settings, pendingUsers, awaitingUsers, userGroups) {
   const pending = dropOpts.filter(o => !o.approved);
   const approved = dropOpts.filter(o => o.approved);
   const userCards = users.map(u => `
@@ -1655,10 +1739,12 @@ function renderAdminContent(stats, users, dropOpts, settings, pendingUsers, awai
         <span style="font-weight:700">${esc(u.username)}</span>
         ${u.must_change_password ? '<span class="badge badge-warn" style="margin-left:6px">Temp pw</span>' : ''}
         ${u.is_locked ? '<span class="badge badge-danger" style="margin-left:6px">🔒 Locked</span>' : ''}
+        <span style="font-size:.75rem;color:${u.user_group_name ? '#1a56db' : '#9ca3af'};margin-left:6px">${u.user_group_name ? '👥 ' + esc(u.user_group_name) : 'No group'}</span>
       </div>
       <div style="display:flex;gap:6px;flex-wrap:wrap">
         ${u.is_locked ? `<button class="btn btn-outline btn-sm" onclick="unlockUser(${u.id}, '${esc(u.username)}')">🔓 Unlock</button>` : ''}
         <button class="btn btn-outline btn-sm" onclick="resetUserPw(${u.id}, '${esc(u.username)}')">🔑 Reset</button>
+        <button class="btn btn-outline btn-sm" onclick="showAdminSetUserGroup(${u.id}, '${esc(u.username)}', ${u.user_group_id ?? 'null'})">👥 Group</button>
         <button class="btn btn-danger btn-sm" onclick="deleteUser(${u.id}, '${esc(u.username)}')">🗑</button>
       </div>
     </div>
@@ -1674,7 +1760,10 @@ function renderAdminContent(stats, users, dropOpts, settings, pendingUsers, awai
     const items = (dropByField[field] || []).map(o => `
     <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid #f3f4f6">
       <span style="font-size:.9rem">${esc(o.value)}</span>
-      <button class="btn btn-danger btn-sm" onclick="deleteDropdown(${o.id})">✕</button>
+      <div style="display:flex;gap:4px">
+        <button class="btn btn-outline btn-sm" onclick="renameDropdown(${o.id}, '${esc(o.value)}')">✏️</button>
+        <button class="btn btn-danger btn-sm" onclick="deleteDropdown(${o.id})">✕</button>
+      </div>
     </div>`).join('');
     return `
     <div class="card">
@@ -1736,6 +1825,21 @@ function renderAdminContent(stats, users, dropOpts, settings, pendingUsers, awai
     </div>
   </div>`).join('') : '<p style="font-size:.85rem;color:#6b7280">No users awaiting activation.</p>';
 
+  const groupCards = userGroups.map(g => `
+  <div class="card" style="padding:12px">
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+      <div>
+        <span style="font-weight:700">${esc(g.name)}</span>
+        <span style="font-size:.75rem;color:#6b7280;margin-left:6px">${g.user_count} user${g.user_count !== 1 ? 's' : ''}</span>
+      </div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        <button class="btn btn-outline btn-sm" onclick="showGroupDropdownModal(${g.id}, '${esc(g.name)}')">⚙️ Options</button>
+        <button class="btn btn-outline btn-sm" onclick="renameUserGroup(${g.id}, '${esc(g.name)}')">✏️ Rename</button>
+        <button class="btn btn-danger btn-sm" onclick="deleteUserGroup(${g.id}, '${esc(g.name)}')">🗑</button>
+      </div>
+    </div>
+  </div>`).join('');
+
   app().innerHTML = `
   <div class="view">
     <div class="view-header">
@@ -1773,6 +1877,11 @@ function renderAdminContent(stats, users, dropOpts, settings, pendingUsers, awai
     <div class="section-heading">Users</div>
     <button class="btn btn-primary btn-full" style="margin-bottom:14px" onclick="addUser()">➕ Add User</button>
     ${userCards || '<p style="font-size:.85rem;color:#6b7280;margin-bottom:14px">No users yet.</p>'}
+
+    <div class="section-heading">User Groups</div>
+    <p style="font-size:.85rem;color:#6b7280;margin-bottom:10px">Groups control which dropdown options users see. Assign users to groups using the 👥 button above.</p>
+    <button class="btn btn-primary btn-full" style="margin-bottom:14px" onclick="addUserGroup()">➕ Add User Group</button>
+    ${groupCards || '<p style="font-size:.85rem;color:#6b7280;margin-bottom:14px">No user groups yet.</p>'}
 
     <div class="section-heading">Database</div>
     <div class="card">
@@ -1969,6 +2078,128 @@ async function deleteDropdown(id) {
   } catch(e) { showAlert(e.message, 'error', 'admin-alerts'); }
 }
 
+async function renameDropdown(id, currentValue) {
+  const newValue = prompt(`Rename "${currentValue}" to:`, currentValue);
+  if (!newValue || newValue.trim() === currentValue) return;
+  try {
+    await api('PUT', `/api/dropdowns/admin/${id}`, { value: newValue.trim() });
+    showAlert(`Renamed to: ${newValue.trim()}`, 'success', 'admin-alerts');
+    renderAdmin();
+  } catch(e) { showAlert(e.message, 'error', 'admin-alerts'); }
+}
+
+// ── Admin User Group management ───────────────────────────────────────────────
+
+async function addUserGroup() {
+  const name = prompt('Enter a name for the new user group:');
+  if (!name || !name.trim()) return;
+  try {
+    await api('POST', '/api/admin/user-groups', { name: name.trim() });
+    showAlert(`User group "${name.trim()}" created.`, 'success', 'admin-alerts');
+    renderAdmin();
+  } catch(e) { showAlert(e.message, 'error', 'admin-alerts'); }
+}
+
+async function renameUserGroup(id, currentName) {
+  const newName = prompt(`Rename group "${currentName}" to:`, currentName);
+  if (!newName || newName.trim() === currentName) return;
+  try {
+    await api('PUT', `/api/admin/user-groups/${id}`, { name: newName.trim() });
+    showAlert(`Group renamed to: ${newName.trim()}`, 'success', 'admin-alerts');
+    renderAdmin();
+  } catch(e) { showAlert(e.message, 'error', 'admin-alerts'); }
+}
+
+async function deleteUserGroup(id, name) {
+  if (!confirm(`Delete user group "${name}"? Users assigned to this group will have their group removed.`)) return;
+  try {
+    await api('DELETE', `/api/admin/user-groups/${id}`, {});
+    showAlert(`Group "${name}" deleted.`, 'success', 'admin-alerts');
+    renderAdmin();
+  } catch(e) { showAlert(e.message, 'error', 'admin-alerts'); }
+}
+
+async function showGroupDropdownModal(groupId, groupName) {
+  const modal = document.createElement('div');
+  modal.className = 'modal-overlay';
+  modal.id = 'group-dd-modal';
+  modal.innerHTML = `<div class="modal-sheet" style="max-height:80vh;overflow-y:auto"><div class="modal-title">⚙️ Options for ${esc(groupName)}</div><p class="loading">Loading…</p></div>`;
+  document.body.appendChild(modal);
+  try {
+    const d = await api('GET', `/api/admin/user-groups/${groupId}/dropdowns`);
+    const byField = {};
+    for (const o of (d?.options || [])) {
+      if (!byField[o.field_name]) byField[o.field_name] = [];
+      byField[o.field_name].push(o);
+    }
+    const fieldLabels = { category: 'Task from', subcategory: 'Task type', outcome: 'Outcome' };
+    const sections = ['category', 'subcategory', 'outcome'].map(field => {
+      const opts = (byField[field] || []).map(o => `
+        <label style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid #f3f4f6;cursor:pointer">
+          <input type="checkbox" name="group-opt-${groupId}" value="${o.id}" ${o.assigned ? 'checked' : ''} style="width:18px;height:18px;flex-shrink:0">
+          <span style="font-size:.9rem">${esc(o.value)}</span>
+        </label>`).join('');
+      return `<div style="margin-bottom:16px">
+        <div style="font-weight:700;color:#374151;margin-bottom:4px;font-size:.9rem">${fieldLabels[field]}</div>
+        ${opts || '<p style="font-size:.85rem;color:#6b7280">No options available</p>'}
+      </div>`;
+    }).join('');
+    modal.querySelector('.modal-sheet').innerHTML = `
+      <div class="modal-title">⚙️ Options for ${esc(groupName)}</div>
+      <p style="font-size:.85rem;color:#6b7280;margin-bottom:16px">Tick the options that should appear in dropdown lists for users in this group.</p>
+      ${sections || '<p style="color:#6b7280">No dropdown options exist yet.</p>'}
+      <div style="display:flex;gap:10px;margin-top:16px;position:sticky;bottom:0;background:#fff;padding-top:8px">
+        <button class="btn btn-primary" style="flex:1" onclick="saveGroupDropdowns(${groupId})">💾 Save</button>
+        <button class="btn btn-secondary" style="flex:1" onclick="document.getElementById('group-dd-modal')?.remove()">Cancel</button>
+      </div>`;
+  } catch(e) {
+    modal.querySelector('.modal-sheet').innerHTML = `<div class="alert alert-error">${esc(e.message)}</div><button class="btn btn-secondary btn-full" onclick="document.getElementById('group-dd-modal')?.remove()">Close</button>`;
+  }
+}
+
+async function saveGroupDropdowns(groupId) {
+  const checkboxes = document.querySelectorAll(`input[name="group-opt-${groupId}"]:checked`);
+  const option_ids = Array.from(checkboxes).map(cb => Number(cb.value));
+  try {
+    await api('PUT', `/api/admin/user-groups/${groupId}/dropdowns`, { option_ids });
+    showAlert('Group options saved.', 'success', 'admin-alerts');
+    document.getElementById('group-dd-modal')?.remove();
+  } catch(e) { showAlert(e.message, 'error', 'admin-alerts'); }
+}
+
+function showAdminSetUserGroup(userId, username, currentGroupId) {
+  // Re-use the admin panel's group list if available, else just show a simple modal
+  const modal = document.createElement('div');
+  modal.className = 'modal-overlay';
+  modal.id = 'admin-group-modal';
+  modal.innerHTML = `<div class="modal-sheet"><div class="modal-title">👥 Assign Group — ${esc(username)}</div><p class="loading">Loading…</p></div>`;
+  document.body.appendChild(modal);
+  api('GET', '/api/admin/user-groups').then(d => {
+    const groups = d?.groups || [];
+    const opts = groups.map(g => `
+      <div onclick="adminSetUserGroup(${userId}, ${g.id})" style="padding:12px;border:2px solid ${g.id === currentGroupId ? '#1a56db' : '#e5e7eb'};background:${g.id === currentGroupId ? '#eff6ff' : ''};border-radius:8px;margin-bottom:8px;cursor:pointer">
+        <span style="font-weight:600">${esc(g.name)}</span>
+        <span style="font-size:.75rem;color:#6b7280;margin-left:6px">${g.user_count} user${g.user_count !== 1 ? 's' : ''}</span>
+      </div>`).join('');
+    modal.querySelector('.modal-sheet').innerHTML = `
+      <div class="modal-title">👥 Assign Group — ${esc(username)}</div>
+      ${opts || '<p style="font-size:.85rem;color:#6b7280">No groups available. Create a group first.</p>'}
+      ${currentGroupId ? `<button class="btn btn-secondary btn-full" style="margin-top:8px" onclick="adminSetUserGroup(${userId}, null)">✕ Remove from group</button>` : ''}
+      <button class="btn btn-outline btn-full" style="margin-top:8px" onclick="document.getElementById('admin-group-modal')?.remove()">Cancel</button>`;
+  }).catch(e => {
+    modal.querySelector('.modal-sheet').innerHTML = `<div class="alert alert-error">${esc(e.message)}</div><button class="btn btn-secondary btn-full" onclick="document.getElementById('admin-group-modal')?.remove()">Close</button>`;
+  });
+}
+
+async function adminSetUserGroup(userId, groupId) {
+  try {
+    await api('PATCH', `/api/admin/users/${userId}/group`, { groupId: groupId ?? null });
+    document.getElementById('admin-group-modal')?.remove();
+    showAlert('User group updated.', 'success', 'admin-alerts');
+    renderAdmin();
+  } catch(e) { showAlert(e.message, 'error', 'admin-alerts'); }
+}
+
 // ── SPA back/forward navigation ───────────────────────────────────────────────
 const HISTORY_RENDER_MAP = {
   'home':               () => renderHome(),
@@ -1977,6 +2208,7 @@ const HISTORY_RENDER_MAP = {
   'settings':           () => renderSettings(),
   'change-password':    () => renderChangePassword(),
   'delete-account':     () => renderDeleteAccount(),
+  'group-selection':    () => renderGroupSelection(() => renderHome()),
   'task-start':         () => renderTaskStart(),
   'task-active':        () => { if (state.activeTask) renderTaskActive(); else renderHome(); },
   'task-end':           () => { if (state.activeTask) renderTaskEnd(); else renderHome(); },
@@ -1989,7 +2221,7 @@ const HISTORY_RENDER_MAP = {
 
 const AUTH_REQUIRED_VIEWS = new Set([
   'home', 'settings', 'change-password', 'delete-account',
-  'task-start', 'task-active', 'task-end', 'task-edit',
+  'group-selection', 'task-start', 'task-active', 'task-end', 'task-edit',
   'analytics-session', 'analytics-history', 'admin', 'await-activation',
 ]);
 

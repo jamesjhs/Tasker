@@ -43,7 +43,10 @@ router.post('/settings', validateCsrf, (req: Request, res: Response) => {
 
 router.get('/users', (_req: Request, res: Response) => {
   const users = getDb().prepare(
-    'SELECT id,username,must_change_password,is_locked,created_at FROM users WHERE is_admin=0 AND is_approved=1 AND pending_activation=0 ORDER BY username'
+    `SELECT u.id, u.username, u.must_change_password, u.is_locked, u.created_at,
+            ug.id as user_group_id, ug.name as user_group_name
+     FROM users u LEFT JOIN user_groups ug ON ug.id = u.user_group_id
+     WHERE u.is_admin=0 AND u.is_approved=1 AND u.pending_activation=0 ORDER BY u.username`
   ).all();
   res.json({ users });
 });
@@ -116,6 +119,119 @@ router.post('/users/:id/activate', validateCsrf, (req: Request, res: Response) =
   if (!user) { res.status(404).json({ error: 'User awaiting activation not found.' }); return; }
   getDb().prepare('UPDATE users SET pending_activation=0 WHERE id=?').run(userId);
   logEvent('admin_user_activated');
+  res.json({ success: true }); return;
+});
+
+router.patch('/users/:id/group', validateCsrf, (req: Request, res: Response) => {
+  const userId = Number(req.params['id']);
+  const { groupId } = req.body as { groupId: number | null };
+  const db = getDb();
+  const user = db.prepare('SELECT id FROM users WHERE id=? AND is_admin=0').get(userId);
+  if (!user) { res.status(404).json({ error: 'User not found.' }); return; }
+  if (groupId !== null && groupId !== undefined) {
+    const group = db.prepare('SELECT id FROM user_groups WHERE id=?').get(groupId);
+    if (!group) { res.status(400).json({ error: 'User group not found.' }); return; }
+  }
+  db.prepare('UPDATE users SET user_group_id=? WHERE id=?').run(groupId ?? null, userId);
+  logEvent('admin_user_group_changed');
+  res.json({ success: true });
+});
+
+// ── User Groups ───────────────────────────────────────────────────────────────
+
+router.get('/user-groups', (_req: Request, res: Response) => {
+  const db = getDb();
+  const groups = db.prepare(
+    `SELECT ug.id, ug.name, ug.created_at,
+            COUNT(DISTINCT u.id) as user_count
+     FROM user_groups ug
+     LEFT JOIN users u ON u.user_group_id = ug.id AND u.is_admin=0
+     GROUP BY ug.id ORDER BY ug.name`
+  ).all();
+  res.json({ groups });
+});
+
+router.post('/user-groups', validateCsrf, (req: Request, res: Response) => {
+  const { name } = req.body as { name: string };
+  const clean = (name || '').trim();
+  if (!clean || clean.length > 80) { res.status(400).json({ error: 'Invalid group name.' }); return; }
+  const db = getDb();
+  try {
+    const result = db.prepare('INSERT INTO user_groups (name) VALUES (?)').run(clean);
+    const newGroupId = result.lastInsertRowid as number;
+    // Seed new group with all currently approved dropdown options
+    db.prepare(
+      'INSERT OR IGNORE INTO group_dropdown_options (group_id, dropdown_option_id) SELECT ?,id FROM dropdown_options WHERE approved=1'
+    ).run(newGroupId);
+    logEvent('admin_user_group_created');
+    res.json({ success: true, id: newGroupId, name: clean });
+  } catch {
+    res.status(409).json({ error: 'A group with that name already exists.' });
+  }
+});
+
+router.put('/user-groups/:id', validateCsrf, (req: Request, res: Response) => {
+  const groupId = Number(req.params['id']);
+  const { name } = req.body as { name: string };
+  const clean = (name || '').trim();
+  if (!clean || clean.length > 80) { res.status(400).json({ error: 'Invalid group name.' }); return; }
+  const db = getDb();
+  const group = db.prepare('SELECT id FROM user_groups WHERE id=?').get(groupId);
+  if (!group) { res.status(404).json({ error: 'Group not found.' }); return; }
+  try {
+    db.prepare('UPDATE user_groups SET name=? WHERE id=?').run(clean, groupId);
+    logEvent('admin_user_group_renamed');
+    res.json({ success: true });
+  } catch {
+    res.status(409).json({ error: 'A group with that name already exists.' });
+  }
+});
+
+router.delete('/user-groups/:id', validateCsrf, (req: Request, res: Response) => {
+  const groupId = Number(req.params['id']);
+  const db = getDb();
+  const group = db.prepare('SELECT id FROM user_groups WHERE id=?').get(groupId);
+  if (!group) { res.status(404).json({ error: 'Group not found.' }); return; }
+  // Remove group reference from users (set to NULL) — CASCADE handles group_dropdown_options
+  db.prepare('UPDATE users SET user_group_id=NULL WHERE user_group_id=?').run(groupId);
+  db.prepare('DELETE FROM user_groups WHERE id=?').run(groupId);
+  logEvent('admin_user_group_deleted');
+  res.json({ success: true });
+});
+
+router.get('/user-groups/:id/dropdowns', (req: Request, res: Response) => {
+  const groupId = Number(req.params['id']);
+  const db = getDb();
+  const group = db.prepare('SELECT id,name FROM user_groups WHERE id=?').get(groupId) as any;
+  if (!group) { res.status(404).json({ error: 'Group not found.' }); return; }
+  // Return all approved options, flagging which ones are assigned to this group
+  const options = db.prepare(
+    `SELECT do.id, do.field_name, do.value,
+            CASE WHEN gdo.group_id IS NOT NULL THEN 1 ELSE 0 END as assigned
+     FROM dropdown_options do
+     LEFT JOIN group_dropdown_options gdo ON gdo.dropdown_option_id=do.id AND gdo.group_id=?
+     WHERE do.approved=1
+     ORDER BY do.field_name, do.value`
+  ).all(groupId);
+  res.json({ group, options });
+});
+
+router.put('/user-groups/:id/dropdowns', validateCsrf, (req: Request, res: Response) => {
+  const groupId = Number(req.params['id']);
+  const { option_ids } = req.body as { option_ids: number[] };
+  const db = getDb();
+  const group = db.prepare('SELECT id FROM user_groups WHERE id=?').get(groupId);
+  if (!group) { res.status(404).json({ error: 'Group not found.' }); return; }
+  if (!Array.isArray(option_ids)) { res.status(400).json({ error: 'option_ids must be an array.' }); return; }
+  const update = db.transaction(() => {
+    db.prepare('DELETE FROM group_dropdown_options WHERE group_id=?').run(groupId);
+    const ins = db.prepare('INSERT OR IGNORE INTO group_dropdown_options (group_id, dropdown_option_id) VALUES (?,?)');
+    for (const optId of option_ids) {
+      ins.run(groupId, Number(optId));
+    }
+  });
+  update();
+  logEvent('admin_group_dropdowns_updated');
   res.json({ success: true });
 });
 

@@ -47,6 +47,12 @@ export function replaceDb(uploadedPath: string): void {
 
 function initSchema(db: Database.Database): void {
   db.exec(`
+    CREATE TABLE IF NOT EXISTS user_groups (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL UNIQUE,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
     CREATE TABLE IF NOT EXISTS users (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       username TEXT NOT NULL UNIQUE,
@@ -58,6 +64,7 @@ function initSchema(db: Database.Database): void {
       mfa_enabled INTEGER NOT NULL DEFAULT 0,
       failed_login_attempts INTEGER NOT NULL DEFAULT 0,
       is_locked INTEGER NOT NULL DEFAULT 0,
+      user_group_id INTEGER REFERENCES user_groups(id) ON DELETE SET NULL,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
 
@@ -93,6 +100,12 @@ function initSchema(db: Database.Database): void {
       UNIQUE(field_name, value)
     );
 
+    CREATE TABLE IF NOT EXISTS group_dropdown_options (
+      group_id INTEGER NOT NULL REFERENCES user_groups(id) ON DELETE CASCADE,
+      dropdown_option_id INTEGER NOT NULL REFERENCES dropdown_options(id) ON DELETE CASCADE,
+      PRIMARY KEY (group_id, dropdown_option_id)
+    );
+
     CREATE TABLE IF NOT EXISTS events (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       event_type TEXT NOT NULL,
@@ -121,6 +134,9 @@ function initSchema(db: Database.Database): void {
   if (!userCols.includes('pending_activation')) {
     db.exec('ALTER TABLE users ADD COLUMN pending_activation INTEGER NOT NULL DEFAULT 0');
   }
+  if (!userCols.includes('user_group_id')) {
+    db.exec('ALTER TABLE users ADD COLUMN user_group_id INTEGER');
+  }
 
   // Migrate existing databases: add assigned_date column if missing
   const taskCols = (db.prepare("PRAGMA table_info(tasks)").all() as { name: string }[]).map(c => c.name);
@@ -146,5 +162,16 @@ function initSchema(db: Database.Database): void {
       ['outcome', 'Completed'], ['outcome', 'Delegated'], ['outcome', 'Escalated'],
       ['outcome', 'Deferred'], ['outcome', 'Abandoned'],
     ]);
+  }
+
+  // Seed default user group if none exist
+  const groupCount = (db.prepare('SELECT COUNT(*) as c FROM user_groups').get() as { c: number }).c;
+  if (groupCount === 0) {
+    const result = db.prepare('INSERT INTO user_groups (name) VALUES (?)').run('General');
+    const generalGroupId = result.lastInsertRowid as number;
+    // Assign all existing approved dropdown options to the default group
+    db.prepare(
+      'INSERT OR IGNORE INTO group_dropdown_options (group_id, dropdown_option_id) SELECT ?,id FROM dropdown_options WHERE approved=1'
+    ).run(generalGroupId);
   }
 }
