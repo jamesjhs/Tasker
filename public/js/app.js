@@ -1452,7 +1452,6 @@ function buildHistoryParams() {
 function renderAnalyticsContent(data, mode, pendingLog) {
   const { tasks, summary: s } = data;
   const isHistory = mode === 'history';
-  const pendingCount = pendingLog?.count ?? null;
   const pendingLabel = pendingLog
     ? `${pendingLog.count} <span style="font-size:.65rem;display:block;color:#6b7280;margin-top:2px">(${formatDateShort(pendingLog.logged_at)})</span>`
     : '—';
@@ -1528,7 +1527,7 @@ function renderAnalyticsContent(data, mode, pendingLog) {
       <div class="stat-card"><div class="stat-number">${s.dutyCount}</div><div class="stat-label">My Group tasks</div></div>
       <div class="stat-card"><div class="stat-number">${s.personalCount}</div><div class="stat-label">Personal</div></div>
       <div class="stat-card"><div class="stat-number">${s.totalInterruptions || 0}</div><div class="stat-label">Interruptions</div></div>
-      <div class="stat-card"><div class="stat-number" style="font-size:${pendingCount !== null ? '2rem' : '1.5rem'}">${pendingLabel}</div><div class="stat-label">Pending tasks</div></div>
+      <div class="stat-card"><div class="stat-number">${pendingLabel}</div><div class="stat-label">Pending tasks</div></div>
     </div>
     ${regressionNote}
     ${s.total > 0 ? `
