@@ -22,6 +22,7 @@ const state = {
   editTask: null,
   charts: {},
   pendingTaskLog: null,  // { count, logged_at } — most recent pending task snapshot
+  recentHandledCount: null,  // number — tasks completed in the last 7 days
 };
 
 // ── History management ────────────────────────────────────────────────────────
@@ -658,6 +659,7 @@ function renderHomeHTML() {
     <div class="card" style="margin-top:16px">
       <div class="card-title">📋 Pending Tasks</div>
       ${state.pendingTaskLog ? `<p style="font-size:.85rem;color:#6b7280;margin-bottom:8px">Last logged: <strong>${state.pendingTaskLog.count}</strong> (${formatDateShort(state.pendingTaskLog.logged_at)} ${formatTimeShort(state.pendingTaskLog.logged_at)})</p>` : ''}
+      ${state.recentHandledCount !== null ? `<p style="font-size:.85rem;color:#6b7280;margin-bottom:8px">Tasks handled (last 7 days): <strong>${state.recentHandledCount}</strong></p>` : ''}
       <div style="display:flex;gap:8px;align-items:center">
         <input id="pending-count-input" class="input" type="number" min="0" max="9999" placeholder="Enter count…" style="flex:1">
         <button class="btn btn-primary" onclick="doLogPendingCount()">Log</button>
@@ -672,13 +674,15 @@ async function renderHome() {
   stopTimer(); clearCharts(); state.currentView = 'home';
   pushHistory('home');
   app().innerHTML = renderHomeHTML();
-  const [_activeTask, statsRes, pendingRes] = await Promise.all([
+  const [_activeTask, statsRes, pendingRes, recentRes] = await Promise.all([
     checkActiveTask(),
     fetch('/api/auth/stats', { credentials: 'same-origin' }).catch(() => null),
     fetch('/api/tasks/pending-count', { credentials: 'same-origin' }).catch(() => null),
+    fetch('/api/tasks/recent-count', { credentials: 'same-origin' }).catch(() => null),
   ]);
   if (statsRes?.ok) state.appStats = await statsRes.json();
   if (pendingRes?.ok) state.pendingTaskLog = await pendingRes.json();
+  if (recentRes?.ok) { const r = await recentRes.json(); state.recentHandledCount = r?.count ?? null; }
   if (state.activeTask) {
     await checkInactivityInterruption();
     updateLastActive();

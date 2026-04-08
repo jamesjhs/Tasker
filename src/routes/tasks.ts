@@ -8,6 +8,14 @@ router.use(requireAuth);
 router.use(requirePasswordChange);
 router.use(requireActivation);
 
+router.get('/recent-count', (req: Request, res: Response) => {
+  const s = req.session as any;
+  const row = getDb().prepare(
+    `SELECT COUNT(*) AS count FROM tasks WHERE user_id=? AND status='completed' AND end_time >= datetime('now','-7 days')`
+  ).get(s.userId) as any;
+  res.json({ count: row?.count ?? 0 });
+});
+
 router.get('/pending-count', (req: Request, res: Response) => {
   const s = req.session as any;
   const log = getDb().prepare(
