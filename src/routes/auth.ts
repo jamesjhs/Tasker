@@ -3,7 +3,7 @@ import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import { getDb, getSetting } from '../db';
 import { generateUsername } from '../words';
-import { requireAuth, validateCsrf, logEvent } from '../middleware/index';
+import { requireAuth, validateCsrf, logEvent, requirePasswordChange, requireActivation } from '../middleware/index';
 
 const router = Router();
 const PASSWORD_RE = /^(?=.*[!@#$%^&*()\-_=+\[\]{};:'",.<>/?\\|`~]).{8,}$/;
@@ -189,12 +189,50 @@ router.post('/set-group', requireAuth, validateCsrf, (req: Request, res: Respons
   const s = req.session as any;
   const { groupId } = req.body as { groupId: number | null };
   const db = getDb();
-  if (groupId !== null && groupId !== undefined) {
+  if (groupId !== null) {
     const group = db.prepare('SELECT id FROM user_groups WHERE id=?').get(groupId);
     if (!group) { res.status(400).json({ error: 'User group not found.' }); return; }
   }
-  db.prepare('UPDATE users SET user_group_id=? WHERE id=?').run(groupId ?? null, s.userId);
+  db.transaction(() => {
+    db.prepare('UPDATE users SET user_group_id=? WHERE id=?').run(groupId ?? null, s.userId);
+    // Seed personal options from group defaults whenever group changes
+    if (groupId !== null) {
+      db.prepare('DELETE FROM user_dropdown_options WHERE user_id=?').run(s.userId);
+      db.prepare(
+        'INSERT INTO user_dropdown_options (user_id, dropdown_option_id) SELECT ?, dropdown_option_id FROM group_dropdown_options WHERE group_id=?'
+      ).run(s.userId, groupId);
+    }
+  })();
   logEvent('user_group_set');
+  res.json({ success: true });
+});
+
+// Return all approved options with personal assignment state
+router.get('/my-options', requireAuth, requirePasswordChange, requireActivation, (req: Request, res: Response) => {
+  const s = req.session as any;
+  const options = getDb().prepare(
+    `SELECT do.id, do.field_name, do.value,
+            CASE WHEN udo.user_id IS NOT NULL THEN 1 ELSE 0 END as assigned
+     FROM dropdown_options do
+     LEFT JOIN user_dropdown_options udo ON udo.dropdown_option_id=do.id AND udo.user_id=?
+     WHERE do.approved=1
+     ORDER BY do.field_name, do.value`
+  ).all(s.userId);
+  res.json({ options });
+});
+
+// Replace the user's entire personal option list
+router.put('/my-options', requireAuth, requirePasswordChange, requireActivation, validateCsrf, (req: Request, res: Response) => {
+  const s = req.session as any;
+  const { option_ids } = req.body as { option_ids: number[] };
+  if (!Array.isArray(option_ids)) { res.status(400).json({ error: 'option_ids must be an array.' }); return; }
+  const db = getDb();
+  db.transaction(() => {
+    db.prepare('DELETE FROM user_dropdown_options WHERE user_id=?').run(s.userId);
+    const ins = db.prepare('INSERT OR IGNORE INTO user_dropdown_options (user_id, dropdown_option_id) VALUES (?,?)');
+    for (const optId of option_ids) ins.run(s.userId, Number(optId));
+  })();
+  logEvent('user_options_updated');
   res.json({ success: true });
 });
 

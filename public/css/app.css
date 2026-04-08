@@ -269,12 +269,56 @@ html, body {
 .modal-sheet {
   background: #fff;
   border-radius: 20px 20px 0 0;
-  padding: 24px 20px 40px;
   width: 100%;
   max-height: 90vh;
-  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
 }
-.modal-title { font-size: 1.2rem; font-weight: 700; margin-bottom: 16px; }
+.modal-body {
+  padding: 24px 20px 8px;
+  overflow-y: auto;
+  flex: 1 1 auto;
+}
+.modal-footer {
+  padding: 10px 20px 28px;
+  background: #fff;
+  border-top: 1px solid #f3f4f6;
+  display: flex;
+  gap: 10px;
+  flex-shrink: 0;
+}
+.modal-title { font-size: 1.2rem; font-weight: 700; margin-bottom: 12px; }
+
+/* ── Desktop modal: centered dialog ─────────────────────────────────── */
+@media (min-width: 640px) {
+  .modal-overlay {
+    align-items: center;
+    padding: 20px;
+  }
+  .modal-sheet {
+    border-radius: 16px;
+    max-width: 540px;
+    margin: 0 auto;
+    max-height: 82vh;
+  }
+  .modal-footer { padding-bottom: 20px; }
+}
+
+/* ── Admin desktop layout ────────────────────────────────────────────── */
+@media (min-width: 700px) {
+  .view--wide { max-width: 900px; }
+  .admin-desktop-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0 24px;
+  }
+  .admin-drop-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 14px;
+  }
+  .admin-drop-grid .card { margin-bottom: 0; }
+}
 
 /* ── Bottom nav ───────────────────────────────────────────────────── */
 .nav-bottom {

@@ -28,6 +28,7 @@ const state = {
 // ── History management ────────────────────────────────────────────────────────
 let _popstateActive = false;
 let _groupSelectionCb = null; // callback after group selection completes
+let _myOptionsCb = null;      // callback after personal options step completes
 
 function pushHistory(view) {
   if (_popstateActive || window.history.state?.view === view) return;
@@ -521,7 +522,11 @@ async function doSetGroup() {
     }
     state._pendingGroupId = null;
     await loadDropdowns();
-    if (_groupSelectionCb) { const cb = _groupSelectionCb; _groupSelectionCb = null; cb(); }
+    // Show personal options customisation step
+    const onContinue = () => {
+      if (_groupSelectionCb) { const cb = _groupSelectionCb; _groupSelectionCb = null; cb(); }
+    };
+    await renderMyOptionsStep(state.user?.userGroupName || 'your group', onContinue);
   } catch(e) {
     if (btn) { btn.disabled = false; btn.textContent = '✓ Continue with selected group'; }
     showAlert(e.message, 'error', 'group-alerts');
@@ -533,9 +538,89 @@ function skipGroupSelection() {
   if (_groupSelectionCb) { const cb = _groupSelectionCb; _groupSelectionCb = null; cb(); }
 }
 
+// ── MY OPTIONS (personal dropdown customisation) ──────────────────────────────
+async function _loadAndShowMyOptions(groupName, onContinue, historyEntry) {
+  _myOptionsCb = onContinue;
+  state.currentView = 'my-options';
+  if (historyEntry === 'replace') replaceHistory('my-options');
+  else if (historyEntry === 'push') pushHistory('my-options');
+  app().innerHTML = `<div class="view"><p class="loading">Loading options…</p></div>`;
+  let options = [];
+  try {
+    const d = await api('GET', '/api/auth/my-options');
+    options = d?.options || [];
+  } catch(e) {}
+  app().innerHTML = buildMyOptionsPage(groupName, options);
+}
+
+async function renderMyOptionsStep(groupName, onContinue) {
+  await _loadAndShowMyOptions(groupName, onContinue, 'replace');
+}
+
+async function openMyOptionsModal() {
+  await _loadAndShowMyOptions(
+    state.user?.userGroupName || 'your group',
+    () => renderSettings(),
+    'push'
+  );
+}
+
+function buildMyOptionsPage(groupName, options) {
+  const byField = {};
+  for (const o of options) {
+    if (!byField[o.field_name]) byField[o.field_name] = [];
+    byField[o.field_name].push(o);
+  }
+  const fieldLabels = { category: 'Task from', subcategory: 'Task type', outcome: 'Outcome' };
+  const sections = ['category', 'subcategory', 'outcome'].map(field => {
+    const opts = (byField[field] || []).map(o => `
+      <label style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid #f3f4f6;cursor:pointer">
+        <input type="checkbox" name="my-opt" value="${o.id}" ${o.assigned ? 'checked' : ''} style="width:18px;height:18px;flex-shrink:0">
+        <span style="font-size:.9rem">${esc(o.value)}</span>
+      </label>`).join('');
+    return `<div style="margin-bottom:16px">
+      <div style="font-weight:700;color:#374151;font-size:.9rem;margin-bottom:4px">${fieldLabels[field]}</div>
+      ${opts || '<p style="font-size:.85rem;color:#6b7280">No options available</p>'}
+    </div>`;
+  }).join('');
+  return `
+  <div class="view">
+    <h1 style="margin-bottom:8px;color:#1a56db">⚙️ Customise My Options</h1>
+    <p style="font-size:.9rem;color:#6b7280;margin-bottom:16px">
+      These are the default options for the <strong>${esc(groupName)}</strong> group.
+      Tick or untick to personalise your dropdown lists.
+    </p>
+    <div id="myopts-alerts"></div>
+    ${sections || '<p style="color:#6b7280">No options available.</p>'}
+    <div style="display:flex;flex-direction:column;gap:8px;margin-top:16px">
+      <button class="btn btn-primary btn-full" id="myopts-save-btn" onclick="doSaveMyOptions()">✓ Save and continue</button>
+      <button class="btn btn-secondary btn-full" onclick="skipMyOptions()">Use defaults as-is</button>
+    </div>
+  </div>`;
+}
+
+async function doSaveMyOptions() {
+  const checkboxes = document.querySelectorAll('input[name="my-opt"]:checked');
+  const option_ids = Array.from(checkboxes).map(cb => Number(cb.value));
+  const btn = document.getElementById('myopts-save-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+  try {
+    await api('PUT', '/api/auth/my-options', { option_ids });
+    await loadDropdowns();
+    if (_myOptionsCb) { const cb = _myOptionsCb; _myOptionsCb = null; cb(); }
+  } catch(e) {
+    if (btn) { btn.disabled = false; btn.textContent = '✓ Save and continue'; }
+    showAlert(e.message, 'error', 'myopts-alerts');
+  }
+}
+
+function skipMyOptions() {
+  if (_myOptionsCb) { const cb = _myOptionsCb; _myOptionsCb = null; cb(); }
+}
+
 function setGroupFromSettings() {
   renderGroupSelection(async () => {
-    await loadDropdowns();
+    // After group chosen + options customised, return to settings
     renderSettings();
   });
 }
@@ -855,7 +940,8 @@ function renderSettings() {
       <div class="divider"></div>
       <div style="margin-bottom:14px">
         <p style="font-size:.85rem;color:#374151;margin-bottom:6px">👥 My User Group: <strong>${groupName ? esc(groupName) : 'Not set'}</strong></p>
-        <button class="btn btn-outline btn-full" onclick="setGroupFromSettings()">${groupName ? '🔄 Change Group' : '👥 Select Group'}</button>
+        <button class="btn btn-outline btn-full" style="margin-bottom:6px" onclick="setGroupFromSettings()">${groupName ? '🔄 Change Group' : '👥 Select Group'}</button>
+        ${groupName ? `<button class="btn btn-outline btn-full" onclick="openMyOptionsModal()">⚙️ Customise My Options</button>` : ''}
       </div>
       <div class="divider"></div>
       <button class="btn btn-outline btn-full" style="margin-bottom:10px" onclick="renderChangePassword()">🔑 Change Password</button>
@@ -1841,7 +1927,7 @@ function renderAdminContent(stats, users, dropOpts, settings, pendingUsers, awai
   </div>`).join('');
 
   app().innerHTML = `
-  <div class="view">
+  <div class="view view--wide">
     <div class="view-header">
       <h1>🔐 Admin Panel</h1>
     </div>
@@ -1868,45 +1954,58 @@ function renderAdminContent(stats, users, dropOpts, settings, pendingUsers, awai
       <button class="btn btn-primary btn-full" style="margin-top:12px" id="reg-settings-btn" onclick="saveRegistrationSettings()">💾 Save Settings</button>
     </div>
 
-    <div class="section-heading">Pending User Approvals ${pendingUsers.length ? `<span class="badge badge-warn" style="margin-left:6px">${pendingUsers.length}</span>` : ''}</div>
-    ${pendingUserCards}
+    <div class="admin-desktop-grid">
+      <div>
+        <div class="section-heading">Pending User Approvals ${pendingUsers.length ? `<span class="badge badge-warn" style="margin-left:6px">${pendingUsers.length}</span>` : ''}</div>
+        ${pendingUserCards}
 
-    <div class="section-heading">Awaiting Activation ${awaitingUsers.length ? `<span class="badge badge-warn" style="margin-left:6px">${awaitingUsers.length}</span>` : ''}</div>
-    ${awaitingUserCards}
+        <div class="section-heading">Awaiting Activation ${awaitingUsers.length ? `<span class="badge badge-warn" style="margin-left:6px">${awaitingUsers.length}</span>` : ''}</div>
+        ${awaitingUserCards}
 
-    <div class="section-heading">Users</div>
-    <button class="btn btn-primary btn-full" style="margin-bottom:14px" onclick="addUser()">➕ Add User</button>
-    ${userCards || '<p style="font-size:.85rem;color:#6b7280;margin-bottom:14px">No users yet.</p>'}
+        <div class="section-heading">Users</div>
+        <button class="btn btn-primary btn-full" style="margin-bottom:14px" onclick="addUser()">➕ Add User</button>
+        ${userCards || '<p style="font-size:.85rem;color:#6b7280;margin-bottom:14px">No users yet.</p>'}
+      </div>
 
-    <div class="section-heading">User Groups</div>
-    <p style="font-size:.85rem;color:#6b7280;margin-bottom:10px">Groups control which dropdown options users see. Assign users to groups using the 👥 button above.</p>
-    <button class="btn btn-primary btn-full" style="margin-bottom:14px" onclick="addUserGroup()">➕ Add User Group</button>
-    ${groupCards || '<p style="font-size:.85rem;color:#6b7280;margin-bottom:14px">No user groups yet.</p>'}
-
-    <div class="section-heading">Database</div>
-    <div class="card">
-      <div style="display:flex;flex-direction:column;gap:10px">
-        <button class="btn btn-outline btn-full" onclick="downloadBackup()">💾 Download Backup</button>
-        <div>
-          <label class="btn btn-secondary btn-full" style="cursor:pointer">
-            📤 Restore from Backup
-            <input type="file" accept=".db" style="display:none" onchange="uploadRestore(this)">
-          </label>
-          <p style="font-size:.75rem;color:#dc2626;margin-top:4px">⚠️ This replaces the current database immediately.</p>
-        </div>
+      <div>
+        <div class="section-heading">User Groups</div>
+        <p style="font-size:.85rem;color:#6b7280;margin-bottom:10px">Groups control which dropdown options users see. Assign users to groups using the 👥 button above.</p>
+        <button class="btn btn-primary btn-full" style="margin-bottom:14px" onclick="addUserGroup()">➕ Add User Group</button>
+        ${groupCards || '<p style="font-size:.85rem;color:#6b7280;margin-bottom:14px">No user groups yet.</p>'}
       </div>
     </div>
 
-    <div class="section-heading">My Account</div>
-    <div class="card">
-      <button class="btn btn-outline btn-full" onclick="renderChangePassword()">🔑 Change My Password</button>
-    </div>
-
     <div class="section-heading">Dropdown Options</div>
-    ${dropSections}
+    <div class="admin-drop-grid">
+      ${dropSections}
+    </div>
 
     <div class="section-heading">Pending User Proposals</div>
     ${pendingCards}
+
+    <div class="admin-desktop-grid" style="margin-top:0">
+      <div>
+        <div class="section-heading">Database</div>
+        <div class="card">
+          <div style="display:flex;flex-direction:column;gap:10px">
+            <button class="btn btn-outline btn-full" onclick="downloadBackup()">💾 Download Backup</button>
+            <div>
+              <label class="btn btn-secondary btn-full" style="cursor:pointer">
+                📤 Restore from Backup
+                <input type="file" accept=".db" style="display:none" onchange="uploadRestore(this)">
+              </label>
+              <p style="font-size:.75rem;color:#dc2626;margin-top:4px">⚠️ This replaces the current database immediately.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div>
+        <div class="section-heading">My Account</div>
+        <div class="card">
+          <button class="btn btn-outline btn-full" onclick="renderChangePassword()">🔑 Change My Password</button>
+        </div>
+      </div>
+    </div>
 
     <div class="divider"></div>
     <button class="btn btn-secondary btn-full" style="margin-bottom:16px" onclick="doLogout()">🚪 Log Out</button>
@@ -2123,7 +2222,10 @@ async function showGroupDropdownModal(groupId, groupName) {
   const modal = document.createElement('div');
   modal.className = 'modal-overlay';
   modal.id = 'group-dd-modal';
-  modal.innerHTML = `<div class="modal-sheet" style="max-height:80vh;overflow-y:auto"><div class="modal-title">⚙️ Options for ${esc(groupName)}</div><p class="loading">Loading…</p></div>`;
+  modal.innerHTML = `<div class="modal-sheet">
+    <div class="modal-body"><div class="modal-title">⚙️ Options for ${esc(groupName)}</div><p class="loading">Loading…</p></div>
+    <div class="modal-footer"><button class="btn btn-secondary" style="flex:1" onclick="document.getElementById('group-dd-modal')?.remove()">Cancel</button></div>
+  </div>`;
   document.body.appendChild(modal);
   try {
     const d = await api('GET', `/api/admin/user-groups/${groupId}/dropdowns`);
@@ -2144,16 +2246,16 @@ async function showGroupDropdownModal(groupId, groupName) {
         ${opts || '<p style="font-size:.85rem;color:#6b7280">No options available</p>'}
       </div>`;
     }).join('');
-    modal.querySelector('.modal-sheet').innerHTML = `
+    modal.querySelector('.modal-body').innerHTML = `
       <div class="modal-title">⚙️ Options for ${esc(groupName)}</div>
       <p style="font-size:.85rem;color:#6b7280;margin-bottom:16px">Tick the options that should appear in dropdown lists for users in this group.</p>
-      ${sections || '<p style="color:#6b7280">No dropdown options exist yet.</p>'}
-      <div style="display:flex;gap:10px;margin-top:16px;position:sticky;bottom:0;background:#fff;padding-top:8px">
-        <button class="btn btn-primary" style="flex:1" onclick="saveGroupDropdowns(${groupId})">💾 Save</button>
-        <button class="btn btn-secondary" style="flex:1" onclick="document.getElementById('group-dd-modal')?.remove()">Cancel</button>
-      </div>`;
+      ${sections || '<p style="color:#6b7280">No dropdown options exist yet.</p>'}`;
+    modal.querySelector('.modal-footer').innerHTML = `
+      <button class="btn btn-primary" style="flex:1" onclick="saveGroupDropdowns(${groupId})">💾 Save</button>
+      <button class="btn btn-secondary" style="flex:1" onclick="document.getElementById('group-dd-modal')?.remove()">Cancel</button>`;
   } catch(e) {
-    modal.querySelector('.modal-sheet').innerHTML = `<div class="alert alert-error">${esc(e.message)}</div><button class="btn btn-secondary btn-full" onclick="document.getElementById('group-dd-modal')?.remove()">Close</button>`;
+    modal.querySelector('.modal-body').innerHTML = `<div class="alert alert-error">${esc(e.message)}</div>`;
+    modal.querySelector('.modal-footer').innerHTML = `<button class="btn btn-secondary btn-full" onclick="document.getElementById('group-dd-modal')?.remove()">Close</button>`;
   }
 }
 
@@ -2168,11 +2270,13 @@ async function saveGroupDropdowns(groupId) {
 }
 
 function showAdminSetUserGroup(userId, username, currentGroupId) {
-  // Re-use the admin panel's group list if available, else just show a simple modal
   const modal = document.createElement('div');
   modal.className = 'modal-overlay';
   modal.id = 'admin-group-modal';
-  modal.innerHTML = `<div class="modal-sheet"><div class="modal-title">👥 Assign Group — ${esc(username)}</div><p class="loading">Loading…</p></div>`;
+  modal.innerHTML = `<div class="modal-sheet">
+    <div class="modal-body"><div class="modal-title">👥 Assign Group — ${esc(username)}</div><p class="loading">Loading…</p></div>
+    <div class="modal-footer"><button class="btn btn-secondary btn-full" onclick="document.getElementById('admin-group-modal')?.remove()">Cancel</button></div>
+  </div>`;
   document.body.appendChild(modal);
   api('GET', '/api/admin/user-groups').then(d => {
     const groups = d?.groups || [];
@@ -2181,13 +2285,13 @@ function showAdminSetUserGroup(userId, username, currentGroupId) {
         <span style="font-weight:600">${esc(g.name)}</span>
         <span style="font-size:.75rem;color:#6b7280;margin-left:6px">${g.user_count} user${g.user_count !== 1 ? 's' : ''}</span>
       </button>`).join('');
-    modal.querySelector('.modal-sheet').innerHTML = `
+    modal.querySelector('.modal-body').innerHTML = `
       <div class="modal-title">👥 Assign Group — ${esc(username)}</div>
       ${opts || '<p style="font-size:.85rem;color:#6b7280">No groups available. Create a group first.</p>'}
-      ${currentGroupId ? `<button class="btn btn-secondary btn-full" style="margin-top:8px" onclick="adminSetUserGroup(${userId}, null)">✕ Remove from group</button>` : ''}
-      <button class="btn btn-outline btn-full" style="margin-top:8px" onclick="document.getElementById('admin-group-modal')?.remove()">Cancel</button>`;
+      ${currentGroupId ? `<button class="btn btn-secondary btn-full" style="margin-top:8px" onclick="adminSetUserGroup(${userId}, null)">✕ Remove from group</button>` : ''}`;
+    modal.querySelector('.modal-footer').innerHTML = `<button class="btn btn-outline btn-full" onclick="document.getElementById('admin-group-modal')?.remove()">Cancel</button>`;
   }).catch(e => {
-    modal.querySelector('.modal-sheet').innerHTML = `<div class="alert alert-error">${esc(e.message)}</div><button class="btn btn-secondary btn-full" onclick="document.getElementById('admin-group-modal')?.remove()">Close</button>`;
+    modal.querySelector('.modal-body').innerHTML = `<div class="alert alert-error">${esc(e.message)}</div>`;
   });
 }
 
@@ -2209,6 +2313,7 @@ const HISTORY_RENDER_MAP = {
   'change-password':    () => renderChangePassword(),
   'delete-account':     () => renderDeleteAccount(),
   'group-selection':    () => renderGroupSelection(() => renderHome()),
+  'my-options':         () => openMyOptionsModal(), // restores options UI with return-to-settings callback
   'task-start':         () => renderTaskStart(),
   'task-active':        () => { if (state.activeTask) renderTaskActive(); else renderHome(); },
   'task-end':           () => { if (state.activeTask) renderTaskEnd(); else renderHome(); },
@@ -2221,7 +2326,7 @@ const HISTORY_RENDER_MAP = {
 
 const AUTH_REQUIRED_VIEWS = new Set([
   'home', 'settings', 'change-password', 'delete-account',
-  'group-selection', 'task-start', 'task-active', 'task-end', 'task-edit',
+  'group-selection', 'my-options', 'task-start', 'task-active', 'task-end', 'task-edit',
   'analytics-session', 'analytics-history', 'admin', 'await-activation',
 ]);
 

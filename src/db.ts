@@ -106,6 +106,12 @@ function initSchema(db: Database.Database): void {
       PRIMARY KEY (group_id, dropdown_option_id)
     );
 
+    CREATE TABLE IF NOT EXISTS user_dropdown_options (
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      dropdown_option_id INTEGER NOT NULL REFERENCES dropdown_options(id) ON DELETE CASCADE,
+      PRIMARY KEY (user_id, dropdown_option_id)
+    );
+
     CREATE TABLE IF NOT EXISTS events (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       event_type TEXT NOT NULL,

@@ -10,29 +10,40 @@ router.get('/:field', requireAuth, requirePasswordChange, requireActivation, (re
   if (!ALLOWED.includes(field)) { res.status(400).json({ error: 'Invalid field.' }); return; }
   const s = req.session as any;
   const db = getDb();
-  let opts: string[];
   if (s.userId) {
+    // 1. Check if user has any personal options at all
+    const personalTotal = (db.prepare('SELECT COUNT(*) as c FROM user_dropdown_options WHERE user_id=?').get(s.userId) as { c: number }).c;
+    if (personalTotal > 0) {
+      // Use personal options for this field (may be empty if user deselected all)
+      const rows = db.prepare(
+        `SELECT do.value FROM dropdown_options do
+         INNER JOIN user_dropdown_options udo ON udo.dropdown_option_id=do.id
+         WHERE do.field_name=? AND do.approved=1 AND udo.user_id=?
+         ORDER BY do.value`
+      ).all(field, s.userId) as { value: string }[];
+      res.json({ options: rows.map(r => r.value) });
+      return;
+    }
+    // 2. Fall back to group options
     const user = db.prepare('SELECT user_group_id FROM users WHERE id=?').get(s.userId) as { user_group_id: number | null } | undefined;
     const groupId = user?.user_group_id ?? null;
     if (groupId !== null) {
-      // Return only options assigned to this group
       const rows = db.prepare(
         `SELECT do.value FROM dropdown_options do
          INNER JOIN group_dropdown_options gdo ON gdo.dropdown_option_id=do.id
          WHERE do.field_name=? AND do.approved=1 AND gdo.group_id=?
          ORDER BY do.value`
-      ).all(field, groupId) as any[];
+      ).all(field, groupId) as { value: string }[];
       if (rows.length > 0) {
-        opts = rows.map(r => r.value);
-        res.json({ options: opts });
+        res.json({ options: rows.map(r => r.value) });
         return;
       }
     }
   }
-  // Fall back: return all approved options
-  opts = (db.prepare(
+  // 3. Fall back: return all approved options
+  const opts = (db.prepare(
     'SELECT value FROM dropdown_options WHERE field_name=? AND approved=1 ORDER BY value'
-  ).all(field) as any[]).map(r => r.value);
+  ).all(field) as { value: string }[]).map(r => r.value);
   res.json({ options: opts });
 });
 
