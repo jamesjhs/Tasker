@@ -480,9 +480,9 @@ async function renderGroupSelection(onContinue) {
     groups = d?.groups || [];
   } catch(e) {}
   const groupOpts = groups.map(g => `
-    <div class="card" id="gsel-${g.id}" onclick="selectGroupOption(${g.id})" style="padding:14px;cursor:pointer;border:2px solid #e5e7eb;margin-bottom:8px">
+    <button class="card" id="gsel-${g.id}" onclick="selectGroupOption(${g.id})" style="padding:14px;cursor:pointer;border:2px solid #e5e7eb;margin-bottom:8px;width:100%;text-align:left;background:#fff;border-radius:8px">
       <span style="font-weight:600;font-size:1rem">${esc(g.name)}</span>
-    </div>`).join('');
+    </button>`).join('');
   app().innerHTML = `
   <div class="view">
     <h1 style="margin-bottom:8px;color:#1a56db">👥 Choose Your Group</h1>
@@ -2177,10 +2177,10 @@ function showAdminSetUserGroup(userId, username, currentGroupId) {
   api('GET', '/api/admin/user-groups').then(d => {
     const groups = d?.groups || [];
     const opts = groups.map(g => `
-      <div onclick="adminSetUserGroup(${userId}, ${g.id})" style="padding:12px;border:2px solid ${g.id === currentGroupId ? '#1a56db' : '#e5e7eb'};background:${g.id === currentGroupId ? '#eff6ff' : ''};border-radius:8px;margin-bottom:8px;cursor:pointer">
+      <button onclick="adminSetUserGroup(${userId}, ${g.id})" style="display:block;width:100%;padding:12px;border:2px solid ${g.id === currentGroupId ? '#1a56db' : '#e5e7eb'};background:${g.id === currentGroupId ? '#eff6ff' : '#fff'};border-radius:8px;margin-bottom:8px;text-align:left;cursor:pointer">
         <span style="font-weight:600">${esc(g.name)}</span>
         <span style="font-size:.75rem;color:#6b7280;margin-left:6px">${g.user_count} user${g.user_count !== 1 ? 's' : ''}</span>
-      </div>`).join('');
+      </button>`).join('');
     modal.querySelector('.modal-sheet').innerHTML = `
       <div class="modal-title">👥 Assign Group — ${esc(username)}</div>
       ${opts || '<p style="font-size:.85rem;color:#6b7280">No groups available. Create a group first.</p>'}

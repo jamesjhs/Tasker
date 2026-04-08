@@ -119,7 +119,7 @@ router.post('/users/:id/activate', validateCsrf, (req: Request, res: Response) =
   if (!user) { res.status(404).json({ error: 'User awaiting activation not found.' }); return; }
   getDb().prepare('UPDATE users SET pending_activation=0 WHERE id=?').run(userId);
   logEvent('admin_user_activated');
-  res.json({ success: true }); return;
+  res.json({ success: true });
 });
 
 router.patch('/users/:id/group', validateCsrf, (req: Request, res: Response) => {
