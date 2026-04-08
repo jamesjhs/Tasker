@@ -20,7 +20,8 @@ router.get('/stats', (_req: Request, res: Response) => {
   const pendingCount = (db.prepare('SELECT COUNT(*) as c FROM users WHERE is_admin=0 AND is_approved=0').get() as any).c;
   const awaitingActivationCount = (db.prepare('SELECT COUNT(*) as c FROM users WHERE is_admin=0 AND is_approved=1 AND pending_activation=1').get() as any).c;
   const taskCount = (db.prepare('SELECT COUNT(*) as c FROM tasks WHERE status=\'completed\'').get() as any).c;
-  res.json({ userCount, pendingCount, awaitingActivationCount, taskCount });
+  const pendingGroupCount = (db.prepare('SELECT COUNT(*) as c FROM user_groups WHERE is_approved=0').get() as any).c;
+  res.json({ userCount, pendingCount, awaitingActivationCount, taskCount, pendingGroupCount });
 });
 
 router.get('/settings', (_req: Request, res: Response) => {
@@ -130,6 +131,7 @@ router.get('/user-groups', (_req: Request, res: Response) => {
             COUNT(DISTINCT u.id) as user_count
      FROM user_groups ug
      LEFT JOIN users u ON u.user_group_id = ug.id AND u.is_admin=0
+     WHERE ug.is_approved=1
      GROUP BY ug.id ORDER BY ug.name`
   ).all();
   res.json({ groups });
@@ -216,6 +218,40 @@ router.put('/user-groups/:id/dropdowns', validateCsrf, (req: Request, res: Respo
   });
   update();
   logEvent('admin_group_dropdowns_updated');
+  res.json({ success: true });
+});
+
+// ── Pending Group Proposals ───────────────────────────────────────────────────
+
+router.get('/pending-groups', (_req: Request, res: Response) => {
+  const groups = getDb().prepare(
+    'SELECT id, name, created_at FROM user_groups WHERE is_approved=0 ORDER BY created_at'
+  ).all();
+  res.json({ groups });
+});
+
+router.post('/pending-groups/:id/approve', validateCsrf, (req: Request, res: Response) => {
+  const groupId = Number(req.params['id']);
+  const db = getDb();
+  const group = db.prepare('SELECT id FROM user_groups WHERE id=? AND is_approved=0').get(groupId);
+  if (!group) { res.status(404).json({ error: 'Pending group not found.' }); return; }
+  db.transaction(() => {
+    db.prepare('UPDATE user_groups SET is_approved=1 WHERE id=?').run(groupId);
+    // Seed the newly approved group with all currently approved dropdown options
+    db.prepare(
+      'INSERT OR IGNORE INTO group_dropdown_options (group_id, dropdown_option_id) SELECT ?,id FROM dropdown_options WHERE approved=1'
+    ).run(groupId);
+  })();
+  logEvent('admin_group_proposal_approved');
+  res.json({ success: true });
+});
+
+router.delete('/pending-groups/:id', validateCsrf, (req: Request, res: Response) => {
+  const groupId = Number(req.params['id']);
+  const group = getDb().prepare('SELECT id FROM user_groups WHERE id=? AND is_approved=0').get(groupId);
+  if (!group) { res.status(404).json({ error: 'Pending group not found.' }); return; }
+  getDb().prepare('DELETE FROM user_groups WHERE id=?').run(groupId);
+  logEvent('admin_group_proposal_rejected');
   res.json({ success: true });
 });
 

@@ -72,6 +72,45 @@ const esc = str => str == null ? '' : String(str)
   .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
   .replace(/"/g,'&quot;').replace(/'/g,'&#039;');
 
+// ── Fuzzy search helper ──────────────────────────────────────────────────────
+function fuzzyMatch(query, str) {
+  if (!query) return true;
+  return str.toLowerCase().includes(query.toLowerCase());
+}
+
+/**
+ * Filter a <select> element's options based on a search query.
+ * Keeps the "— Select —" placeholder and optional "Add new" sentinel.
+ * @param {HTMLInputElement} input  The search input element
+ * @param {string}           selectId  ID of the <select> to filter
+ * @param {string}           field  Key in state.dropdowns (category/subcategory/outcome)
+ * @param {boolean}          hasNew  Whether the select has a "+ Add new" option
+ */
+function filterSelectOpts(input, selectId, field, hasNew) {
+  const query = input.value.trim();
+  const sel = document.getElementById(selectId);
+  if (!sel) return;
+  const current = sel.value;
+  const allOpts = state.dropdowns[field] || [];
+  const filtered = allOpts.filter(o => fuzzyMatch(query, o));
+  sel.innerHTML = '';
+  const placeholder = document.createElement('option');
+  placeholder.value = ''; placeholder.textContent = '— Select —';
+  sel.appendChild(placeholder);
+  for (const o of filtered) {
+    const opt = document.createElement('option');
+    opt.value = o; opt.textContent = o;
+    if (o === current) opt.selected = true;
+    sel.appendChild(opt);
+  }
+  if (hasNew) {
+    const newOpt = document.createElement('option');
+    newOpt.value = '__new__'; newOpt.textContent = '+ Add new option…';
+    sel.appendChild(newOpt);
+  }
+  if (filtered.includes(current)) sel.value = current;
+}
+
 function isMobileDevice() {
   return /Mobile|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
 }
@@ -500,6 +539,14 @@ async function renderGroupSelection(onContinue) {
       <button class="btn btn-primary btn-full" id="gsel-btn" onclick="doSetGroup()" ${groups.length ? '' : 'disabled'}>✓ Continue with selected group</button>
     </div>
     <button class="btn btn-secondary btn-full" style="margin-top:8px" onclick="skipGroupSelection()">Skip for now</button>
+    <div style="margin-top:20px;border-top:1px solid #e5e7eb;padding-top:16px">
+      <p style="font-size:.85rem;color:#6b7280;margin-bottom:6px">Don't see your group? Suggest one for admin review.</p>
+      <div class="alert alert-warning" style="font-size:.8rem;margin-bottom:8px">⚠️ Do not include any patient, staff, location, or other personally identifiable information in group names.</div>
+      <div class="add-new-row">
+        <input id="gsel-propose-input" class="input" style="flex:1" type="text" maxlength="100" placeholder="Suggest a group name…">
+        <button class="btn btn-outline btn-sm" onclick="proposeGroupName('group-alerts')">Suggest</button>
+      </div>
+    </div>
   </div>`;
 }
 
@@ -539,6 +586,17 @@ async function doSetGroup() {
 function skipGroupSelection() {
   state._pendingGroupId = null;
   if (_groupSelectionCb) { const cb = _groupSelectionCb; _groupSelectionCb = null; cb(); }
+}
+
+async function proposeGroupName(alertContainerId) {
+  const input = document.getElementById('gsel-propose-input');
+  const val = (input?.value || '').trim();
+  if (!val) return;
+  try {
+    const d = await api('POST', '/api/auth/propose-group', { name: val });
+    if (input) input.value = '';
+    showAlert(d?.message || 'Group suggestion submitted for admin review.', 'success', alertContainerId);
+  } catch(e) { showAlert(e.message, 'error', alertContainerId); }
 }
 
 // ── MY OPTIONS (personal dropdown customisation) ──────────────────────────────
@@ -584,17 +642,25 @@ function buildMyOptionsPage(groupName, options) {
     return `<div style="margin-bottom:16px">
       <div style="font-weight:700;color:#374151;font-size:.9rem;margin-bottom:4px">${fieldLabels[field]}</div>
       ${opts || '<p style="font-size:.85rem;color:#6b7280">No options available</p>'}
+      <div class="add-new-row" style="margin-top:8px">
+        <input id="co-new-${field}" class="input" style="flex:1" type="text" maxlength="100" placeholder="Suggest new ${fieldLabels[field].toLowerCase()}…">
+        <button class="btn btn-outline btn-sm" onclick="proposeOptionFromCustomise('${field}')">Suggest</button>
+      </div>
     </div>`;
   }).join('');
   return `
   <div class="view">
     <h1 style="margin-bottom:8px;color:#1a56db">⚙️ Customise My Options</h1>
-    <p style="font-size:.9rem;color:#6b7280;margin-bottom:16px">
+    <p style="font-size:.9rem;color:#6b7280;margin-bottom:8px">
       These are the default options for the <strong>${esc(groupName)}</strong> group.
       Tick or untick to personalise your dropdown lists.
     </p>
+    <div class="alert alert-warning" style="margin-bottom:16px;font-size:.82rem">
+      ⚠️ When suggesting new options, do not include any patient, staff, location, or other personally identifiable information. Suggestions are reviewed by an administrator before becoming available.
+    </div>
     <div id="myopts-alerts"></div>
     ${sections || '<p style="color:#6b7280">No options available.</p>'}
+    <div id="myopts-propose-alerts"></div>
     <div style="display:flex;flex-direction:column;gap:8px;margin-top:16px">
       <button class="btn btn-primary btn-full" id="myopts-save-btn" onclick="doSaveMyOptions()">✓ Save and continue</button>
       <button class="btn btn-secondary btn-full" onclick="skipMyOptions()">Use defaults as-is</button>
@@ -619,6 +685,17 @@ async function doSaveMyOptions() {
 
 function skipMyOptions() {
   if (_myOptionsCb) { const cb = _myOptionsCb; _myOptionsCb = null; cb(); }
+}
+
+async function proposeOptionFromCustomise(field) {
+  const input = document.getElementById(`co-new-${field}`);
+  const val = (input?.value || '').trim();
+  if (!val) { showAlert('Please enter a value to suggest.', 'error', 'myopts-propose-alerts'); return; }
+  try {
+    const d = await api('POST', '/api/dropdowns/propose', { field_name: field, value: val });
+    if (input) input.value = '';
+    showAlert(`"${esc(val)}" submitted for admin review.`, 'success', 'myopts-propose-alerts');
+  } catch(e) { showAlert(e.message, 'error', 'myopts-propose-alerts'); }
 }
 
 function setGroupFromSettings() {
@@ -1107,6 +1184,7 @@ function buildDropdownGroup(field, label, options, containerId) {
   return `
   <div class="form-group" id="${containerId}-group">
     <label for="${containerId}-sel">${esc(label)}</label>
+    <input class="input" style="margin-bottom:4px" placeholder="Search ${esc(label.toLowerCase())}…" aria-label="Search ${esc(label.toLowerCase())}" oninput="filterSelectOpts(this,'${containerId}-sel','${field}',true)">
     <select id="${containerId}-sel" class="select" onchange="onDropdownChange('${containerId}','${field}')">
       <option value="">— Select —</option>
       ${opts}
@@ -1446,6 +1524,7 @@ function buildReviewDropdown(field, label, options, current) {
   return `
   <div class="form-group">
     <label for="te-${field}">${esc(label)}</label>
+    <input class="input" style="margin-bottom:4px" placeholder="Search ${esc(label.toLowerCase())}…" aria-label="Search ${esc(label.toLowerCase())}" oninput="filterSelectOpts(this,'te-${field}','${field}',false)">
     <select id="te-${field}" class="select">
       <option value="">— Select —</option>${opts}
     </select>
@@ -1457,6 +1536,7 @@ function buildReviewOutcomeGroup(options, current) {
   return `
   <div class="form-group" id="te-out-group">
     <label for="te-outcome">Outcome</label>
+    <input class="input" style="margin-bottom:4px" placeholder="Search outcome…" aria-label="Search outcome" oninput="filterSelectOpts(this,'te-outcome','outcome',true)">
     <select id="te-outcome" class="select" onchange="onOutcomeEndChange()">
       <option value="">— Select —</option>${opts}
       <option value="__new__">+ Add new outcome…</option>
@@ -1801,7 +1881,7 @@ async function renderAdmin() {
   pushHistory('admin');
   app().innerHTML = `<div class="view"><p class="loading">Loading admin panel…</p></div>`;
   try {
-    const [stats, users, dropOpts, settings, pendingUsers, awaitingUsers, userGroups] = await Promise.all([
+    const [stats, users, dropOpts, settings, pendingUsers, awaitingUsers, userGroups, pendingGroups] = await Promise.all([
       api('GET', '/api/admin/stats'),
       api('GET', '/api/admin/users'),
       api('GET', '/api/dropdowns/admin/all'),
@@ -1809,16 +1889,17 @@ async function renderAdmin() {
       api('GET', '/api/admin/pending-users'),
       api('GET', '/api/admin/awaiting-activation'),
       api('GET', '/api/admin/user-groups'),
+      api('GET', '/api/admin/pending-groups'),
     ]);
-    if (!stats || !users || !dropOpts || !settings || !pendingUsers || !awaitingUsers || !userGroups) return;
-    renderAdminContent(stats, users?.users || [], dropOpts?.options || [], settings, pendingUsers?.users || [], awaitingUsers?.users || [], userGroups?.groups || []);
+    if (!stats || !users || !dropOpts || !settings || !pendingUsers || !awaitingUsers || !userGroups || !pendingGroups) return;
+    renderAdminContent(stats, users?.users || [], dropOpts?.options || [], settings, pendingUsers?.users || [], awaitingUsers?.users || [], userGroups?.groups || [], pendingGroups?.groups || []);
   } catch(e) {
     app().innerHTML = `<div class="view"><div id="admin-alerts"></div></div>`;
     showAlert(e.message, 'error', 'admin-alerts');
   }
 }
 
-function renderAdminContent(stats, users, dropOpts, settings, pendingUsers, awaitingUsers, userGroups) {
+function renderAdminContent(stats, users, dropOpts, settings, pendingUsers, awaitingUsers, userGroups, pendingGroups) {
   const pending = dropOpts.filter(o => !o.approved);
   const approved = dropOpts.filter(o => o.approved);
   const userCards = users.map(u => `
@@ -1983,6 +2064,21 @@ function renderAdminContent(stats, users, dropOpts, settings, pendingUsers, awai
 
     <div class="section-heading">Pending User Proposals</div>
     ${pendingCards}
+
+    <div class="section-heading">Pending Group Proposals ${pendingGroups.length ? `<span class="badge badge-warn" style="margin-left:6px">${pendingGroups.length}</span>` : ''}</div>
+    ${pendingGroups.length ? pendingGroups.map(g => `
+    <div class="card" style="padding:12px">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+        <div>
+          <span style="font-size:.8rem;color:#6b7280">User group</span>
+          <span style="font-weight:700;margin-left:8px">${esc(g.name)}</span>
+        </div>
+        <div style="display:flex;gap:6px">
+          <button class="btn btn-primary btn-sm" onclick="approvePendingGroup(${g.id})">✓ Approve</button>
+          <button class="btn btn-danger btn-sm" onclick="rejectPendingGroup(${g.id})">✗ Reject</button>
+        </div>
+      </div>
+    </div>`).join('') : '<p style="font-size:.85rem;color:#6b7280">No pending group suggestions.</p>'}
 
     <div class="admin-desktop-grid" style="margin-top:0">
       <div>
@@ -2174,6 +2270,22 @@ async function approveDropdown(id) {
 async function deleteDropdown(id) {
   try {
     await api('DELETE', `/api/dropdowns/admin/${id}`, {});
+    renderAdmin();
+  } catch(e) { showAlert(e.message, 'error', 'admin-alerts'); }
+}
+
+async function approvePendingGroup(groupId) {
+  try {
+    await api('POST', `/api/admin/pending-groups/${groupId}/approve`, {});
+    showAlert('Group approved and added to available groups.', 'success', 'admin-alerts');
+    renderAdmin();
+  } catch(e) { showAlert(e.message, 'error', 'admin-alerts'); }
+}
+
+async function rejectPendingGroup(groupId) {
+  try {
+    await api('DELETE', `/api/admin/pending-groups/${groupId}`, {});
+    showAlert('Group suggestion rejected.', 'success', 'admin-alerts');
     renderAdmin();
   } catch(e) { showAlert(e.message, 'error', 'admin-alerts'); }
 }

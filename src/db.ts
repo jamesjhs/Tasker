@@ -144,6 +144,12 @@ function initSchema(db: Database.Database): void {
     db.exec('ALTER TABLE users ADD COLUMN user_group_id INTEGER');
   }
 
+  // Migrate existing databases: add is_approved to user_groups (for pending group proposals)
+  const groupCols = (db.prepare("PRAGMA table_info(user_groups)").all() as { name: string }[]).map(c => c.name);
+  if (!groupCols.includes('is_approved')) {
+    db.exec('ALTER TABLE user_groups ADD COLUMN is_approved INTEGER NOT NULL DEFAULT 1');
+  }
+
   // Migrate existing databases: add assigned_date column if missing
   const taskCols = (db.prepare("PRAGMA table_info(tasks)").all() as { name: string }[]).map(c => c.name);
   if (!taskCols.includes('assigned_date')) {

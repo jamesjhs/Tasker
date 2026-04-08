@@ -181,8 +181,22 @@ router.get('/me', requireAuth, (req: Request, res: Response) => {
 });
 
 router.get('/user-groups', requireAuth, (_req: Request, res: Response) => {
-  const groups = getDb().prepare('SELECT id, name FROM user_groups ORDER BY name').all();
+  const groups = getDb().prepare('SELECT id, name FROM user_groups WHERE is_approved=1 ORDER BY name').all();
   res.json({ groups });
+});
+
+router.post('/propose-group', requireAuth, validateCsrf, requirePasswordChange, requireActivation, (req: Request, res: Response) => {
+  const { name } = req.body as { name: string };
+  const clean = (name || '').trim();
+  if (!clean || clean.length > 100) { res.status(400).json({ error: 'Invalid group name.' }); return; }
+  const db = getDb();
+  const existing = db.prepare('SELECT id, is_approved FROM user_groups WHERE name=?').get(clean) as any;
+  if (existing) {
+    res.json({ message: existing.is_approved ? 'A group with that name already exists.' : 'That group name is already pending review.' });
+    return;
+  }
+  db.prepare('INSERT INTO user_groups (name, is_approved) VALUES (?,0)').run(clean);
+  res.json({ message: 'Group suggestion submitted for admin review.' });
 });
 
 router.post('/set-group', requireAuth, validateCsrf, (req: Request, res: Response) => {
