@@ -1,6 +1,6 @@
 # Tasker — Maintenance and Troubleshooting Manual
 
-**Version 1.3.0 — April 2026**
+**Version 1.4.0 — April 2026**
 
 ---
 
@@ -47,7 +47,7 @@ Tasker stores all data in two SQLite files in the `data/` directory:
 
 ### Backup via the admin panel (recommended)
 
-1. Log in as admin on a mobile device.
+1. Log in as admin.
 2. Scroll to the **Database** section.
 3. Tap **💾 Download Backup**.
 4. The file is downloaded as `tasker-backup-<timestamp>.db`.
@@ -95,9 +95,9 @@ To retain only the last 30 backups, add a cleanup line:
 
 ### Via the admin panel
 
-1. Log in as admin on a mobile device.
+1. Log in as admin.
 2. Scroll to the **Database** section.
-3. Tap **📤 Restore from Backup** and select a `.db` backup file from your phone.
+3. Tap **📤 Restore from Backup** and select a `.db` backup file.
 
 > ⚠️ **This replaces the current database immediately and cannot be undone.** All data since the backup was taken will be lost. Download a fresh backup first if you want to preserve current data.
 
@@ -156,7 +156,7 @@ sudo systemctl restart tasker
 
 ## User management
 
-All user management is done from the **Admin Panel**, accessible by logging in as the admin account from a mobile browser.
+All user management is done from the **Admin Panel**, accessible by logging in as the admin account.
 
 ### Registration settings
 
@@ -221,7 +221,7 @@ Tap **✕** next to any existing option to delete it. Existing tasks that used t
 
 ## Health-check endpoint
 
-Tasker exposes `GET /readyz` for uptime monitoring and heartbeat polling. No authentication is required and the endpoint is exempt from the mobile-only restriction.
+Tasker exposes `GET /readyz` for uptime monitoring and heartbeat polling. No authentication is required.
 
 **Response format:**
 
@@ -229,7 +229,7 @@ Tasker exposes `GET /readyz` for uptime monitoring and heartbeat polling. No aut
 {
   "ok": true,
   "service": "Tasker",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "timestamp": "2026-04-04T12:09:26.477Z"
 }
 ```
@@ -300,7 +300,7 @@ sudo journalctl -u tasker -n 50 --no-pager
 
 ### The application starts but shows a blank screen / spinner
 
-- Open the browser developer tools (or check mobile browser console).
+- Open the browser developer tools.
 - Check for network errors — the browser is likely unable to reach `/api/auth/csrf-token`.
 - Verify the server is running: `systemctl status tasker`.
 - Check that the reverse proxy is correctly forwarding requests.
@@ -363,10 +363,6 @@ The application applies migrations automatically on startup via the `initSchema`
 - SQLite WAL mode is enabled by default and handles concurrent reads well.
 - The application is designed for small teams (tens of users). For very large deployments, consider scheduling backups and the retention job during off-peak hours.
 - If response times are slow, check system resource usage: `top` or `htop`.
-
-### Mobile-only block is too aggressive / not working
-
-The `mobileOnly` middleware checks the browser's `User-Agent` string. If a legitimate mobile device is being blocked, it may be sending an unusual user-agent. Check the request user-agent in the Nginx access log or application logs and consider whether the check needs adjustment in `src/middleware/index.ts`.
 
 ### The app works on HTTP but shows errors on HTTPS
 

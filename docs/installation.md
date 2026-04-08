@@ -1,6 +1,6 @@
 # Tasker — Installation Manual
 
-**Version 1.3.0 — April 2026**
+**Version 1.4.0 — April 2026**
 
 ---
 
@@ -24,7 +24,7 @@
 
 ## Overview
 
-Tasker is a Node.js application that stores its data in a local SQLite database file. It has no external database dependencies. The application serves a mobile-only web interface over HTTP or HTTPS (automatically detected).
+Tasker is a Node.js application that stores its data in a local SQLite database file. It has no external database dependencies. The application serves a web interface over HTTP or HTTPS (automatically detected).
 
 Architecture summary:
 
@@ -169,7 +169,7 @@ db.close();
 
 ### 3. Log in and change the admin password
 
-Open the application in a mobile browser (or a browser with a mobile user-agent). Log in with:
+Open the application in a browser. Log in with:
 
 - **Username:** `admin`
 - **Password:** `Admin123!`
