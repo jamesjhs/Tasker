@@ -21,7 +21,6 @@ html, body {
   padding: 16px 16px 80px;
   max-width: 540px;
   margin: 0 auto;
-  min-height: 100vh;
 }
 .view-header {
   display: flex;

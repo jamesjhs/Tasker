@@ -138,6 +138,10 @@ router.get('/export', async (req: Request, res: Response) => {
     };
   });
 
+  const pendingLog = getDb().prepare(
+    `SELECT count, logged_at FROM pending_task_logs WHERE user_id=? ORDER BY logged_at DESC LIMIT 1`
+  ).get(s.userId) as any;
+
   const wb = new ExcelJS.Workbook();
   const ws = wb.addWorksheet('Tasks');
   ws.columns = [
@@ -153,6 +157,18 @@ router.get('/export', async (req: Request, res: Response) => {
     { header: 'Notes',           key: 'Notes',           width: 32 },
   ];
   ws.addRows(tasks);
+
+  const ws2 = wb.addWorksheet('Summary');
+  ws2.columns = [
+    { header: 'Metric', key: 'Metric', width: 28 },
+    { header: 'Value',  key: 'Value',  width: 20 },
+  ];
+  ws2.addRows([
+    { 'Metric': 'Pending tasks (last logged)', 'Value': pendingLog ? pendingLog.count : '' },
+    { 'Metric': 'Pending tasks logged at',     'Value': pendingLog ? new Date(pendingLog.logged_at) : '' },
+  ]);
+  ws2.getCell('B2').numFmt = 'yyyy-mm-dd hh:mm';
+
   res.setHeader('Content-Disposition', 'attachment; filename="tasker-export.xlsx"');
   res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
   await wb.xlsx.write(res);
