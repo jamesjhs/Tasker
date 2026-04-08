@@ -126,9 +126,27 @@ async function forceSessionExpiry() {
   state.activeTask = null;
   state.csrfToken = null;
   state.registrationConfig = null;
+  renderInactivityLogout();
+}
+
+function renderInactivityLogout() {
+  stopTimer(); stopActivityTracking(); clearCharts(); state.currentView = 'inactivity-logout';
+  replaceHistory('login');
+  app().innerHTML = `
+  <div class="view" style="min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:32px 20px;text-align:center">
+    <div style="font-size:3rem;margin-bottom:16px">🔒</div>
+    <h1 style="font-size:1.5rem;color:#1a56db;margin-bottom:16px">You have been logged out</h1>
+    <div class="alert alert-warning" style="max-width:400px;margin-bottom:24px;text-align:left">
+      <p style="margin-bottom:8px">You have been logged out due to <strong>30 minutes of inactivity</strong>.</p>
+      <p>Any task you were working on has been suspended.</p>
+    </div>
+    <button class="btn btn-primary" onclick="returnToLogin()" style="min-width:220px">🔑 Click here to log in again</button>
+  </div>`;
+}
+
+async function returnToLogin() {
   try { await refreshCsrf(); } catch(e) {}
   await renderLogin();
-  showAlert('Your session expired due to inactivity. Please log in again.', 'error', 'login-alerts');
 }
 
 function checkClientInactivity() {
@@ -1226,8 +1244,8 @@ function renderTaskReview(t, isEdit) {
       ${isEdit ? `
         <button class="btn btn-primary" style="flex:1" onclick="submitTaskReview(${t.id}, true)">💾 Save changes</button>
       ` : `
-        <button class="btn btn-secondary" style="flex:1" onclick="submitTaskReview(${t.id}, false, 'start')">➕ Submit &amp; add another</button>
-        <button class="btn btn-primary" style="flex:1" onclick="submitTaskReview(${t.id}, false, 'analytics')">📊 Submit &amp; analytics</button>
+        <button class="btn btn-primary" style="flex:1" onclick="submitTaskReview(${t.id}, false, 'start')">➕ Submit &amp; add another</button>
+        <button class="btn btn-secondary" style="flex:1" onclick="submitTaskReview(${t.id}, false, 'analytics')">📊 Submit &amp; analytics</button>
         <button class="btn btn-danger btn-sm" onclick="discardFromEnd(${t.id})">🗑</button>
       `}
     </div>
