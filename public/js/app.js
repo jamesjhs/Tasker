@@ -593,6 +593,11 @@ async function doLogin() {
       renderHome();
     });
   } catch(e) {
+    if (/invalid csrf token/i.test(e.message)) {
+      showAlert('Login expired, refreshing…', 'info', 'login-alerts');
+      setTimeout(() => location.reload(), 2000);
+      return;
+    }
     btn.disabled = false; btn.textContent = 'Log in';
     showAlert(e.message, 'error', 'login-alerts');
   }
