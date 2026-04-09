@@ -1624,21 +1624,21 @@ function buildReviewOutcomeGroup(options, current) {
   return `
   <div class="form-group" id="te-out-group">
     <label>Outcome</label>
-    <div class="combo-wrap" id="te-outcome-wrap">
+    <div class="combo-wrap" id="te-outcome">
       <button type="button" id="te-outcome-btn"
               class="combo-btn${displayValue ? '' : ' placeholder'}"
-              onclick="openCombo('te-outcome-wrap','outcome',true)"
+              onclick="openCombo('te-outcome','outcome',true)"
               aria-haspopup="listbox" aria-expanded="false">
         ${displayValue ? esc(displayValue) : '— Select Outcome —'}
       </button>
-      <div class="combo-panel" id="te-outcome-wrap-panel" role="listbox">
-        <input class="combo-search" id="te-outcome-wrap-search" type="text" autocomplete="off"
+      <div class="combo-panel" id="te-outcome-panel" role="listbox">
+        <input class="combo-search" id="te-outcome-search" type="text" autocomplete="off"
                placeholder="Search…"
-               oninput="filterCombo('te-outcome-wrap','outcome',true)"
-               onkeydown="comboKeydown(event,'te-outcome-wrap','outcome',true)">
-        <div class="combo-opts" id="te-outcome-wrap-opts"></div>
+               oninput="filterCombo('te-outcome','outcome',true)"
+               onkeydown="comboKeydown(event,'te-outcome','outcome',true)">
+        <div class="combo-opts" id="te-outcome-opts"></div>
       </div>
-      <input type="hidden" id="te-outcome" value="${esc(displayValue)}">
+      <input type="hidden" id="te-outcome-sel" value="${esc(displayValue)}">
     </div>
     <div id="te-out-new" style="display:none" class="add-new-row">
       <input id="te-out-new-input" class="input" type="text" placeholder="Type new outcome…">
@@ -1657,7 +1657,7 @@ async function submitNewOutcomeEnd() {
   if (!val) return;
   try {
     await api('POST', '/api/dropdowns/propose', { field_name: 'outcome', value: val });
-    const hidden = document.getElementById('te-outcome');
+    const hidden = document.getElementById('te-outcome-sel');
     const btn    = document.getElementById('te-outcome-btn');
     if (hidden) hidden.value = val;
     if (btn) { btn.textContent = val + ' (pending)'; btn.classList.remove('placeholder'); }
@@ -1684,7 +1684,7 @@ async function submitTaskReview(taskId, isEdit, dest) {
   const start = document.getElementById('te-start')?.value;
   const end = document.getElementById('te-end')?.value;
   if (!end) { showAlert('Please set an end time.', 'error', 'te-alerts'); return; }
-  const outcome = document.getElementById('te-outcome')?.value || null;
+  const outcome = document.getElementById('te-outcome-sel')?.value || null;
   if (!outcome) { showAlert('Please select an Outcome.', 'error', 'te-alerts'); return; }
   const dutyEl = document.getElementById('te-duty');
   const categoryVal = document.getElementById('te-category-sel')?.value || t.category || null;
@@ -1782,14 +1782,28 @@ function buildHistoryParams() {
   const to = document.getElementById('h-to')?.value || '';
   const isDuty = document.getElementById('h-duty')?.value || '';
   const cat = document.getElementById('h-cat')?.value || '';
+  const sub = document.getElementById('h-sub')?.value || '';
   const out = document.getElementById('h-out')?.value || '';
   const parts = [];
   if (from) parts.push('from=' + encodeURIComponent(from));
   if (to) parts.push('to=' + encodeURIComponent(to));
   if (isDuty) parts.push('is_duty=' + (isDuty === 'duty' ? 'true' : 'false'));
   if (cat) parts.push('category=' + encodeURIComponent(cat));
+  if (sub) parts.push('subcategory=' + encodeURIComponent(sub));
   if (out) parts.push('outcome=' + encodeURIComponent(out));
   return parts.length ? '?' + parts.join('&') : '';
+}
+
+function setDatePreset(days) {
+  const to = new Date();
+  const from = new Date();
+  from.setDate(from.getDate() - days + 1);
+  const fmt = d => d.toISOString().split('T')[0];
+  const fromEl = document.getElementById('h-from');
+  const toEl = document.getElementById('h-to');
+  if (fromEl) fromEl.value = fmt(from);
+  if (toEl) toEl.value = fmt(to);
+  renderAnalyticsHistory();
 }
 
 function renderAnalyticsContent(data, mode, pendingLog) {
@@ -1800,38 +1814,53 @@ function renderAnalyticsContent(data, mode, pendingLog) {
     : '—';
 
   const filterBar = isHistory ? `
-  <div class="filter-bar" style="margin-bottom:16px">
-    <div class="form-group" style="margin-bottom:0">
-      <label>From date</label>
-      <input id="h-from" class="input" type="date">
+  <div class="card filter-card" style="margin-bottom:14px">
+    <div class="card-title">🔍 Filter & Date Range</div>
+    <div class="date-preset-group">
+      <button class="btn btn-sm btn-secondary" onclick="setDatePreset(7)">7 days</button>
+      <button class="btn btn-sm btn-secondary" onclick="setDatePreset(14)">14 days</button>
+      <button class="btn btn-sm btn-secondary" onclick="setDatePreset(30)">30 days</button>
     </div>
-    <div class="form-group" style="margin-bottom:0">
-      <label>To date</label>
-      <input id="h-to" class="input" type="date">
+    <div class="filter-bar" style="margin-bottom:0">
+      <div class="form-group" style="margin-bottom:0">
+        <label>From date</label>
+        <input id="h-from" class="input" type="date">
+      </div>
+      <div class="form-group" style="margin-bottom:0">
+        <label>To date</label>
+        <input id="h-to" class="input" type="date">
+      </div>
+      <div class="form-group" style="margin-bottom:0">
+        <label>Type</label>
+        <select id="h-duty" class="select">
+          <option value="">All</option>
+          <option value="duty">My Group only</option>
+          <option value="personal">Personal only</option>
+        </select>
+      </div>
+      <div class="form-group" style="margin-bottom:0">
+        <label>Category</label>
+        <select id="h-cat" class="select">
+          <option value="">All</option>
+          ${state.dropdowns.category.map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join('')}
+        </select>
+      </div>
+      <div class="form-group" style="margin-bottom:0">
+        <label>Task type</label>
+        <select id="h-sub" class="select">
+          <option value="">All</option>
+          ${state.dropdowns.subcategory.map(o => `<option value="${esc(o)}">${esc(o)}</option>`).join('')}
+        </select>
+      </div>
+      <div class="form-group" style="margin-bottom:0">
+        <label>Outcome</label>
+        <select id="h-out" class="select">
+          <option value="">All</option>
+          ${state.dropdowns.outcome.map(o => `<option value="${esc(o)}">${esc(o)}</option>`).join('')}
+        </select>
+      </div>
+      <button class="btn btn-primary btn-full" onclick="renderAnalyticsHistory()">Apply Filters</button>
     </div>
-    <div class="form-group" style="margin-bottom:0">
-      <label>Type</label>
-      <select id="h-duty" class="select">
-        <option value="">All</option>
-        <option value="duty">My Group only</option>
-        <option value="personal">Personal only</option>
-      </select>
-    </div>
-    <div class="form-group" style="margin-bottom:0">
-      <label>Category</label>
-      <select id="h-cat" class="select">
-        <option value="">All</option>
-        ${state.dropdowns.category.map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join('')}
-      </select>
-    </div>
-    <div class="form-group" style="margin-bottom:0">
-      <label>Outcome</label>
-      <select id="h-out" class="select">
-        <option value="">All</option>
-        ${state.dropdowns.outcome.map(o => `<option value="${esc(o)}">${esc(o)}</option>`).join('')}
-      </select>
-    </div>
-    <button class="btn btn-primary btn-full" onclick="renderAnalyticsHistory()">Apply Filters</button>
   </div>` : '';
 
   const taskCards = tasks.map(t => {
@@ -1854,8 +1883,24 @@ function renderAnalyticsContent(data, mode, pendingLog) {
 
   const regressionNote = s.regression ? `
   <div class="alert alert-info" style="font-size:.85rem">
-    📈 Trend: ${s.regression.slope > 0 ? '+' : ''}${s.regression.slope} tasks/day (R²=${s.regression.r2})
+    📈 Trend: ${s.regression.slope > 0 ? '+' : ''}${s.regression.slope} tasks/day &nbsp;·&nbsp; R²=${s.regression.r2}${Math.abs(s.regression.slope) < 0.1 ? ' (stable)' : s.regression.slope > 0 ? ' (increasing)' : ' (decreasing)'}
   </div>` : '';
+
+  // Build insight cards
+  const insightItems = buildInsights(s);
+  const insightSection = insightItems.length > 0 ? `
+  <div class="card">
+    <div class="card-title">💡 Insights</div>
+    <div class="insights-grid">${insightItems.map(i => `<div class="insight-item">${i}</div>`).join('')}</div>
+  </div>` : '';
+
+  // Determine which charts to show
+  const hasMultiDates = isHistory && s.dates?.length > 1;
+  const subLabels = Object.keys(s.bySubcategory || {}).filter(k => k !== 'Unspecified' || Object.keys(s.bySubcategory).length === 1);
+  const hasSubcategory = subLabels.length > 0;
+  const hasHour = Object.keys(s.byHour || {}).length > 0;
+  const hasDow = Object.keys(s.byDayOfWeek || {}).length > 0;
+  const hasOutcome = Object.keys(s.byOutcome || {}).length > 0;
 
   app().innerHTML = `
   <div class="view">
@@ -1864,28 +1909,59 @@ function renderAnalyticsContent(data, mode, pendingLog) {
     </div>
     <div class="retention-notice">⏳ Your data is automatically deleted after 30 days.</div>
     ${filterBar}
-    <div class="stat-grid">
+    <div class="stat-grid stat-grid-3">
       <div class="stat-card"><div class="stat-number">${s.total}</div><div class="stat-label">Total tasks</div></div>
       <div class="stat-card"><div class="stat-number">${s.totalMins}</div><div class="stat-label">Total mins</div></div>
+      <div class="stat-card"><div class="stat-number">${s.avgDurMins ?? 0}</div><div class="stat-label">Avg mins/task</div></div>
       <div class="stat-card"><div class="stat-number">${s.dutyCount}</div><div class="stat-label">My Group tasks</div></div>
       <div class="stat-card"><div class="stat-number">${s.personalCount}</div><div class="stat-label">Personal</div></div>
       <div class="stat-card"><div class="stat-number">${s.totalInterruptions || 0}</div><div class="stat-label">Interruptions</div></div>
+      <div class="stat-card"><div class="stat-number">${s.avgInterruptionsPerTask ?? 0}</div><div class="stat-label">Avg intr/task</div></div>
       <div class="stat-card"><div class="stat-number">${pendingLabel}</div><div class="stat-label">Pending tasks</div></div>
     </div>
     ${regressionNote}
+    ${insightSection}
     ${s.total > 0 ? `
     <div class="card">
-      <div class="card-title">Time by Category</div>
+      <div class="card-title">Time by Category (mins)</div>
       <div class="chart-container" style="height:240px"><canvas id="chart-cat"></canvas></div>
+    </div>
+    ${hasOutcome ? `
+    <div class="card">
+      <div class="card-title">Outcome Distribution</div>
+      <div class="chart-container" style="height:220px"><canvas id="chart-outcome"></canvas></div>
+    </div>` : ''}
+    <div class="card">
+      <div class="card-title">Avg Duration by Category (mins)</div>
+      <div class="chart-container" style="height:${Math.max(180, Object.keys(s.byCategory).length * 44)}px"><canvas id="chart-cat-dur"></canvas></div>
     </div>
     <div class="card">
       <div class="card-title">My Group vs Personal</div>
       <div class="chart-container" style="height:200px"><canvas id="chart-split"></canvas></div>
     </div>
-    ${isHistory && s.dates?.length > 1 ? `
+    ${hasSubcategory ? `
     <div class="card">
-      <div class="card-title">Tasks Over Time</div>
+      <div class="card-title">Tasks by Type</div>
+      <div class="chart-container" style="height:${Math.max(180, subLabels.length * 44)}px"><canvas id="chart-sub"></canvas></div>
+    </div>` : ''}
+    ${hasHour ? `
+    <div class="card">
+      <div class="card-title">Activity by Hour of Day</div>
+      <div class="chart-container" style="height:200px"><canvas id="chart-hour"></canvas></div>
+    </div>` : ''}
+    ${hasDow ? `
+    <div class="card">
+      <div class="card-title">Activity by Day of Week</div>
+      <div class="chart-container" style="height:200px"><canvas id="chart-dow"></canvas></div>
+    </div>` : ''}
+    ${hasMultiDates ? `
+    <div class="card">
+      <div class="card-title">Tasks &amp; Time Over Time</div>
       <div class="chart-container" style="height:220px"><canvas id="chart-trend"></canvas></div>
+    </div>
+    <div class="card">
+      <div class="card-title">Interruptions Over Time</div>
+      <div class="chart-container" style="height:200px"><canvas id="chart-intr-trend"></canvas></div>
     </div>` : ''}
     ` : '<div class="card"><p style="color:#6b7280;text-align:center;padding:20px">No completed tasks yet.</p></div>'}
     <div style="display:flex;gap:10px;margin-bottom:12px;flex-wrap:wrap">
@@ -1900,28 +1976,140 @@ function renderAnalyticsContent(data, mode, pendingLog) {
 
   // Render charts
   if (s.total > 0) {
-    // Category doughnut
+    // Category time doughnut
     const catLabels = Object.keys(s.byCategory);
     const catMins = catLabels.map(k => s.byCategory[k].minutes);
     renderChart('chart-cat', 'doughnut', catLabels, [{ data: catMins, backgroundColor: COLORS }], { plugins: { legend: { position: 'bottom' } } });
 
+    // Outcome distribution doughnut
+    if (hasOutcome) {
+      const outLabels = Object.keys(s.byOutcome);
+      const outCounts = outLabels.map(k => s.byOutcome[k]);
+      renderChart('chart-outcome', 'doughnut', outLabels, [{ data: outCounts, backgroundColor: COLORS }], { plugins: { legend: { position: 'bottom' } } });
+    }
+
+    // Avg duration by category horizontal bar
+    const catAvgLabels = catLabels;
+    const catAvgMins = catLabels.map(k => s.byCategory[k].count > 0 ? Math.round(s.byCategory[k].minutes / s.byCategory[k].count) : 0);
+    renderChart('chart-cat-dur', 'bar', catAvgLabels, [{ label: 'Avg mins', data: catAvgMins, backgroundColor: COLORS }],
+      { indexAxis: 'y', plugins: { legend: { display: false } }, scales: { x: { beginAtZero: true } } });
+
     // My Group vs personal bar
     renderChart('chart-split', 'bar', ['My Group', 'Personal'],
-      [{ label: 'Tasks', data: [s.dutyCount, s.personalCount], backgroundColor: ['#1a56db','#7c3aed'] }],
-      { indexAxis: 'y', plugins: { legend: { display: false } } });
+      [
+        { label: 'Tasks', data: [s.dutyCount, s.personalCount], backgroundColor: ['#1a56db','#7c3aed'] },
+        { label: 'Mins', data: [s.dutyMins || 0, s.personalMins || 0], backgroundColor: ['rgba(26,86,219,.4)','rgba(124,58,237,.4)'] },
+      ],
+      { plugins: { legend: { position: 'bottom' } } });
 
-    // Trend line (history only)
-    if (isHistory && s.dates?.length > 1) {
+    // Subcategory horizontal bar
+    if (hasSubcategory) {
+      const subCounts = subLabels.map(k => s.bySubcategory[k].count);
+      renderChart('chart-sub', 'bar', subLabels, [{ label: 'Tasks', data: subCounts, backgroundColor: COLORS }],
+        { indexAxis: 'y', plugins: { legend: { display: false } }, scales: { x: { beginAtZero: true } } });
+    }
+
+    // Hour-of-day bar chart
+    if (hasHour) {
+      const hourKeys = Array.from({ length: 24 }, (_, i) => i);
+      const hourLabels = hourKeys.map(h => h === 0 ? '12am' : h < 12 ? `${h}am` : h === 12 ? '12pm' : `${h - 12}pm`);
+      const hourCounts = hourKeys.map(h => (s.byHour[h] || { count: 0 }).count);
+      renderChart('chart-hour', 'bar', hourLabels, [{ label: 'Tasks', data: hourCounts, backgroundColor: '#1a56db' }],
+        { plugins: { legend: { display: false } }, scales: { x: { ticks: { maxRotation: 45 } }, y: { beginAtZero: true, ticks: { stepSize: 1 } } } });
+    }
+
+    // Day-of-week bar chart
+    if (hasDow) {
+      const dowNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+      const dowCounts = dowNames.map((_, i) => (s.byDayOfWeek[i] || { count: 0 }).count);
+      renderChart('chart-dow', 'bar', dowNames, [{ label: 'Tasks', data: dowCounts, backgroundColor: COLORS }],
+        { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } } });
+    }
+
+    // Trend + interruptions over time (history only)
+    if (hasMultiDates) {
+      const shortDates = s.dates.map(d => {
+        const parts = d.split('-');
+        return parts.length === 3 ? `${parseInt(parts[2])}/${parseInt(parts[1])}` : d;
+      });
       const counts = s.dates.map(d => s.byDate[d].count);
-      const datasets = [{ label: 'Tasks', data: counts, borderColor: '#1a56db', backgroundColor: 'rgba(26,86,219,.1)', tension: 0.3, fill: true }];
+      const mins_ = s.dates.map(d => s.byDate[d].minutes);
+      const trendDatasets = [
+        { label: 'Tasks', data: counts, borderColor: '#1a56db', backgroundColor: 'rgba(26,86,219,.1)', tension: 0.3, fill: true, yAxisID: 'y' },
+        { label: 'Mins', data: mins_, borderColor: '#059669', backgroundColor: 'rgba(5,150,105,.08)', tension: 0.3, fill: false, yAxisID: 'y1' },
+      ];
       if (s.regression) {
-        const n = s.dates.length;
         const reg = s.dates.map((_, i) => Math.round((s.regression.slope * i + s.regression.intercept) * 10) / 10);
-        datasets.push({ label: 'Trend', data: reg, borderColor: '#dc2626', borderDash: [5,5], pointRadius: 0, tension: 0 });
+        trendDatasets.push({ label: 'Count trend', data: reg, borderColor: '#dc2626', borderDash: [5,5], pointRadius: 0, tension: 0, fill: false, yAxisID: 'y' });
       }
-      renderChart('chart-trend', 'line', s.dates, datasets, { plugins: { legend: { position: 'bottom' } } });
+      renderChart('chart-trend', 'line', shortDates, trendDatasets, {
+        plugins: { legend: { position: 'bottom' } },
+        scales: {
+          y:  { beginAtZero: true, position: 'left',  title: { display: true, text: 'Tasks' }, ticks: { stepSize: 1 } },
+          y1: { beginAtZero: true, position: 'right', title: { display: true, text: 'Mins'  }, grid: { drawOnChartArea: false } },
+        },
+      });
+
+      // Interruptions over time line
+      const intrCounts = s.dates.map(d => {
+        const dayTasks = tasks.filter(t => (t.start_time || '').startsWith(d));
+        return dayTasks.reduce((n, t) => n + (t.interruptions?.length || 0), 0);
+      });
+      renderChart('chart-intr-trend', 'line', shortDates,
+        [{ label: 'Interruptions', data: intrCounts, borderColor: '#d97706', backgroundColor: 'rgba(217,119,6,.1)', tension: 0.3, fill: true }],
+        { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } } });
     }
   }
+}
+
+function buildInsights(s) {
+  if (s.total === 0) return [];
+  const items = [];
+
+  // Busiest hour
+  const hourEntries = Object.entries(s.byHour || {});
+  if (hourEntries.length > 0) {
+    const [h] = hourEntries.sort((a, b) => b[1].count - a[1].count)[0];
+    const hour = parseInt(h);
+    const label = hour === 0 ? '12am' : hour < 12 ? `${hour}am` : hour === 12 ? '12pm' : `${hour - 12}pm`;
+    items.push(`🕐 <strong>Busiest hour:</strong> ${label}`);
+  }
+
+  // Busiest day of week
+  const dowEntries = Object.entries(s.byDayOfWeek || {});
+  if (dowEntries.length > 0) {
+    const [d] = dowEntries.sort((a, b) => b[1].count - a[1].count)[0];
+    const dayNames = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+    items.push(`📅 <strong>Busiest day:</strong> ${dayNames[parseInt(d)]}`);
+  }
+
+  // Most time-consuming category
+  const catEntries = Object.entries(s.byCategory || {});
+  if (catEntries.length > 0) {
+    const [cat, cv] = catEntries.sort((a, b) => b[1].minutes - a[1].minutes)[0];
+    items.push(`⏱️ <strong>Most time:</strong> ${esc(cat)} (${cv.minutes}m)`);
+  }
+
+  // Most interrupted category
+  const intrCatEntries = Object.entries(s.interruptionsByCategory || {}).filter(([,v]) => v > 0);
+  if (intrCatEntries.length > 0) {
+    const [cat] = intrCatEntries.sort((a, b) => b[1] - a[1])[0];
+    items.push(`⚠️ <strong>Most interrupted:</strong> ${esc(cat)}`);
+  }
+
+  // Efficiency: avg duration note
+  if (s.avgDurMins > 0) {
+    const note = s.avgDurMins < 10 ? 'short tasks' : s.avgDurMins < 30 ? 'moderate tasks' : 'longer tasks';
+    items.push(`📊 <strong>Avg task:</strong> ${s.avgDurMins}m (${note})`);
+  }
+
+  // Interruption rate: percentage of tasks that had at least one interruption
+  if (s.total > 0 && s.tasksWithInterruptions > 0) {
+    const pct = Math.round((s.tasksWithInterruptions / s.total) * 100);
+    items.push(`🔔 <strong>Interruption rate:</strong> ${pct}% of tasks`);
+  }
+
+  return items;
 }
 
 const COLORS = ['#1a56db','#7c3aed','#059669','#d97706','#dc2626','#0891b2','#65a30d','#9333ea'];
