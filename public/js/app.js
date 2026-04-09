@@ -8,9 +8,9 @@ const INACTIVITY_MS = 30 * 60 * 1000; // 30 minutes
 
 const state = {
   csrfToken: null,
-  user: null,           // { username, isAdmin, mustChangePassword }
+  user: null,           // { username, isAdmin, mustChangePassword, userGroupId, userGroupName }
   registrationConfig: null, // { selfRegistration, userInvite }
-  appStats: null,       // { userCount, eventCount }
+  appStats: null,       // { userCount, taskCount }
   activeTask: null,     // current in_progress task
   timerInterval: null,
   activityInterval: null,
@@ -27,6 +27,8 @@ const state = {
 
 // ── History management ────────────────────────────────────────────────────────
 let _popstateActive = false;
+let _groupSelectionCb = null; // callback after group selection completes
+let _myOptionsCb = null;      // callback after personal options step completes
 
 function pushHistory(view) {
   if (_popstateActive || window.history.state?.view === view) return;
@@ -69,6 +71,156 @@ const app = () => document.getElementById('app');
 const esc = str => str == null ? '' : String(str)
   .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
   .replace(/"/g,'&quot;').replace(/'/g,'&#039;');
+// Sanitise values used as HTML attribute identifiers (strip everything except a-z A-Z 0-9 - _)
+const safeId = str => str == null ? '' : String(str).replace(/[^a-zA-Z0-9\-_]/g, '');
+
+// ── Combobox (integrated searchable dropdown) ────────────────────────────────
+let _comboOpenId = null;
+
+/** Close all open combos except optionally one */
+function closeAllCombos(exceptId) {
+  if (_comboOpenId && _comboOpenId !== exceptId) {
+    const p = document.getElementById(`${_comboOpenId}-panel`);
+    const b = document.getElementById(`${_comboOpenId}-btn`);
+    if (p) p.classList.remove('open');
+    if (b) { b.classList.remove('open'); b.classList.remove('placeholder'); }
+    _comboOpenId = null;
+  }
+}
+
+function openCombo(id, field, hasNew) {
+  closeAllCombos(id);
+  const panel = document.getElementById(`${id}-panel`);
+  const btn   = document.getElementById(`${id}-btn`);
+  if (!panel) return;
+  const isOpen = panel.classList.contains('open');
+  if (isOpen) { closeCombo(id); return; }
+  panel.classList.add('open');
+  if (btn) btn.classList.add('open');
+  _comboOpenId = id;
+  renderComboOpts(id, field, hasNew, '');
+  const search = document.getElementById(`${id}-search`);
+  if (search) { search.value = ''; setTimeout(() => search.focus(), 30); }
+}
+
+function closeCombo(id) {
+  const panel = document.getElementById(`${id}-panel`);
+  const btn   = document.getElementById(`${id}-btn`);
+  if (panel) panel.classList.remove('open');
+  if (btn) btn.classList.remove('open');
+  if (_comboOpenId === id) _comboOpenId = null;
+}
+
+function renderComboOpts(id, field, hasNew, query) {
+  const container = document.getElementById(`${id}-opts`);
+  if (!container) return;
+  const all = state.dropdowns[field] || [];
+  const filtered = query ? all.filter(o => o.toLowerCase().includes(query.toLowerCase())) : all;
+  const sid = safeId(id);
+  const sfield = safeId(field);
+  let html = '';
+  if (filtered.length === 0 && !hasNew) {
+    html = `<div class="combo-opt combo-empty">No matching options</div>`;
+  } else {
+    html = filtered.map((o,i) =>
+      `<div class="combo-opt" data-idx="${i}" onmousedown="selectComboOpt('${sid}','${sfield}','${esc(o)}')">${esc(o)}</div>`
+    ).join('');
+  }
+  if (hasNew) html += `<div class="combo-opt combo-new" onmousedown="comboAddNew('${sid}','${sfield}')">+ Add new option…</div>`;
+  container.innerHTML = html;
+}
+
+function filterCombo(id, field, hasNew) {
+  const search = document.getElementById(`${id}-search`);
+  renderComboOpts(id, field, hasNew, search ? search.value.trim() : '');
+}
+
+function selectComboOpt(id, field, value) {
+  const hidden = document.getElementById(`${id}-sel`);
+  const btn    = document.getElementById(`${id}-btn`);
+  if (hidden) hidden.value = value;
+  if (btn) { btn.textContent = value; btn.classList.remove('placeholder'); }
+  state.taskForm[field] = value;
+  closeCombo(id);
+  // hide add-new row if it was open
+  const newDiv = document.getElementById(`${id}-new`);
+  if (newDiv) newDiv.style.display = 'none';
+}
+
+function clearComboSelection(id, field, label) {
+  const hidden = document.getElementById(`${id}-sel`);
+  const btn    = document.getElementById(`${id}-btn`);
+  if (hidden) hidden.value = '';
+  if (btn) { btn.textContent = `— Select ${label} —`; btn.classList.add('placeholder'); }
+  state.taskForm[field] = null;
+}
+
+function comboAddNew(id, field) {
+  closeCombo(id);
+  const newDiv = document.getElementById(`${id}-new`);
+  if (newDiv) { newDiv.style.display = 'flex'; document.getElementById(`${id}-new-input`)?.focus(); }
+}
+
+function comboKeydown(ev, id, field, hasNew) {
+  const opts = document.querySelectorAll(`#${id}-opts .combo-opt:not(.combo-empty)`);
+  const active = document.querySelector(`#${id}-opts .combo-active`);
+  let idx = active ? Array.from(opts).indexOf(active) : -1;
+  if (ev.key === 'ArrowDown') {
+    ev.preventDefault();
+    idx = Math.min(idx + 1, opts.length - 1);
+    opts.forEach((o, i) => o.classList.toggle('combo-active', i === idx));
+    opts[idx]?.scrollIntoView({ block: 'nearest' });
+  } else if (ev.key === 'ArrowUp') {
+    ev.preventDefault();
+    idx = Math.max(idx - 1, 0);
+    opts.forEach((o, i) => o.classList.toggle('combo-active', i === idx));
+    opts[idx]?.scrollIntoView({ block: 'nearest' });
+  } else if (ev.key === 'Enter') {
+    ev.preventDefault();
+    if (active) active.dispatchEvent(new MouseEvent('mousedown'));
+    else closeCombo(id);
+  } else if (ev.key === 'Escape') {
+    closeCombo(id);
+  }
+}
+
+// Close combo on outside click
+document.addEventListener('mousedown', (e) => {
+  if (!_comboOpenId) return;
+  const wrap = document.getElementById(`${_comboOpenId}-wrap`);
+  if (wrap && !wrap.contains(e.target)) closeCombo(_comboOpenId);
+});
+
+/** Build HTML for an integrated searchable combobox */
+function buildComboBox(field, label, options, id, hasNew, current) {
+  const displayValue = current || '';
+  const sid = safeId(id);
+  const sfield = safeId(field);
+  return `
+  <div class="form-group" id="${sid}-group">
+    <label>${esc(label)}</label>
+    <div class="combo-wrap" id="${sid}-wrap">
+      <button type="button" id="${sid}-btn"
+              class="combo-btn${displayValue ? '' : ' placeholder'}"
+              onclick="openCombo('${sid}','${sfield}',${hasNew ? 'true' : 'false'})"
+              aria-haspopup="listbox" aria-expanded="false">
+        ${displayValue ? esc(displayValue) : `— Select ${esc(label)} —`}
+      </button>
+      <div class="combo-panel" id="${sid}-panel" role="listbox">
+        <input class="combo-search" id="${sid}-search" type="text" autocomplete="off"
+               placeholder="Search…"
+               oninput="filterCombo('${sid}','${sfield}',${hasNew ? 'true' : 'false'})"
+               onkeydown="comboKeydown(event,'${sid}','${sfield}',${hasNew ? 'true' : 'false'})">
+        <div class="combo-opts" id="${sid}-opts"></div>
+      </div>
+      <input type="hidden" id="${sid}-sel" value="${esc(displayValue)}">
+    </div>
+    ${hasNew ? `<div id="${sid}-new" style="display:none" class="add-new-row">
+      <input id="${sid}-new-input" class="input" type="text" placeholder="Type new ${esc(label.toLowerCase())}…">
+      <button class="btn btn-outline btn-sm" onclick="submitNewOption('${sid}','${sfield}')">Submit</button>
+    </div>` : ''}
+  </div>`;
+}
 
 function isMobileDevice() {
   return /Mobile|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
@@ -331,7 +483,7 @@ function renderStatsCards(stats, marginTop = '20px') {
   return `
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:${marginTop}">
       <div class="stat-card"><div class="stat-number">${stats.userCount}</div><div class="stat-label">Registered users</div></div>
-      <div class="stat-card"><div class="stat-number">${stats.eventCount}</div><div class="stat-label">Events logged</div></div>
+      <div class="stat-card"><div class="stat-number">${stats.taskCount}</div><div class="stat-label">Tasks logged</div></div>
     </div>`;
 }
 
@@ -402,14 +554,18 @@ async function doLogin() {
   try {
     const d = await api('POST', '/api/auth/login', { username, password });
     if (!d) return;
-    state.user = { username, isAdmin: d.isAdmin, mustChangePassword: d.mustChangePassword, pendingActivation: d.pendingActivation };
+    state.user = { username, isAdmin: d.isAdmin, mustChangePassword: d.mustChangePassword, pendingActivation: d.pendingActivation, userGroupId: d.userGroupId ?? null, userGroupName: d.userGroupName ?? null };
     await refreshCsrf();
     if (d.mustChangePassword) { renderChangePassword(); return; }
     if (d.pendingActivation) { renderAwaitActivation(); return; }
     await loadDropdowns();
     await checkActiveTask();
     startActivityTracking();
-    renderPrivacySplash(() => { d.isAdmin ? renderAdmin() : renderHome(); });
+    renderPrivacySplash(async () => {
+      if (d.isAdmin) { renderAdmin(); return; }
+      if (!state.user.userGroupId) { await renderGroupSelection(() => renderHome()); return; }
+      renderHome();
+    });
   } catch(e) {
     btn.disabled = false; btn.textContent = 'Log in';
     showAlert(e.message, 'error', 'login-alerts');
@@ -460,6 +616,203 @@ function renderPrivacySplash(onContinue) {
   document.getElementById('splash-continue-btn').addEventListener('click', () => {
     overlay.remove();
     onContinue();
+  });
+}
+
+// ── GROUP SELECTION ───────────────────────────────────────────────────────────
+async function renderGroupSelection(onContinue) {
+  _groupSelectionCb = onContinue;
+  stopTimer(); clearCharts(); state.currentView = 'group-selection';
+  replaceHistory('group-selection');
+  app().innerHTML = `<div class="view"><p class="loading">Loading groups…</p></div>`;
+  let groups = [];
+  try {
+    const d = await api('GET', '/api/auth/user-groups');
+    groups = d?.groups || [];
+  } catch(e) {}
+  const groupOpts = groups.map(g => `
+    <button class="card" id="gsel-${g.id}" onclick="selectGroupOption(${g.id})" style="padding:14px;cursor:pointer;border:2px solid #e5e7eb;margin-bottom:8px;width:100%;text-align:left;background:#fff;border-radius:8px">
+      <span style="font-weight:600;font-size:1rem">${esc(g.name)}</span>
+    </button>`).join('');
+  app().innerHTML = `
+  <div class="view">
+    <h1 style="margin-bottom:8px;color:#1a56db">👥 Choose Your Group</h1>
+    <p style="font-size:.9rem;color:#6b7280;margin-bottom:12px">
+      Your group determines which task origin, type and outcome options appear in your dropdown lists.
+      You can change this later in Settings.
+    </p>
+    <div class="alert alert-info" style="margin-bottom:16px;font-size:.85rem">
+      🔒 <strong>Your privacy:</strong> Your group selection is used only to personalise your dropdown options and for aggregate audit purposes. It does not make your account identifiable and is not visible to administrators.
+    </div>
+    <div id="group-alerts"></div>
+    ${groupOpts || '<div class="alert alert-info">No user groups have been set up yet. Ask your administrator.</div>'}
+    <div style="display:flex;gap:10px;margin-top:8px">
+      <button class="btn btn-primary btn-full" id="gsel-btn" onclick="doSetGroup()" ${groups.length ? '' : 'disabled'}>✓ Continue with selected group</button>
+    </div>
+    <button class="btn btn-secondary btn-full" style="margin-top:8px" onclick="skipGroupSelection()">Skip for now</button>
+    <div style="margin-top:20px;border-top:1px solid #e5e7eb;padding-top:16px">
+      <p style="font-size:.85rem;color:#6b7280;margin-bottom:6px">Don't see your group? Suggest one for admin review.</p>
+      <div class="alert alert-warning" style="font-size:.8rem;margin-bottom:8px">⚠️ Do not include any patient, staff, location, or other personally identifiable information in group names.</div>
+      <div class="add-new-row">
+        <input id="gsel-propose-input" class="input" style="flex:1" type="text" maxlength="100" placeholder="Suggest a group name…">
+        <button class="btn btn-outline btn-sm" onclick="proposeGroupName('group-alerts')">Suggest</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+function selectGroupOption(id) {
+  document.querySelectorAll('[id^="gsel-"]').forEach(el => {
+    el.style.borderColor = el.id === `gsel-${id}` ? '#1a56db' : '#e5e7eb';
+    el.style.background = el.id === `gsel-${id}` ? '#eff6ff' : '';
+  });
+  state._pendingGroupId = id;
+}
+
+async function doSetGroup() {
+  const groupId = state._pendingGroupId ?? null;
+  if (!groupId) { showAlert('Please select a group.', 'error', 'group-alerts'); return; }
+  const btn = document.getElementById('gsel-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+  try {
+    await api('POST', '/api/auth/set-group', { groupId });
+    if (state.user) {
+      const groupEl = document.getElementById(`gsel-${groupId}`);
+      state.user.userGroupId = groupId;
+      state.user.userGroupName = groupEl?.querySelector('span')?.textContent || null;
+    }
+    state._pendingGroupId = null;
+    await loadDropdowns();
+    // Show personal options customisation step
+    const onContinue = () => {
+      if (_groupSelectionCb) { const cb = _groupSelectionCb; _groupSelectionCb = null; cb(); }
+    };
+    await renderMyOptionsStep(state.user?.userGroupName || 'your group', onContinue);
+  } catch(e) {
+    if (btn) { btn.disabled = false; btn.textContent = '✓ Continue with selected group'; }
+    showAlert(e.message, 'error', 'group-alerts');
+  }
+}
+
+function skipGroupSelection() {
+  state._pendingGroupId = null;
+  if (_groupSelectionCb) { const cb = _groupSelectionCb; _groupSelectionCb = null; cb(); }
+}
+
+async function proposeGroupName(alertContainerId) {
+  const input = document.getElementById('gsel-propose-input');
+  const val = (input?.value || '').trim();
+  if (!val) return;
+  try {
+    const d = await api('POST', '/api/auth/propose-group', { name: val });
+    if (input) input.value = '';
+    showAlert(d?.message || 'Group suggestion submitted for admin review.', 'success', alertContainerId);
+  } catch(e) { showAlert(e.message, 'error', alertContainerId); }
+}
+
+// ── MY OPTIONS (personal dropdown customisation) ──────────────────────────────
+async function _loadAndShowMyOptions(groupName, onContinue, historyEntry) {
+  _myOptionsCb = onContinue;
+  state.currentView = 'my-options';
+  if (historyEntry === 'replace') replaceHistory('my-options');
+  else if (historyEntry === 'push') pushHistory('my-options');
+  app().innerHTML = `<div class="view"><p class="loading">Loading options…</p></div>`;
+  let options = [];
+  try {
+    const d = await api('GET', '/api/auth/my-options');
+    options = d?.options || [];
+  } catch(e) {}
+  app().innerHTML = buildMyOptionsPage(groupName, options);
+}
+
+async function renderMyOptionsStep(groupName, onContinue) {
+  await _loadAndShowMyOptions(groupName, onContinue, 'replace');
+}
+
+async function openMyOptionsModal() {
+  await _loadAndShowMyOptions(
+    state.user?.userGroupName || 'your group',
+    () => renderSettings(),
+    'push'
+  );
+}
+
+function buildMyOptionsPage(groupName, options) {
+  const byField = {};
+  for (const o of options) {
+    if (!byField[o.field_name]) byField[o.field_name] = [];
+    byField[o.field_name].push(o);
+  }
+  const fieldLabels = { category: 'Task from', subcategory: 'Task type', outcome: 'Outcome' };
+  const sections = ['category', 'subcategory', 'outcome'].map(field => {
+    const opts = (byField[field] || []).map(o => `
+      <label style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid #f3f4f6;cursor:pointer">
+        <input type="checkbox" name="my-opt" value="${o.id}" ${o.assigned ? 'checked' : ''} style="width:18px;height:18px;flex-shrink:0">
+        <span style="font-size:.9rem">${esc(o.value)}</span>
+      </label>`).join('');
+    return `<div style="margin-bottom:16px">
+      <div style="font-weight:700;color:#374151;font-size:.9rem;margin-bottom:4px">${fieldLabels[field]}</div>
+      ${opts || '<p style="font-size:.85rem;color:#6b7280">No options available</p>'}
+      <div class="add-new-row" style="margin-top:8px">
+        <input id="co-new-${field}" class="input" style="flex:1" type="text" maxlength="100" placeholder="Suggest new ${fieldLabels[field].toLowerCase()}…">
+        <button class="btn btn-outline btn-sm" onclick="proposeOptionFromCustomise('${field}')">Suggest</button>
+      </div>
+    </div>`;
+  }).join('');
+  return `
+  <div class="view">
+    <h1 style="margin-bottom:8px;color:#1a56db">⚙️ Customise My Options</h1>
+    <p style="font-size:.9rem;color:#6b7280;margin-bottom:8px">
+      These are the default options for the <strong>${esc(groupName)}</strong> group.
+      Tick or untick to personalise your dropdown lists.
+    </p>
+    <div class="alert alert-warning" style="margin-bottom:16px;font-size:.82rem">
+      ⚠️ When suggesting new options, do not include any patient, staff, location, or other personally identifiable information. Suggestions are reviewed by an administrator before becoming available.
+    </div>
+    <div id="myopts-alerts"></div>
+    ${sections || '<p style="color:#6b7280">No options available.</p>'}
+    <div id="myopts-propose-alerts"></div>
+    <div style="display:flex;flex-direction:column;gap:8px;margin-top:16px">
+      <button class="btn btn-primary btn-full" id="myopts-save-btn" onclick="doSaveMyOptions()">✓ Save and continue</button>
+      <button class="btn btn-secondary btn-full" onclick="skipMyOptions()">Use defaults as-is</button>
+    </div>
+  </div>`;
+}
+
+async function doSaveMyOptions() {
+  const checkboxes = document.querySelectorAll('input[name="my-opt"]:checked');
+  const option_ids = Array.from(checkboxes).map(cb => Number(cb.value));
+  const btn = document.getElementById('myopts-save-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+  try {
+    await api('PUT', '/api/auth/my-options', { option_ids });
+    await loadDropdowns();
+    if (_myOptionsCb) { const cb = _myOptionsCb; _myOptionsCb = null; cb(); }
+  } catch(e) {
+    if (btn) { btn.disabled = false; btn.textContent = '✓ Save and continue'; }
+    showAlert(e.message, 'error', 'myopts-alerts');
+  }
+}
+
+function skipMyOptions() {
+  if (_myOptionsCb) { const cb = _myOptionsCb; _myOptionsCb = null; cb(); }
+}
+
+async function proposeOptionFromCustomise(field) {
+  const input = document.getElementById(`co-new-${field}`);
+  const val = (input?.value || '').trim();
+  if (!val) { showAlert('Please enter a value to suggest.', 'error', 'myopts-propose-alerts'); return; }
+  try {
+    const d = await api('POST', '/api/dropdowns/propose', { field_name: field, value: val });
+    if (input) input.value = '';
+    showAlert(`"${esc(val)}" submitted for admin review.`, 'success', 'myopts-propose-alerts');
+  } catch(e) { showAlert(e.message, 'error', 'myopts-propose-alerts'); }
+}
+
+function setGroupFromSettings() {
+  renderGroupSelection(async () => {
+    // After group chosen + options customised, return to settings
+    renderSettings();
   });
 }
 
@@ -766,6 +1119,7 @@ function renderSettings() {
   stopTimer(); clearCharts(); state.currentView = 'settings';
   pushHistory('settings');
   const showInvite = state.registrationConfig?.userInvite !== 'disabled';
+  const groupName = state.user?.userGroupName;
   app().innerHTML = `
   <div class="view">
     <div class="view-header">
@@ -774,6 +1128,12 @@ function renderSettings() {
     <div id="settings-alerts"></div>
     <div class="card">
       <p style="font-size:.9rem;color:#555;margin-bottom:14px">Logged in as: <strong>${esc(state.user?.username)}</strong></p>
+      <div class="divider"></div>
+      <div style="margin-bottom:14px">
+        <p style="font-size:.85rem;color:#374151;margin-bottom:6px">👥 My User Group: <strong>${groupName ? esc(groupName) : 'Not set'}</strong></p>
+        <button class="btn btn-outline btn-full" style="margin-bottom:6px" onclick="setGroupFromSettings()">${groupName ? '🔄 Change Group' : '👥 Select Group'}</button>
+        ${groupName ? `<button class="btn btn-outline btn-full" onclick="openMyOptionsModal()">⚙️ Customise My Options</button>` : ''}
+      </div>
       <div class="divider"></div>
       <button class="btn btn-outline btn-full" style="margin-bottom:10px" onclick="renderChangePassword()">🔑 Change Password</button>
       ${showInvite ? `<button class="btn btn-outline btn-full" style="margin-bottom:10px" id="invite-btn" onclick="doInviteUser()">👤 Invite a User</button>` : ''}
@@ -931,51 +1291,37 @@ function setDuty(isDuty) {
 }
 
 function buildDropdownGroup(field, label, options, containerId) {
-  const opts = options.map(o => `<option value="${esc(o)}">${esc(o)}</option>`).join('');
-  return `
-  <div class="form-group" id="${containerId}-group">
-    <label for="${containerId}-sel">${esc(label)}</label>
-    <select id="${containerId}-sel" class="select" onchange="onDropdownChange('${containerId}','${field}')">
-      <option value="">— Select —</option>
-      ${opts}
-      <option value="__new__">+ Add new option…</option>
-    </select>
-    <div id="${containerId}-new" style="display:none" class="add-new-row">
-      <input id="${containerId}-new-input" class="input" type="text" placeholder="Type new ${label.toLowerCase()}…">
-      <button class="btn btn-outline btn-sm" onclick="submitNewOption('${containerId}','${field}')">Submit</button>
-    </div>
-  </div>`;
+  return buildComboBox(field, label, options, containerId, true, null);
 }
 
 function onDropdownChange(containerId, field) {
+  // kept for backwards-compat — combobox now calls selectComboOpt directly
   const sel = document.getElementById(`${containerId}-sel`);
-  const newDiv = document.getElementById(`${containerId}-new`);
-  if (sel.value === '__new__') {
-    newDiv.style.display = 'flex';
-    sel.value = '';
-  } else {
-    newDiv.style.display = 'none';
-    state.taskForm[field] = sel.value || null;
-  }
+  if (sel) state.taskForm[field] = sel.value || null;
 }
 
 async function submitNewOption(containerId, field) {
   const input = document.getElementById(`${containerId}-new-input`);
-  const val = input.value.trim();
+  const val = (input?.value || '').trim();
   if (!val) return;
   try {
     const d = await api('POST', '/api/dropdowns/propose', { field_name: field, value: val });
     if (!d) return;
-    // Add to local dropdown
-    const sel = document.getElementById(`${containerId}-sel`);
-    const opt = document.createElement('option');
-    opt.value = val; opt.textContent = val + ' (pending)';
-    sel.insertBefore(opt, sel.lastElementChild);
-    sel.value = val;
+    // Update hidden input and combobox button
+    const hidden = document.getElementById(`${containerId}-sel`);
+    const btn    = document.getElementById(`${containerId}-btn`);
+    if (hidden) hidden.value = val;
+    if (btn) { btn.textContent = val + ' (pending)'; btn.classList.remove('placeholder'); }
     state.taskForm[field] = val;
-    document.getElementById(`${containerId}-new`).style.display = 'none';
-    showAlert('Option submitted for review.', 'success', 'ts-alerts');
-  } catch(e) { showAlert(e.message, 'error', 'ts-alerts'); }
+    if (input) input.value = '';
+    const newDiv = document.getElementById(`${containerId}-new`);
+    if (newDiv) newDiv.style.display = 'none';
+    const alertContainer = document.getElementById('ts-alerts') ? 'ts-alerts' : 'te-alerts';
+    showAlert('Option submitted for review.', 'success', alertContainer);
+  } catch(e) {
+    const alertContainer = document.getElementById('ts-alerts') ? 'ts-alerts' : 'te-alerts';
+    showAlert(e.message, 'error', alertContainer);
+  }
 }
 
 async function doStartTask() {
@@ -1270,25 +1616,30 @@ function renderTaskReview(t, isEdit) {
 }
 
 function buildReviewDropdown(field, label, options, current) {
-  const opts = options.map(o => `<option value="${esc(o)}" ${o === current ? 'selected' : ''}>${esc(o)}</option>`).join('');
-  return `
-  <div class="form-group">
-    <label for="te-${field}">${esc(label)}</label>
-    <select id="te-${field}" class="select">
-      <option value="">— Select —</option>${opts}
-    </select>
-  </div>`;
+  return buildComboBox(field, label, options, `te-${field}`, false, current || null);
 }
 
 function buildReviewOutcomeGroup(options, current) {
-  const opts = options.map(o => `<option value="${esc(o)}" ${o === current ? 'selected' : ''}>${esc(o)}</option>`).join('');
+  const displayValue = current || '';
   return `
   <div class="form-group" id="te-out-group">
-    <label for="te-outcome">Outcome</label>
-    <select id="te-outcome" class="select" onchange="onOutcomeEndChange()">
-      <option value="">— Select —</option>${opts}
-      <option value="__new__">+ Add new outcome…</option>
-    </select>
+    <label>Outcome</label>
+    <div class="combo-wrap" id="te-outcome-wrap">
+      <button type="button" id="te-outcome-btn"
+              class="combo-btn${displayValue ? '' : ' placeholder'}"
+              onclick="openCombo('te-outcome-wrap','outcome',true)"
+              aria-haspopup="listbox" aria-expanded="false">
+        ${displayValue ? esc(displayValue) : '— Select Outcome —'}
+      </button>
+      <div class="combo-panel" id="te-outcome-wrap-panel" role="listbox">
+        <input class="combo-search" id="te-outcome-wrap-search" type="text" autocomplete="off"
+               placeholder="Search…"
+               oninput="filterCombo('te-outcome-wrap','outcome',true)"
+               onkeydown="comboKeydown(event,'te-outcome-wrap','outcome',true)">
+        <div class="combo-opts" id="te-outcome-wrap-opts"></div>
+      </div>
+      <input type="hidden" id="te-outcome" value="${esc(displayValue)}">
+    </div>
     <div id="te-out-new" style="display:none" class="add-new-row">
       <input id="te-out-new-input" class="input" type="text" placeholder="Type new outcome…">
       <button class="btn btn-outline btn-sm" onclick="submitNewOutcomeEnd()">Add</button>
@@ -1297,29 +1648,21 @@ function buildReviewOutcomeGroup(options, current) {
 }
 
 function onOutcomeEndChange() {
-  const sel = document.getElementById('te-outcome');
-  const newDiv = document.getElementById('te-out-new');
-  if (sel.value === '__new__') {
-    newDiv.style.display = 'flex';
-    sel.value = '';
-  } else {
-    newDiv.style.display = 'none';
-  }
+  // no-op: handled by combobox now
 }
 
 async function submitNewOutcomeEnd() {
   const input = document.getElementById('te-out-new-input');
-  const val = input.value.trim();
+  const val = (input?.value || '').trim();
   if (!val) return;
   try {
     await api('POST', '/api/dropdowns/propose', { field_name: 'outcome', value: val });
-    const sel = document.getElementById('te-outcome');
-    const opt = document.createElement('option');
-    opt.value = val; opt.textContent = val;
-    sel.insertBefore(opt, sel.lastElementChild);
-    sel.value = val;
+    const hidden = document.getElementById('te-outcome');
+    const btn    = document.getElementById('te-outcome-btn');
+    if (hidden) hidden.value = val;
+    if (btn) { btn.textContent = val + ' (pending)'; btn.classList.remove('placeholder'); }
+    if (input) input.value = '';
     document.getElementById('te-out-new').style.display = 'none';
-    input.value = '';
     showAlert('Outcome added — pending admin approval.', 'success', 'te-alerts');
   } catch(e) { showAlert(e.message, 'error', 'te-alerts'); }
 }
@@ -1344,8 +1687,8 @@ async function submitTaskReview(taskId, isEdit, dest) {
   const outcome = document.getElementById('te-outcome')?.value || null;
   if (!outcome) { showAlert('Please select an Outcome.', 'error', 'te-alerts'); return; }
   const dutyEl = document.getElementById('te-duty');
-  const categoryVal = document.getElementById('te-category')?.value || t.category || null;
-  const subcategoryVal = document.getElementById('te-subcategory')?.value || t.subcategory || null;
+  const categoryVal = document.getElementById('te-category-sel')?.value || t.category || null;
+  const subcategoryVal = document.getElementById('te-subcategory-sel')?.value || t.subcategory || null;
   if (isEdit && !categoryVal) { showAlert('Please select a Task From.', 'error', 'te-alerts'); return; }
   if (isEdit && !subcategoryVal) { showAlert('Please select a Task Type.', 'error', 'te-alerts'); return; }
   const body = {
@@ -1629,23 +1972,25 @@ async function renderAdmin() {
   pushHistory('admin');
   app().innerHTML = `<div class="view"><p class="loading">Loading admin panel…</p></div>`;
   try {
-    const [stats, users, dropOpts, settings, pendingUsers, awaitingUsers] = await Promise.all([
+    const [stats, users, dropOpts, settings, pendingUsers, awaitingUsers, userGroups, pendingGroups] = await Promise.all([
       api('GET', '/api/admin/stats'),
       api('GET', '/api/admin/users'),
       api('GET', '/api/dropdowns/admin/all'),
       api('GET', '/api/admin/settings'),
       api('GET', '/api/admin/pending-users'),
       api('GET', '/api/admin/awaiting-activation'),
+      api('GET', '/api/admin/user-groups'),
+      api('GET', '/api/admin/pending-groups'),
     ]);
-    if (!stats || !users || !dropOpts || !settings || !pendingUsers || !awaitingUsers) return;
-    renderAdminContent(stats, users?.users || [], dropOpts?.options || [], settings, pendingUsers?.users || [], awaitingUsers?.users || []);
+    if (!stats || !users || !dropOpts || !settings || !pendingUsers || !awaitingUsers || !userGroups || !pendingGroups) return;
+    renderAdminContent(stats, users?.users || [], dropOpts?.options || [], settings, pendingUsers?.users || [], awaitingUsers?.users || [], userGroups?.groups || [], pendingGroups?.groups || []);
   } catch(e) {
     app().innerHTML = `<div class="view"><div id="admin-alerts"></div></div>`;
     showAlert(e.message, 'error', 'admin-alerts');
   }
 }
 
-function renderAdminContent(stats, users, dropOpts, settings, pendingUsers, awaitingUsers) {
+function renderAdminContent(stats, users, dropOpts, settings, pendingUsers, awaitingUsers, userGroups, pendingGroups) {
   const pending = dropOpts.filter(o => !o.approved);
   const approved = dropOpts.filter(o => o.approved);
   const userCards = users.map(u => `
@@ -1674,7 +2019,10 @@ function renderAdminContent(stats, users, dropOpts, settings, pendingUsers, awai
     const items = (dropByField[field] || []).map(o => `
     <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid #f3f4f6">
       <span style="font-size:.9rem">${esc(o.value)}</span>
-      <button class="btn btn-danger btn-sm" onclick="deleteDropdown(${o.id})">✕</button>
+      <div style="display:flex;gap:4px">
+        <button class="btn btn-outline btn-sm" onclick="renameDropdown(${o.id}, '${esc(o.value)}')">✏️</button>
+        <button class="btn btn-danger btn-sm" onclick="deleteDropdown(${o.id})">✕</button>
+      </div>
     </div>`).join('');
     return `
     <div class="card">
@@ -1736,15 +2084,30 @@ function renderAdminContent(stats, users, dropOpts, settings, pendingUsers, awai
     </div>
   </div>`).join('') : '<p style="font-size:.85rem;color:#6b7280">No users awaiting activation.</p>';
 
+  const groupCards = userGroups.map(g => `
+  <div class="card" style="padding:12px">
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+      <div>
+        <span style="font-weight:700">${esc(g.name)}</span>
+        <span style="font-size:.75rem;color:#6b7280;margin-left:6px">${g.user_count} user${g.user_count !== 1 ? 's' : ''}</span>
+      </div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        <button class="btn btn-outline btn-sm" onclick="showGroupDropdownModal(${g.id}, '${esc(g.name)}')">⚙️ Options</button>
+        <button class="btn btn-outline btn-sm" onclick="renameUserGroup(${g.id}, '${esc(g.name)}')">✏️ Rename</button>
+        <button class="btn btn-danger btn-sm" onclick="deleteUserGroup(${g.id}, '${esc(g.name)}')">🗑</button>
+      </div>
+    </div>
+  </div>`).join('');
+
   app().innerHTML = `
-  <div class="view">
+  <div class="view view--wide">
     <div class="view-header">
       <h1>🔐 Admin Panel</h1>
     </div>
     <div id="admin-alerts"></div>
     <div class="stat-grid">
       <div class="stat-card"><div class="stat-number">${stats?.userCount ?? '?'}</div><div class="stat-label">Registered users</div></div>
-      <div class="stat-card"><div class="stat-number">${stats?.eventCount ?? '?'}</div><div class="stat-label">Events logged</div></div>
+      <div class="stat-card"><div class="stat-number">${stats?.taskCount ?? '?'}</div><div class="stat-label">Tasks logged</div></div>
     </div>
 
     <div class="section-heading">Registration Settings</div>
@@ -1764,40 +2127,73 @@ function renderAdminContent(stats, users, dropOpts, settings, pendingUsers, awai
       <button class="btn btn-primary btn-full" style="margin-top:12px" id="reg-settings-btn" onclick="saveRegistrationSettings()">💾 Save Settings</button>
     </div>
 
-    <div class="section-heading">Pending User Approvals ${pendingUsers.length ? `<span class="badge badge-warn" style="margin-left:6px">${pendingUsers.length}</span>` : ''}</div>
-    ${pendingUserCards}
+    <div class="admin-desktop-grid">
+      <div>
+        <div class="section-heading">Pending User Approvals ${pendingUsers.length ? `<span class="badge badge-warn" style="margin-left:6px">${pendingUsers.length}</span>` : ''}</div>
+        ${pendingUserCards}
 
-    <div class="section-heading">Awaiting Activation ${awaitingUsers.length ? `<span class="badge badge-warn" style="margin-left:6px">${awaitingUsers.length}</span>` : ''}</div>
-    ${awaitingUserCards}
+        <div class="section-heading">Awaiting Activation ${awaitingUsers.length ? `<span class="badge badge-warn" style="margin-left:6px">${awaitingUsers.length}</span>` : ''}</div>
+        ${awaitingUserCards}
 
-    <div class="section-heading">Users</div>
-    <button class="btn btn-primary btn-full" style="margin-bottom:14px" onclick="addUser()">➕ Add User</button>
-    ${userCards || '<p style="font-size:.85rem;color:#6b7280;margin-bottom:14px">No users yet.</p>'}
+        <div class="section-heading">Users</div>
+        <button class="btn btn-primary btn-full" style="margin-bottom:14px" onclick="addUser()">➕ Add User</button>
+        ${userCards || '<p style="font-size:.85rem;color:#6b7280;margin-bottom:14px">No users yet.</p>'}
+      </div>
 
-    <div class="section-heading">Database</div>
-    <div class="card">
-      <div style="display:flex;flex-direction:column;gap:10px">
-        <button class="btn btn-outline btn-full" onclick="downloadBackup()">💾 Download Backup</button>
-        <div>
-          <label class="btn btn-secondary btn-full" style="cursor:pointer">
-            📤 Restore from Backup
-            <input type="file" accept=".db" style="display:none" onchange="uploadRestore(this)">
-          </label>
-          <p style="font-size:.75rem;color:#dc2626;margin-top:4px">⚠️ This replaces the current database immediately.</p>
-        </div>
+      <div>
+        <div class="section-heading">User Groups</div>
+        <p style="font-size:.85rem;color:#6b7280;margin-bottom:10px">Groups control which dropdown options users see. Users select their own group for privacy reasons.</p>
+        <button class="btn btn-primary btn-full" style="margin-bottom:14px" onclick="addUserGroup()">➕ Add User Group</button>
+        ${groupCards || '<p style="font-size:.85rem;color:#6b7280;margin-bottom:14px">No user groups yet.</p>'}
       </div>
     </div>
 
-    <div class="section-heading">My Account</div>
-    <div class="card">
-      <button class="btn btn-outline btn-full" onclick="renderChangePassword()">🔑 Change My Password</button>
-    </div>
-
     <div class="section-heading">Dropdown Options</div>
-    ${dropSections}
+    <div class="admin-drop-grid">
+      ${dropSections}
+    </div>
 
     <div class="section-heading">Pending User Proposals</div>
     ${pendingCards}
+
+    <div class="section-heading">Pending Group Proposals ${pendingGroups.length ? `<span class="badge badge-warn" style="margin-left:6px">${pendingGroups.length}</span>` : ''}</div>
+    ${pendingGroups.length ? pendingGroups.map(g => `
+    <div class="card" style="padding:12px">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+        <div>
+          <span style="font-size:.8rem;color:#6b7280">User group</span>
+          <span style="font-weight:700;margin-left:8px">${esc(g.name)}</span>
+        </div>
+        <div style="display:flex;gap:6px">
+          <button class="btn btn-primary btn-sm" onclick="approvePendingGroup(${g.id})">✓ Approve</button>
+          <button class="btn btn-danger btn-sm" onclick="rejectPendingGroup(${g.id})">✗ Reject</button>
+        </div>
+      </div>
+    </div>`).join('') : '<p style="font-size:.85rem;color:#6b7280">No pending group suggestions.</p>'}
+
+    <div class="admin-desktop-grid" style="margin-top:0">
+      <div>
+        <div class="section-heading">Database</div>
+        <div class="card">
+          <div style="display:flex;flex-direction:column;gap:10px">
+            <button class="btn btn-outline btn-full" onclick="downloadBackup()">💾 Download Backup</button>
+            <div>
+              <label class="btn btn-secondary btn-full" style="cursor:pointer">
+                📤 Restore from Backup
+                <input type="file" accept=".db" style="display:none" onchange="uploadRestore(this)">
+              </label>
+              <p style="font-size:.75rem;color:#dc2626;margin-top:4px">⚠️ This replaces the current database immediately.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div>
+        <div class="section-heading">My Account</div>
+        <div class="card">
+          <button class="btn btn-outline btn-full" onclick="renderChangePassword()">🔑 Change My Password</button>
+        </div>
+      </div>
+    </div>
 
     <div class="divider"></div>
     <button class="btn btn-secondary btn-full" style="margin-bottom:16px" onclick="doLogout()">🚪 Log Out</button>
@@ -1969,6 +2365,114 @@ async function deleteDropdown(id) {
   } catch(e) { showAlert(e.message, 'error', 'admin-alerts'); }
 }
 
+async function approvePendingGroup(groupId) {
+  try {
+    await api('POST', `/api/admin/pending-groups/${groupId}/approve`, {});
+    showAlert('Group approved and added to available groups.', 'success', 'admin-alerts');
+    renderAdmin();
+  } catch(e) { showAlert(e.message, 'error', 'admin-alerts'); }
+}
+
+async function rejectPendingGroup(groupId) {
+  try {
+    await api('DELETE', `/api/admin/pending-groups/${groupId}`, {});
+    showAlert('Group suggestion rejected.', 'success', 'admin-alerts');
+    renderAdmin();
+  } catch(e) { showAlert(e.message, 'error', 'admin-alerts'); }
+}
+
+async function renameDropdown(id, currentValue) {
+  const newValue = prompt(`Rename "${currentValue}" to:`, currentValue);
+  if (!newValue || newValue.trim() === currentValue) return;
+  try {
+    await api('PUT', `/api/dropdowns/admin/${id}`, { value: newValue.trim() });
+    showAlert(`Renamed to: ${newValue.trim()}`, 'success', 'admin-alerts');
+    renderAdmin();
+  } catch(e) { showAlert(e.message, 'error', 'admin-alerts'); }
+}
+
+// ── Admin User Group management ───────────────────────────────────────────────
+
+async function addUserGroup() {
+  const name = prompt('Enter a name for the new user group:');
+  if (!name || !name.trim()) return;
+  try {
+    await api('POST', '/api/admin/user-groups', { name: name.trim() });
+    showAlert(`User group "${name.trim()}" created.`, 'success', 'admin-alerts');
+    renderAdmin();
+  } catch(e) { showAlert(e.message, 'error', 'admin-alerts'); }
+}
+
+async function renameUserGroup(id, currentName) {
+  const newName = prompt(`Rename group "${currentName}" to:`, currentName);
+  if (!newName || newName.trim() === currentName) return;
+  try {
+    await api('PUT', `/api/admin/user-groups/${id}`, { name: newName.trim() });
+    showAlert(`Group renamed to: ${newName.trim()}`, 'success', 'admin-alerts');
+    renderAdmin();
+  } catch(e) { showAlert(e.message, 'error', 'admin-alerts'); }
+}
+
+async function deleteUserGroup(id, name) {
+  if (!confirm(`Delete user group "${name}"? Users assigned to this group will have their group removed.`)) return;
+  try {
+    await api('DELETE', `/api/admin/user-groups/${id}`, {});
+    showAlert(`Group "${name}" deleted.`, 'success', 'admin-alerts');
+    renderAdmin();
+  } catch(e) { showAlert(e.message, 'error', 'admin-alerts'); }
+}
+
+async function showGroupDropdownModal(groupId, groupName) {
+  const modal = document.createElement('div');
+  modal.className = 'modal-overlay';
+  modal.id = 'group-dd-modal';
+  modal.innerHTML = `<div class="modal-sheet">
+    <div class="modal-body"><div class="modal-title">⚙️ Options for ${esc(groupName)}</div><p class="loading">Loading…</p></div>
+    <div class="modal-footer"><button class="btn btn-secondary" style="flex:1" onclick="document.getElementById('group-dd-modal')?.remove()">Cancel</button></div>
+  </div>`;
+  document.body.appendChild(modal);
+  try {
+    const d = await api('GET', `/api/admin/user-groups/${groupId}/dropdowns`);
+    const byField = {};
+    for (const o of (d?.options || [])) {
+      if (!byField[o.field_name]) byField[o.field_name] = [];
+      byField[o.field_name].push(o);
+    }
+    const fieldLabels = { category: 'Task from', subcategory: 'Task type', outcome: 'Outcome' };
+    const sections = ['category', 'subcategory', 'outcome'].map(field => {
+      const opts = (byField[field] || []).map(o => `
+        <label style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid #f3f4f6;cursor:pointer">
+          <input type="checkbox" name="group-opt-${groupId}" value="${o.id}" ${o.assigned ? 'checked' : ''} style="width:18px;height:18px;flex-shrink:0">
+          <span style="font-size:.9rem">${esc(o.value)}</span>
+        </label>`).join('');
+      return `<div style="margin-bottom:16px">
+        <div style="font-weight:700;color:#374151;margin-bottom:4px;font-size:.9rem">${fieldLabels[field]}</div>
+        ${opts || '<p style="font-size:.85rem;color:#6b7280">No options available</p>'}
+      </div>`;
+    }).join('');
+    modal.querySelector('.modal-body').innerHTML = `
+      <div class="modal-title">⚙️ Options for ${esc(groupName)}</div>
+      <p style="font-size:.85rem;color:#6b7280;margin-bottom:16px">Tick the options that should appear in dropdown lists for users in this group.</p>
+      ${sections || '<p style="color:#6b7280">No dropdown options exist yet.</p>'}`;
+    modal.querySelector('.modal-footer').innerHTML = `
+      <button class="btn btn-primary" style="flex:1" onclick="saveGroupDropdowns(${groupId})">💾 Save</button>
+      <button class="btn btn-secondary" style="flex:1" onclick="document.getElementById('group-dd-modal')?.remove()">Cancel</button>`;
+  } catch(e) {
+    modal.querySelector('.modal-body').innerHTML = `<div class="alert alert-error">${esc(e.message)}</div>`;
+    modal.querySelector('.modal-footer').innerHTML = `<button class="btn btn-secondary btn-full" onclick="document.getElementById('group-dd-modal')?.remove()">Close</button>`;
+  }
+}
+
+async function saveGroupDropdowns(groupId) {
+  const checkboxes = document.querySelectorAll(`input[name="group-opt-${groupId}"]:checked`);
+  const option_ids = Array.from(checkboxes).map(cb => Number(cb.value));
+  try {
+    await api('PUT', `/api/admin/user-groups/${groupId}/dropdowns`, { option_ids });
+    showAlert('Group options saved.', 'success', 'admin-alerts');
+    document.getElementById('group-dd-modal')?.remove();
+  } catch(e) { showAlert(e.message, 'error', 'admin-alerts'); }
+}
+
 // ── SPA back/forward navigation ───────────────────────────────────────────────
 const HISTORY_RENDER_MAP = {
   'home':               () => renderHome(),
@@ -1977,6 +2481,8 @@ const HISTORY_RENDER_MAP = {
   'settings':           () => renderSettings(),
   'change-password':    () => renderChangePassword(),
   'delete-account':     () => renderDeleteAccount(),
+  'group-selection':    () => renderGroupSelection(() => renderHome()),
+  'my-options':         () => openMyOptionsModal(), // restores options UI with return-to-settings callback
   'task-start':         () => renderTaskStart(),
   'task-active':        () => { if (state.activeTask) renderTaskActive(); else renderHome(); },
   'task-end':           () => { if (state.activeTask) renderTaskEnd(); else renderHome(); },
@@ -1989,7 +2495,7 @@ const HISTORY_RENDER_MAP = {
 
 const AUTH_REQUIRED_VIEWS = new Set([
   'home', 'settings', 'change-password', 'delete-account',
-  'task-start', 'task-active', 'task-end', 'task-edit',
+  'group-selection', 'my-options', 'task-start', 'task-active', 'task-end', 'task-edit',
   'analytics-session', 'analytics-history', 'admin', 'await-activation',
 ]);
 

@@ -3,7 +3,7 @@ import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import { getDb, getSetting } from '../db';
 import { generateUsername } from '../words';
-import { requireAuth, validateCsrf, logEvent } from '../middleware/index';
+import { requireAuth, validateCsrf, logEvent, requirePasswordChange, requireActivation } from '../middleware/index';
 
 const router = Router();
 const PASSWORD_RE = /^(?=.*[!@#$%^&*()\-_=+\[\]{};:'",.<>/?\\|`~]).{8,}$/;
@@ -23,8 +23,8 @@ router.get('/registration-config', (_req: Request, res: Response) => {
 router.get('/stats', (_req: Request, res: Response) => {
   const db = getDb();
   const userCount = (db.prepare('SELECT COUNT(*) as c FROM users WHERE is_admin=0 AND is_approved=1 AND pending_activation=0').get() as any).c;
-  const eventCount = (db.prepare('SELECT COUNT(*) as c FROM events').get() as any).c;
-  res.json({ userCount, eventCount });
+  const taskCount = (db.prepare('SELECT COUNT(*) as c FROM tasks WHERE status=\'completed\'').get() as any).c;
+  res.json({ userCount, taskCount });
 });
 
 router.post('/register', validateCsrf, async (req: Request, res: Response) => {
@@ -119,7 +119,17 @@ router.post('/login', validateCsrf, async (req: Request, res: Response) => {
   s.csrfToken = crypto.randomBytes(32).toString('hex');
   db.prepare('UPDATE users SET failed_login_attempts=0, is_locked=0 WHERE id=?').run(user.id);
   logEvent('user_login');
-  res.json({ success: true, isAdmin: user.is_admin === 1, mustChangePassword: user.must_change_password === 1, pendingActivation: user.must_change_password === 0 && user.pending_activation === 1 });
+  const groupInfo = db.prepare(
+    'SELECT u.user_group_id, ug.name as user_group_name FROM users u LEFT JOIN user_groups ug ON ug.id=u.user_group_id WHERE u.id=?'
+  ).get(user.id) as { user_group_id: number | null; user_group_name: string | null } | undefined;
+  res.json({
+    success: true,
+    isAdmin: user.is_admin === 1,
+    mustChangePassword: user.must_change_password === 1,
+    pendingActivation: user.must_change_password === 0 && user.pending_activation === 1,
+    userGroupId: groupInfo?.user_group_id ?? null,
+    userGroupName: groupInfo?.user_group_name ?? null,
+  });
 });
 
 router.post('/logout', (req: Request, res: Response) => {
@@ -152,10 +162,92 @@ router.post('/change-password', requireAuth, validateCsrf, async (req: Request, 
 
 router.get('/me', requireAuth, (req: Request, res: Response) => {
   const s = req.session as any;
-  const user = getDb().prepare('SELECT username,is_admin,must_change_password,pending_activation FROM users WHERE id=?').get(s.userId) as any;
+  const user = getDb().prepare(
+    `SELECT u.username, u.is_admin, u.must_change_password, u.pending_activation,
+            u.user_group_id, ug.name as user_group_name
+     FROM users u LEFT JOIN user_groups ug ON ug.id=u.user_group_id
+     WHERE u.id=?`
+  ).get(s.userId) as any;
   const pendingActivation = user.must_change_password === 0 && user.pending_activation === 1;
   s.pendingActivation = pendingActivation;
-  res.json({ username: user.username, isAdmin: user.is_admin === 1, mustChangePassword: user.must_change_password === 1, pendingActivation });
+  res.json({
+    username: user.username,
+    isAdmin: user.is_admin === 1,
+    mustChangePassword: user.must_change_password === 1,
+    pendingActivation,
+    userGroupId: user.user_group_id ?? null,
+    userGroupName: user.user_group_name ?? null,
+  });
+});
+
+router.get('/user-groups', requireAuth, (_req: Request, res: Response) => {
+  const groups = getDb().prepare('SELECT id, name FROM user_groups WHERE is_approved=1 ORDER BY name').all();
+  res.json({ groups });
+});
+
+router.post('/propose-group', requireAuth, validateCsrf, requirePasswordChange, requireActivation, (req: Request, res: Response) => {
+  const { name } = req.body as { name: string };
+  const clean = (name || '').trim();
+  if (!clean || clean.length > 100) { res.status(400).json({ error: 'Invalid group name.' }); return; }
+  const db = getDb();
+  const existing = db.prepare('SELECT id, is_approved FROM user_groups WHERE name=?').get(clean) as any;
+  if (existing) {
+    res.json({ message: existing.is_approved ? 'A group with that name already exists.' : 'That group name is already pending review.' });
+    return;
+  }
+  db.prepare('INSERT INTO user_groups (name, is_approved) VALUES (?,0)').run(clean);
+  res.json({ message: 'Group suggestion submitted for admin review.' });
+});
+
+router.post('/set-group', requireAuth, validateCsrf, (req: Request, res: Response) => {
+  const s = req.session as any;
+  const { groupId } = req.body as { groupId: number | null };
+  const db = getDb();
+  if (groupId !== null) {
+    const group = db.prepare('SELECT id FROM user_groups WHERE id=? AND is_approved=1').get(groupId);
+    if (!group) { res.status(400).json({ error: 'User group not found.' }); return; }
+  }
+  db.transaction(() => {
+    db.prepare('UPDATE users SET user_group_id=? WHERE id=?').run(groupId ?? null, s.userId);
+    // Seed personal options from group defaults whenever group changes
+    if (groupId !== null) {
+      db.prepare('DELETE FROM user_dropdown_options WHERE user_id=?').run(s.userId);
+      db.prepare(
+        'INSERT INTO user_dropdown_options (user_id, dropdown_option_id) SELECT ?, dropdown_option_id FROM group_dropdown_options WHERE group_id=?'
+      ).run(s.userId, groupId);
+    }
+  })();
+  logEvent('user_group_set');
+  res.json({ success: true });
+});
+
+// Return all approved options with personal assignment state
+router.get('/my-options', requireAuth, requirePasswordChange, requireActivation, (req: Request, res: Response) => {
+  const s = req.session as any;
+  const options = getDb().prepare(
+    `SELECT do.id, do.field_name, do.value,
+            CASE WHEN udo.user_id IS NOT NULL THEN 1 ELSE 0 END as assigned
+     FROM dropdown_options do
+     LEFT JOIN user_dropdown_options udo ON udo.dropdown_option_id=do.id AND udo.user_id=?
+     WHERE do.approved=1
+     ORDER BY do.field_name, do.value`
+  ).all(s.userId);
+  res.json({ options });
+});
+
+// Replace the user's entire personal option list
+router.put('/my-options', requireAuth, requirePasswordChange, requireActivation, validateCsrf, (req: Request, res: Response) => {
+  const s = req.session as any;
+  const { option_ids } = req.body as { option_ids: number[] };
+  if (!Array.isArray(option_ids)) { res.status(400).json({ error: 'option_ids must be an array.' }); return; }
+  const db = getDb();
+  db.transaction(() => {
+    db.prepare('DELETE FROM user_dropdown_options WHERE user_id=?').run(s.userId);
+    const ins = db.prepare('INSERT OR IGNORE INTO user_dropdown_options (user_id, dropdown_option_id) VALUES (?,?)');
+    for (const optId of option_ids) ins.run(s.userId, Number(optId));
+  })();
+  logEvent('user_options_updated');
+  res.json({ success: true });
 });
 
 router.delete('/account', requireAuth, validateCsrf, async (req: Request, res: Response) => {

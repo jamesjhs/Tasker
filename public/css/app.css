@@ -269,12 +269,56 @@ html, body {
 .modal-sheet {
   background: #fff;
   border-radius: 20px 20px 0 0;
-  padding: 24px 20px 40px;
   width: 100%;
   max-height: 90vh;
-  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
 }
-.modal-title { font-size: 1.2rem; font-weight: 700; margin-bottom: 16px; }
+.modal-body {
+  padding: 24px 20px 8px;
+  overflow-y: auto;
+  flex: 1 1 auto;
+}
+.modal-footer {
+  padding: 10px 20px 28px;
+  background: #fff;
+  border-top: 1px solid #f3f4f6;
+  display: flex;
+  gap: 10px;
+  flex-shrink: 0;
+}
+.modal-title { font-size: 1.2rem; font-weight: 700; margin-bottom: 12px; }
+
+/* ── Desktop modal: centered dialog ─────────────────────────────────── */
+@media (min-width: 640px) {
+  .modal-overlay {
+    align-items: center;
+    padding: 20px;
+  }
+  .modal-sheet {
+    border-radius: 16px;
+    max-width: 540px;
+    margin: 0 auto;
+    max-height: 82vh;
+  }
+  .modal-footer { padding-bottom: 20px; }
+}
+
+/* ── Admin desktop layout ────────────────────────────────────────────── */
+@media (min-width: 700px) {
+  .view--wide { max-width: 900px; }
+  .admin-desktop-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0 24px;
+  }
+  .admin-drop-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 14px;
+  }
+  .admin-drop-grid .card { margin-bottom: 0; }
+}
 
 /* ── Bottom nav ───────────────────────────────────────────────────── */
 .nav-bottom {
@@ -320,6 +364,69 @@ html, body {
 /* ── Dropdown add-new ─────────────────────────────────────────────── */
 .add-new-row { display: flex; gap: 8px; margin-top: 6px; }
 .add-new-row .input { flex: 1; }
+
+/* ── Combobox (integrated searchable dropdown) ────────────────────── */
+.combo-wrap { position: relative; }
+.combo-btn {
+  width: 100%;
+  padding: 12px 36px 12px 14px;
+  border: 2px solid #d1d5db;
+  border-radius: 10px;
+  font-size: 1rem;
+  background: #fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%23666' d='M6 8L0 0h12z'/%3E%3C/svg%3E") no-repeat right 14px center;
+  color: #1a1a2e;
+  transition: border-color .15s;
+  -webkit-appearance: none;
+  appearance: none;
+  min-height: 48px;
+  text-align: left;
+  cursor: pointer;
+  display: block;
+  line-height: 1.4;
+}
+.combo-btn:focus, .combo-btn.open {
+  outline: none;
+  border-color: #1a56db;
+  box-shadow: 0 0 0 3px rgba(26,86,219,.15);
+}
+.combo-btn.placeholder { color: #9ca3af; }
+.combo-panel {
+  display: none;
+  position: absolute;
+  top: calc(100% + 3px);
+  left: 0; right: 0;
+  background: #fff;
+  border: 2px solid #1a56db;
+  border-radius: 10px;
+  overflow: hidden;
+  z-index: 200;
+  box-shadow: 0 6px 20px rgba(0,0,0,.13);
+}
+.combo-panel.open { display: block; }
+.combo-search {
+  display: block;
+  width: 100%;
+  padding: 10px 14px;
+  border: none;
+  border-bottom: 1.5px solid #e5e7eb;
+  font-size: .95rem;
+  color: #1a1a2e;
+  background: #f9fafb;
+  min-height: 0;
+}
+.combo-search:focus { outline: none; background: #eff6ff; }
+.combo-opts { overflow-y: auto; max-height: 180px; }
+.combo-opt {
+  padding: 10px 14px;
+  cursor: pointer;
+  font-size: .92rem;
+  color: #1a1a2e;
+  -webkit-user-select: none;
+  user-select: none;
+}
+.combo-opt:hover, .combo-opt.combo-active { background: #eff6ff; color: #1a56db; }
+.combo-opt.combo-new { color: #1a56db; border-top: 1.5px solid #e5e7eb; }
+.combo-opt.combo-empty { color: #9ca3af; pointer-events: none; }
 
 /* ── Task card ────────────────────────────────────────────────────── */
 .task-card { position: relative; }
