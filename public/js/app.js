@@ -1803,6 +1803,7 @@ function setDatePreset(days) {
   const toEl = document.getElementById('h-to');
   if (fromEl) fromEl.value = fmt(from);
   if (toEl) toEl.value = fmt(to);
+  renderAnalyticsHistory();
 }
 
 function renderAnalyticsContent(data, mode, pendingLog) {
@@ -2028,8 +2029,8 @@ function renderAnalyticsContent(data, mode, pendingLog) {
     // Trend + interruptions over time (history only)
     if (hasMultiDates) {
       const shortDates = s.dates.map(d => {
-        const [,m,day] = d.split('-');
-        return `${parseInt(day)}/${parseInt(m)}`;
+        const parts = d.split('-');
+        return parts.length === 3 ? `${parseInt(parts[2])}/${parseInt(parts[1])}` : d;
       });
       const counts = s.dates.map(d => s.byDate[d].count);
       const mins_ = s.dates.map(d => s.byDate[d].minutes);
@@ -2102,9 +2103,9 @@ function buildInsights(s) {
     items.push(`📊 <strong>Avg task:</strong> ${s.avgDurMins}m (${note})`);
   }
 
-  // Interruption rate
-  if (s.total > 0 && s.totalInterruptions > 0) {
-    const pct = Math.round((s.totalInterruptions / s.total) * 100);
+  // Interruption rate: percentage of tasks that had at least one interruption
+  if (s.total > 0 && s.tasksWithInterruptions > 0) {
+    const pct = Math.round((s.tasksWithInterruptions / s.total) * 100);
     items.push(`🔔 <strong>Interruption rate:</strong> ${pct}% of tasks`);
   }
 

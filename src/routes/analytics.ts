@@ -100,6 +100,7 @@ function buildSummary(tasks: any[]) {
   }
 
   const totalInterruptions = tasks.reduce((s, t) => s + (t.interruptions?.length || 0), 0);
+  const tasksWithInterruptions = tasks.filter(t => (t.interruptions?.length || 0) > 0).length;
   const avgDurMins = tasks.length > 0 ? Math.round(totalMins / tasks.length) : 0;
   const avgInterruptionsPerTask = tasks.length > 0
     ? Math.round((totalInterruptions / tasks.length) * 10) / 10
@@ -109,6 +110,7 @@ function buildSummary(tasks: any[]) {
     total: tasks.length,
     totalMins,
     totalInterruptions,
+    tasksWithInterruptions,
     avgDurMins,
     avgInterruptionsPerTask,
     dutyCount: duty.length,
