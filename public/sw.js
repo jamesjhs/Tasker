@@ -3,7 +3,7 @@
    Cache-first for static assets, network-first for /api/
    ============================================================ */
 
-const CACHE_NAME = 'tasker-v3';
+const CACHE_NAME = 'tasker-v4';
 
 // External CDN URLs (e.g. Chart.js from jsDelivr) are intentionally excluded
 // from precaching to avoid CSP connect-src violations during SW install.
