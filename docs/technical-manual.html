@@ -1,0 +1,816 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tasker — Technical Reference Manual v1.5.0</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      font-size: 15px;
+      line-height: 1.7;
+      color: #1f2937;
+      background: #f9fafb;
+      margin: 0;
+      padding: 0;
+    }
+    .page {
+      max-width: 1100px;
+      margin: 0 auto;
+      background: #fff;
+      padding: 48px 56px;
+      min-height: 100vh;
+    }
+    h1 { font-size: 2.2rem; color: #1a56db; border-bottom: 3px solid #1a56db; padding-bottom: 12px; margin-top: 0; }
+    h2 { font-size: 1.5rem; color: #1e3a8a; border-bottom: 2px solid #e5e7eb; padding-bottom: 6px; margin-top: 48px; }
+    h3 { font-size: 1.15rem; color: #374151; margin-top: 28px; }
+    h4 { font-size: 1rem; color: #4b5563; margin-top: 20px; font-style: italic; }
+    a { color: #1a56db; }
+    code {
+      font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+      font-size: .875em;
+      background: #f3f4f6;
+      border: 1px solid #e5e7eb;
+      border-radius: 4px;
+      padding: 1px 5px;
+    }
+    pre {
+      background: #1e293b;
+      color: #e2e8f0;
+      border-radius: 8px;
+      padding: 20px 24px;
+      overflow-x: auto;
+      font-size: .875em;
+      line-height: 1.6;
+      margin: 16px 0;
+    }
+    pre code { background: none; border: none; padding: 0; color: inherit; font-size: inherit; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: .9rem;
+      margin: 16px 0;
+    }
+    thead tr { background: #eff6ff; }
+    th, td { border: 1px solid #e5e7eb; padding: 8px 12px; text-align: left; vertical-align: top; }
+    th { font-weight: 700; color: #1e3a8a; }
+    tr:nth-child(even) td { background: #f9fafb; }
+    .subtitle { font-size: 1.05rem; color: #6b7280; margin-top: -8px; margin-bottom: 32px; }
+    .toc { background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px; padding: 20px 28px; margin-bottom: 40px; }
+    .toc h2 { border: none; margin-top: 0; font-size: 1.1rem; color: #1e3a8a; }
+    .toc ol { margin: 0; padding-left: 20px; }
+    .toc li { margin: 4px 0; }
+    .toc a { text-decoration: none; }
+    .toc a:hover { text-decoration: underline; }
+    .note {
+      background: #f0fdf4;
+      border-left: 4px solid #16a34a;
+      border-radius: 0 6px 6px 0;
+      padding: 12px 16px;
+      margin: 16px 0;
+      font-size: .9rem;
+    }
+    .warn {
+      background: #fffbeb;
+      border-left: 4px solid #d97706;
+      border-radius: 0 6px 6px 0;
+      padding: 12px 16px;
+      margin: 16px 0;
+      font-size: .9rem;
+    }
+    .arch {
+      background: #1e293b;
+      color: #e2e8f0;
+      border-radius: 8px;
+      padding: 20px 24px;
+      font-family: monospace;
+      font-size: .85rem;
+      line-height: 1.7;
+      overflow-x: auto;
+      white-space: pre;
+    }
+    hr { border: none; border-top: 2px solid #e5e7eb; margin: 40px 0; }
+    @media print {
+      body { background: #fff; }
+      .page { padding: 20px 28px; box-shadow: none; }
+      h2 { page-break-before: auto; }
+    }
+    @media (max-width: 700px) {
+      .page { padding: 24px 18px; }
+      h1 { font-size: 1.5rem; }
+      h2 { font-size: 1.2rem; }
+    }
+  </style>
+</head>
+<body>
+<div class="page">
+
+<h1>Tasker — Technical Reference Manual</h1>
+<p class="subtitle">Version 1.5.0 &nbsp;·&nbsp; April 2026 &nbsp;·&nbsp; <em>Prepared in the role of Professor of Digital Engineering Product Design</em></p>
+
+<div class="toc">
+  <h2>Table of Contents</h2>
+  <ol>
+    <li><a href="#s1">Executive Summary</a></li>
+    <li><a href="#s2">System Architecture Overview</a></li>
+    <li><a href="#s3">Technology Stack &amp; Dependencies</a></li>
+    <li><a href="#s4">Project Structure</a></li>
+    <li><a href="#s5">Environment Configuration</a></li>
+    <li><a href="#s6">Server Entry Point — <code>src/server.ts</code></a></li>
+    <li><a href="#s7">Database Layer — <code>src/db.ts</code></a></li>
+    <li><a href="#s8">Field-Level Encryption — <code>src/encrypt.ts</code></a></li>
+    <li><a href="#s9">Middleware — <code>src/middleware/index.ts</code></a></li>
+    <li><a href="#s10">Anonymous Username Generator — <code>src/words.ts</code></a></li>
+    <li><a href="#s11">API Route Layer</a>
+      <ol>
+        <li><a href="#s11_1">Authentication — <code>src/routes/auth.ts</code></a></li>
+        <li><a href="#s11_2">Tasks — <code>src/routes/tasks.ts</code></a></li>
+        <li><a href="#s11_3">Analytics — <code>src/routes/analytics.ts</code></a></li>
+        <li><a href="#s11_4">Dropdowns — <code>src/routes/dropdowns.ts</code></a></li>
+        <li><a href="#s11_5">Admin — <code>src/routes/admin.ts</code></a></li>
+      </ol>
+    </li>
+    <li><a href="#s12">Client-Side Application — <code>public/js/app.js</code></a></li>
+    <li><a href="#s13">Progressive Web App (PWA) Layer</a></li>
+    <li><a href="#s14">Security Design</a></li>
+    <li><a href="#s15">Data Model</a></li>
+    <li><a href="#s16">User Lifecycle &amp; Workflows</a></li>
+    <li><a href="#s17">Task Lifecycle &amp; Workflows</a></li>
+    <li><a href="#s18">Analytics Engine</a></li>
+    <li><a href="#s19">Admin Workflows</a></li>
+    <li><a href="#s20">Testing Architecture</a></li>
+    <li><a href="#s21">Build &amp; Deployment Pipeline</a></li>
+    <li><a href="#s22">Data Retention &amp; Privacy</a></li>
+    <li><a href="#s23">Known Design Decisions &amp; Constraints</a></li>
+  </ol>
+</div>
+
+<hr>
+
+<h2 id="s1">1. Executive Summary</h2>
+<p>Tasker is a privacy-first, mobile-first web application designed to enable healthcare staff to log and analyse their administrative workload anonymously. It operates as a single-page application (SPA) served by a Node.js/Express back-end, with all data stored locally in a SQLite database file. There are no third-party data processors, no cloud dependencies, and no telemetry.</p>
+<p>Key design priorities, in order:</p>
+<ol>
+  <li><strong>Privacy</strong> — usernames are computer-generated word-pairs that cannot be linked to a real person; no names, patient references, or identifying data is ever stored or requested.</li>
+  <li><strong>Security</strong> — CSRF protection, bcrypt password hashing, session-based authentication, field-level AES-256-GCM encryption for notes, account lockout, rate limiting, and strict Content-Security-Policy headers.</li>
+  <li><strong>Simplicity</strong> — one process, one file-based database, zero external services.</li>
+  <li><strong>Mobile UX</strong> — the entire front-end renders inside a single <code>&lt;div id="app"&gt;</code> element and uses vanilla JavaScript with no front-end framework. It installs as a PWA.</li>
+  <li><strong>Automatic data lifecycle</strong> — task records are deleted after 30 days.</li>
+</ol>
+
+<hr>
+
+<h2 id="s2">2. System Architecture Overview</h2>
+<div class="arch">┌──────────────────────────────────────────────────────────────────┐
+│                          CLIENT (Browser / PWA)                   │
+│   public/js/app.js   ─── single-page vanilla JS application       │
+│   public/sw.js       ─── Service Worker (cache-first + offline)   │
+│   public/css/app.css ─── all styling                              │
+│   public/index.html  ─── root shell (single &lt;div id="app"&gt;)       │
+└───────────────┬──────────────────────────────────────────────────┘
+                │  HTTPS (TLS 1.2/1.3) or HTTP (dev)
+                │  All API calls carry X-CSRF-Token header
+                │  Session cookie: httpOnly, sameSite=strict
+┌───────────────▼──────────────────────────────────────────────────┐
+│                     NODE.JS SERVER PROCESS                        │
+│   src/server.ts       ─── Express 5 app, middleware, TLS, cron   │
+│   src/routes/auth.ts  ─── /api/auth/*                            │
+│   src/routes/tasks.ts ─── /api/tasks/*                           │
+│   src/routes/analytics.ts ─── /api/analytics/*                   │
+│   src/routes/dropdowns.ts ─── /api/dropdowns/*                   │
+│   src/routes/admin.ts ─── /api/admin/*                           │
+│   src/middleware/     ─── requireAuth, CSRF, logging             │
+│   src/db.ts           ─── SQLite singleton + schema              │
+│   src/encrypt.ts      ─── AES-256-GCM field encryption           │
+└───────────────┬──────────────────────────────────────────────────┘
+                │  better-sqlite3 (synchronous, in-process)
+┌───────────────▼──────────────────────────────────────────────────┐
+│                     FILESYSTEM (data/)                            │
+│   data/tasker.db    ─── all application data (WAL mode)          │
+│   data/sessions.db  ─── session store (separate SQLite file)     │
+│   data/restore-tmp/ ─── transient upload buffer for DB restore   │
+└──────────────────────────────────────────────────────────────────┘</div>
+<p>The server process is single-threaded Node.js. There is no message queue, no worker pool, and no caching layer. The SQLite database is opened once at startup via a module-level singleton and all queries are synchronous (using <code>better-sqlite3</code>). This design eliminates entire categories of concurrency bugs and is entirely appropriate for a small-team deployment.</p>
+
+<hr>
+
+<h2 id="s3">3. Technology Stack &amp; Dependencies</h2>
+
+<h3>3.1 Runtime Dependencies</h3>
+<table>
+  <thead><tr><th>Package</th><th>Version</th><th>Purpose</th></tr></thead>
+  <tbody>
+    <tr><td><code>express</code></td><td>^5.2.1</td><td>HTTP framework. Version 5 introduces native <code>async</code> error propagation without <code>next(err)</code> boilerplate.</td></tr>
+    <tr><td><code>better-sqlite3</code></td><td>^12.8.0</td><td>Synchronous SQLite bindings for Node.js. Version 12.x required for Node 24 compatibility. All queries block the event loop — acceptable for low-concurrency deployments.</td></tr>
+    <tr><td><code>better-sqlite3-session-store</code></td><td>^0.1.0</td><td>Stores Express sessions in a separate SQLite file (<code>sessions.db</code>) rather than in memory.</td></tr>
+    <tr><td><code>express-session</code></td><td>^1.19.0</td><td>Cookie-based session middleware. Session data lives in the SQLite store.</td></tr>
+    <tr><td><code>bcryptjs</code></td><td>^3.0.3</td><td>Password hashing using bcrypt with a cost factor of 12. Pure JavaScript — no native binding required.</td></tr>
+    <tr><td><code>dotenv</code></td><td>^17.4.0</td><td>Loads <code>.env</code> file into <code>process.env</code> at startup.</td></tr>
+    <tr><td><code>express-rate-limit</code></td><td>^8.3.2</td><td>In-memory rate limiting. Auth: 20 req/15 min. API: 200 req/min.</td></tr>
+    <tr><td><code>helmet</code></td><td>^8.1.0</td><td>Sets security-related HTTP response headers: CSP, HSTS, X-Frame-Options, X-Content-Type-Options, etc.</td></tr>
+    <tr><td><code>exceljs</code></td><td>^4.4.0</td><td>Generates <code>.xlsx</code> workbooks for the mobile data-export feature. Streaming write directly to the HTTP response.</td></tr>
+    <tr><td><code>multer</code></td><td>^2.1.1</td><td>Handles <code>multipart/form-data</code> uploads. Used exclusively for the admin database-restore endpoint.</td></tr>
+  </tbody>
+</table>
+
+<h3>3.2 Development Dependencies</h3>
+<table>
+  <thead><tr><th>Package</th><th>Version</th><th>Purpose</th></tr></thead>
+  <tbody>
+    <tr><td><code>typescript</code></td><td>^6.0.2</td><td>TypeScript compiler; targets ES2020, outputs CommonJS to <code>dist/</code>.</td></tr>
+    <tr><td><code>ts-node</code></td><td>^10.9.2</td><td>Runs TypeScript directly without pre-compilation (development mode).</td></tr>
+    <tr><td><code>jest</code> + <code>ts-jest</code></td><td>^30 / ^29</td><td>Unit and integration test runner.</td></tr>
+    <tr><td><code>supertest</code></td><td>^7.2.2</td><td>HTTP assertion library for testing Express routes without a live server.</td></tr>
+    <tr><td><code>@types/*</code></td><td>various</td><td>TypeScript type definitions for all runtime dependencies.</td></tr>
+  </tbody>
+</table>
+
+<h3>3.3 npm Overrides</h3>
+<p>The <code>overrides</code> section in <code>package.json</code> forces specific versions of three transitive dependencies of <code>exceljs</code>: <code>archiver@^7</code>, <code>unzipper@^0.12.3</code>, and <code>fast-csv@^5.0.5</code>. This suppresses deprecation warnings from older transitive versions and has no effect on application functionality.</p>
+
+<h3>3.4 Front-End Libraries (CDN, not bundled)</h3>
+<p>The front-end uses <strong>Chart.js</strong> loaded from <code>https://cdn.jsdelivr.net</code>. It is the only client-side external dependency. The Content-Security-Policy explicitly allows scripts and connections from <code>cdn.jsdelivr.net</code> while blocking all other external sources. Chart.js is intentionally not bundled — this eliminates any front-end build step, with the trade-off that charts require a live network connection.</p>
+
+<hr>
+
+<h2 id="s4">4. Project Structure</h2>
+<pre><code>/
+├── src/                    TypeScript source
+│   ├── server.ts           Entry point
+│   ├── db.ts               Database singleton + schema + migrations
+│   ├── encrypt.ts          AES-256-GCM field encryption helpers
+│   ├── words.ts            Anonymous username generator
+│   ├── middleware/
+│   │   └── index.ts        requireAuth, requireAdmin, requirePasswordChange,
+│   │                       requireActivation, validateCsrf, logEvent
+│   ├── routes/
+│   │   ├── auth.ts         /api/auth/*
+│   │   ├── tasks.ts        /api/tasks/*
+│   │   ├── analytics.ts    /api/analytics/*
+│   │   ├── dropdowns.ts    /api/dropdowns/*
+│   │   └── admin.ts        /api/admin/*
+│   └── __tests__/
+│       ├── security.test.ts
+│       ├── helpers/testApp.ts
+│       └── tsconfig.json
+├── public/                 Statically served files (no build step)
+│   ├── index.html          SPA shell
+│   ├── css/app.css         All styles
+│   ├── js/app.js           Entire front-end (vanilla JS, ~2700 lines)
+│   ├── sw.js               Service Worker
+│   ├── manifest.json       PWA manifest
+│   ├── favicon.svg
+│   ├── icons/              PWA icons
+│   ├── policy.html         Data &amp; Use Policy
+│   ├── help.html           User help page
+│   └── guide.html          Quick-start guide
+├── docs/
+│   ├── installation.md
+│   ├── maintenance.md
+│   └── technical-manual.html   ← this file
+├── dist/                   Compiled output (git-ignored; generated by npm run build)
+├── data/                   Runtime data (git-ignored; created on first run)
+│   ├── tasker.db
+│   ├── sessions.db
+│   └── restore-tmp/
+├── package.json
+├── tsconfig.json
+└── .env.example</code></pre>
+
+<hr>
+
+<h2 id="s5">5. Environment Configuration</h2>
+<p>All runtime configuration is provided via environment variables, loaded from a <code>.env</code> file by <code>dotenv</code>.</p>
+<table>
+  <thead><tr><th>Variable</th><th>Required in prod</th><th>Description</th></tr></thead>
+  <tbody>
+    <tr><td><code>PORT</code></td><td>No</td><td>TCP port the server listens on. Default: <code>3020</code>.</td></tr>
+    <tr><td><code>SESSION_SECRET</code></td><td><strong>Yes</strong></td><td>64+ random hex characters used to sign session cookies. If omitted, a random value is generated each restart — invalidating all sessions on every restart.</td></tr>
+    <tr><td><code>NODE_ENV</code></td><td><strong>Yes</strong></td><td>Set to <code>production</code> to enable <code>secure: true</code> on session cookies (HTTPS-only cookies).</td></tr>
+    <tr><td><code>ENCRYPTION_KEY</code></td><td>Recommended</td><td>64 hex characters (32 bytes). If set, task <code>notes</code> are encrypted with AES-256-GCM. If absent, notes are stored as plaintext.</td></tr>
+    <tr><td><code>SSL_CERT</code></td><td>For TLS</td><td>Path to PEM certificate file. If both <code>SSL_CERT</code> and <code>SSL_KEY</code> exist on disk, the server starts in HTTPS mode.</td></tr>
+    <tr><td><code>SSL_KEY</code></td><td>For TLS</td><td>Path to PEM private key file.</td></tr>
+    <tr><td><code>SSL_CERT_DIR</code></td><td>No</td><td>Directory shortcut — individual cert/key paths are derived from this if not overridden.</td></tr>
+    <tr><td><code>TASKER_DB_PATH</code></td><td>Tests only</td><td>Override the database path (e.g. <code>:memory:</code> or a temp file). Used by the test harness.</td></tr>
+  </tbody>
+</table>
+
+<hr>
+
+<h2 id="s6">6. Server Entry Point — <code>src/server.ts</code></h2>
+
+<h3>6.1 Startup Sequence</h3>
+<ol>
+  <li><strong><code>dotenv/config</code></strong> is imported first as a side-effect, loading <code>.env</code> into <code>process.env</code>.</li>
+  <li>The Express <code>app</code> object is created and <code>trust proxy</code> is set to <code>1</code>, enabling correct IP detection behind a reverse proxy.</li>
+  <li><strong>SSL detection</strong>: The process checks whether both <code>SSL_CERT</code> and <code>SSL_KEY</code> files exist on disk. The <code>useHttps</code> boolean controls subsequent TLS-related behaviour.</li>
+  <li><strong>Helmet</strong> applies security headers. The CSP allows <code>'unsafe-inline'</code> for scripts (required by vanilla-JS inline event handlers in <code>app.js</code>) and <code>cdn.jsdelivr.net</code> (Chart.js). <code>upgradeInsecureRequests</code> is only included when running over HTTPS.</li>
+  <li><strong>JSON and URL-encoded body parsers</strong> are registered with a 1 MB request size limit.</li>
+  <li><strong>Session middleware</strong> is configured with a SQLite-backed store, <code>httpOnly: true</code>, <code>sameSite: 'strict'</code>, <code>secure</code> conditional on <code>NODE_ENV=production</code>, <code>maxAge: 30 minutes</code>.</li>
+  <li><strong>Rate limiters</strong> are created: auth (20/15 min) and API (200/min).</li>
+  <li>The <strong><code>/readyz</code></strong> health-check endpoint is registered before authentication middleware.</li>
+  <li><strong><code>express.static</code></strong> serves <code>public/</code>. The <code>sw.js</code> file gets <code>Cache-Control: no-cache</code> and <code>Service-Worker-Allowed: /</code> headers.</li>
+  <li>All <strong>API route groups</strong> are mounted with their respective rate limiters.</li>
+  <li>Static HTML pages (<code>/policy</code>, <code>/help</code>, <code>/guide</code>) are served by explicit routes.</li>
+  <li>The catch-all <code>GET /{*path}</code> returns <code>index.html</code> — enabling SPA browser history navigation.</li>
+  <li><strong>Data retention</strong> job: <code>runRetention()</code> deletes tasks older than 30 days on startup and every 24 hours.</li>
+  <li><strong><code>getDb()</code></strong> initialises the database connection and runs schema migrations.</li>
+  <li>The HTTP(S) server starts listening on the configured port.</li>
+</ol>
+
+<h3>6.2 Version Exposure</h3>
+<p>The app's version string is read from <code>package.json</code> at compile time via <code>import { version } from '../package.json'</code> (enabled by <code>resolveJsonModule: true</code> in <code>tsconfig.json</code>). Exposed at <code>/api/version</code> and <code>/readyz</code>.</p>
+
+<hr>
+
+<h2 id="s7">7. Database Layer — <code>src/db.ts</code></h2>
+
+<h3>7.1 Singleton Pattern</h3>
+<p>The database connection is managed as a module-level singleton: a <code>let _db</code> variable that is <code>null</code> until first use. <code>getDb()</code> is the only way to obtain the connection. This ensures the <code>data/</code> directory is created before any file is opened, schema initialisation runs exactly once, and a single connection is reused across all requests.</p>
+
+<h3>7.2 SQLite Pragmas</h3>
+<ul>
+  <li><code>PRAGMA journal_mode = WAL</code> — Write-Ahead Logging. Readers do not block writers and writers do not block readers, enabling concurrent API requests without serialisation stalls.</li>
+  <li><code>PRAGMA foreign_keys = ON</code> — Enforces referential integrity (SQLite does not enforce <code>REFERENCES</code> constraints by default).</li>
+</ul>
+
+<h3>7.3 Schema Definition (<code>initSchema</code>)</h3>
+<p>The schema is declared in one idempotent <code>db.exec()</code> call using <code>CREATE TABLE IF NOT EXISTS</code>. The eight tables are:</p>
+<table>
+  <thead><tr><th>Table</th><th>Purpose</th></tr></thead>
+  <tbody>
+    <tr><td><code>user_groups</code></td><td>Named groupings for users (e.g. "General", "Cardiology"). Controls dropdown visibility.</td></tr>
+    <tr><td><code>users</code></td><td>All accounts: regular users and the admin. Stores bcrypt hash, lockout state, group assignment, activation flags.</td></tr>
+    <tr><td><code>settings</code></td><td>Key/value configuration pairs (currently: <code>self_registration</code>, <code>user_invite</code> modes).</td></tr>
+    <tr><td><code>tasks</code></td><td>The core data entity. One row per logged task.</td></tr>
+    <tr><td><code>dropdown_options</code></td><td>The master list of selectable values for <code>category</code>, <code>subcategory</code>, and <code>outcome</code> fields.</td></tr>
+    <tr><td><code>group_dropdown_options</code></td><td>Many-to-many join: which options are visible to which group.</td></tr>
+    <tr><td><code>user_dropdown_options</code></td><td>Many-to-many join: which options an individual user has personally selected.</td></tr>
+    <tr><td><code>events</code></td><td>Anonymised event log (event type + timestamp only).</td></tr>
+    <tr><td><code>pending_task_logs</code></td><td>Timestamped snapshots of a user's pending task count.</td></tr>
+  </tbody>
+</table>
+
+<h3>7.4 Automatic Schema Migrations</h3>
+<p>After the initial schema creation, <code>initSchema</code> reads each table's actual column list using <code>PRAGMA table_info(tableName)</code> and conditionally adds columns introduced in later versions (<code>failed_login_attempts</code>, <code>is_locked</code>, <code>is_approved</code>, <code>pending_activation</code>, <code>user_group_id</code>, <code>assigned_date</code>, etc.). Any existing database from an older version is automatically migrated on the next startup — no manual scripts or downtime required.</p>
+
+<h3>7.5 Seed Data</h3>
+<p>On a fresh database (zero approved dropdown options), default categories, subcategories, and outcomes are inserted atomically. If no user groups exist, a "General" group is created and seeded with all options. Settings default to <code>'admin_approved'</code>.</p>
+
+<h3>7.6 Database Restore</h3>
+<p><code>replaceDb(uploadedPath)</code>: validates the uploaded path is strictly inside <code>data/restore-tmp/</code> (path traversal prevention), closes the current database connection, and copies the uploaded file over <code>tasker.db</code>.</p>
+
+<hr>
+
+<h2 id="s8">8. Field-Level Encryption — <code>src/encrypt.ts</code></h2>
+
+<h3>8.1 Purpose and Scope</h3>
+<p>The <code>notes</code> field on a task is the only free-text field users can write into. To prevent exposure if the database file is accessed outside the application, notes are encrypted at rest when <code>ENCRYPTION_KEY</code> is configured.</p>
+
+<h3>8.2 Algorithm: AES-256-GCM</h3>
+<ul>
+  <li>GCM (Galois/Counter Mode) provides both <strong>confidentiality</strong> and <strong>integrity</strong> (any tampering with the ciphertext is detected).</li>
+  <li>The key is a 32-byte value derived from the <code>ENCRYPTION_KEY</code> environment variable (64 hex characters).</li>
+  <li>A fresh 16-byte random <strong>Initialisation Vector (IV)</strong> is generated per encryption operation via <code>crypto.randomBytes</code> — the same plaintext always produces a different ciphertext.</li>
+  <li>The 16-byte <strong>authentication tag</strong> is stored and verified before decryption.</li>
+</ul>
+
+<h3>8.3 Storage Format</h3>
+<p>Encrypted values are stored as a prefixed, colon-delimited base64 string:</p>
+<pre><code>enc:&lt;IV base64&gt;:&lt;tag base64&gt;:&lt;ciphertext base64&gt;</code></pre>
+<p>The <code>enc:</code> prefix distinguishes encrypted from plaintext values, enabling backwards-compatible operation with pre-existing plaintext notes.</p>
+
+<h3>8.4 Key Validation</h3>
+<p><code>getKey()</code> re-reads <code>ENCRYPTION_KEY</code> from <code>process.env</code> on every call. It validates the 64-hex-character format and returns <code>null</code> if invalid (logging a warning). When <code>null</code>, <code>encryptField</code> passes values through unmodified, and <code>decryptField</code> returns <code>null</code> for any already-encrypted value (preventing silent ciphertext exposure).</p>
+
+<hr>
+
+<h2 id="s9">9. Middleware — <code>src/middleware/index.ts</code></h2>
+
+<h3>9.1 <code>requireAuth</code></h3>
+<p>Checks: (1) <code>req.session.userId</code> exists; (2) session activity is within 30 minutes — if not, session is destroyed and <code>401 Session expired</code> is returned; (3) <code>session.sessionDate</code> matches today — if the session spans midnight, it is destroyed. On success, <code>session.lastActivity</code> is updated.</p>
+
+<h3>9.2 <code>requireAdmin</code></h3>
+<p>Checks <code>session.isAdmin === true</code>. Returns <code>403</code> otherwise. Always stacked on top of <code>requireAuth</code>.</p>
+
+<h3>9.3 <code>requirePasswordChange</code></h3>
+<p>If <code>session.mustChangePassword</code> is <code>true</code>, blocks all requests except <code>/change-password</code> and <code>/logout</code>. Enforces password change for admin-created and invited users.</p>
+
+<h3>9.4 <code>requireActivation</code></h3>
+<p>If <code>session.pendingActivation</code> is <code>true</code>, blocks all requests except <code>/logout</code>. Enforces administrator activation of invited accounts.</p>
+
+<h3>9.5 <code>validateCsrf</code></h3>
+<p>Reads the <code>X-CSRF-Token</code> request header and compares it against <code>session.csrfToken</code>. Returns <code>403 Invalid CSRF token</code> on mismatch. Required on all POST/PATCH/PUT/DELETE requests.</p>
+
+<h3>9.6 <code>logEvent</code></h3>
+<p>Non-blocking helper that inserts a row into the <code>events</code> table with an event type string only — no user IDs, no IP addresses, no task IDs. Catches all errors silently.</p>
+
+<hr>
+
+<h2 id="s10">10. Anonymous Username Generator — <code>src/words.ts</code></h2>
+<p>Generates pseudonymous adjective-noun word pairs (e.g. <code>BrightHeron</code>, <code>CalmOak</code>) from lists of 100 adjectives and 100 nouns (10,000 combinations). <code>generateUsername()</code> uses <code>crypto.randomInt(arr.length)</code> (cryptographically secure), checks the result against the <code>users</code> table, and retries up to 200 times on collision. Falls back to appending a 3-digit random number if all 200 attempts collide.</p>
+
+<hr>
+
+<h2 id="s11">11. API Route Layer</h2>
+<p>All routes are Express <code>Router</code> instances mounted by <code>server.ts</code>. Route files import and apply only the middleware they need — there is no global <code>app.use(requireAuth)</code>.</p>
+
+<h3 id="s11_1">11.1 Authentication — <code>src/routes/auth.ts</code></h3>
+<p><strong>Password policy regex:</strong> minimum 8 characters, at least one special character from <code>!@#$%^&amp;*()\-_=+...</code></p>
+
+<table>
+  <thead><tr><th>Endpoint</th><th>Description</th></tr></thead>
+  <tbody>
+    <tr><td><code>GET /api/auth/csrf-token</code></td><td>Returns (or generates) the CSRF token for the current session. No auth required.</td></tr>
+    <tr><td><code>GET /api/auth/registration-config</code></td><td>Returns <code>{ selfRegistration, userInvite }</code> mode settings. Used by the login page to show/hide the Register button.</td></tr>
+    <tr><td><code>GET /api/auth/stats</code></td><td>Returns aggregate user/task counts for the public login page stats.</td></tr>
+    <tr><td><code>POST /api/auth/register</code></td><td>Self-registration. Generates username, hashes password at cost 12, inserts user. <code>is_approved</code> set based on <code>selfRegistration</code> mode.</td></tr>
+    <tr><td><code>POST /api/auth/invite</code></td><td>Logged-in user invitation. Generates username + temporary password. <code>pending_activation</code> set based on <code>user_invite</code> mode.</td></tr>
+    <tr><td><code>POST /api/auth/login</code></td><td>Validates credentials. Timing-safe (always calls <code>bcrypt.compare</code> even for unknown usernames). Checks approval, lockout, increments failure counter, resets on success, regenerates CSRF token.</td></tr>
+    <tr><td><code>POST /api/auth/logout</code></td><td>Destroys session.</td></tr>
+    <tr><td><code>POST /api/auth/change-password</code></td><td>Validates new password. If not forced, also verifies current password. Updates hash, clears <code>must_change_password</code>.</td></tr>
+    <tr><td><code>GET /api/auth/me</code></td><td>Returns current user profile (including group info) from database. Used on page refresh to restore state.</td></tr>
+    <tr><td><code>GET /api/auth/user-groups</code></td><td>Returns all approved user groups for the group-selection UI.</td></tr>
+    <tr><td><code>POST /api/auth/propose-group</code></td><td>Inserts a user-suggested group name with <code>is_approved = 0</code>.</td></tr>
+    <tr><td><code>POST /api/auth/set-group</code></td><td>Updates <code>user_group_id</code>. Atomically seeds personal dropdown options from the new group's defaults.</td></tr>
+    <tr><td><code>GET /PUT /api/auth/my-options</code></td><td>GET: returns all approved options with personal assignment flags. PUT: atomically replaces personal option selection.</td></tr>
+    <tr><td><code>DELETE /api/auth/account</code></td><td>User self-deletion. Requires username + password confirmation. Cascades to delete all task data.</td></tr>
+  </tbody>
+</table>
+
+<h3 id="s11_2">11.2 Tasks — <code>src/routes/tasks.ts</code></h3>
+<p>All routes protected by <code>requireAuth</code>, <code>requirePasswordChange</code>, <code>requireActivation</code>.</p>
+<table>
+  <thead><tr><th>Endpoint</th><th>Description</th></tr></thead>
+  <tbody>
+    <tr><td><code>GET /api/tasks/active</code></td><td>Returns the single <code>in_progress</code> task for the current user, or <code>{ task: null }</code>. Decrypts notes.</td></tr>
+    <tr><td><code>GET /api/tasks/recent-count</code></td><td>Count of tasks completed in the last 7 days.</td></tr>
+    <tr><td><code>GET/POST /api/tasks/pending-count</code></td><td>Log or retrieve timestamped snapshots of the user's pending task backlog (0–9999).</td></tr>
+    <tr><td><code>POST /api/tasks/start</code></td><td>Creates a task with <code>status = 'in_progress'</code>. Enforces single active task per user. Validates start_time is today. Encrypts notes.</td></tr>
+    <tr><td><code>PATCH /api/tasks/:id</code></td><td>Main task update. Dynamic SET clause. Validates temporal consistency, notes length (2000 chars), date-of-today constraints. Encrypts notes on write. Logs event on completion/discard.</td></tr>
+    <tr><td><code>GET /api/tasks/</code></td><td>All non-discarded tasks with optional query-string filtering.</td></tr>
+    <tr><td><code>GET /api/tasks/:id</code></td><td>Single task by ID, ownership-checked.</td></tr>
+    <tr><td><code>DELETE /api/tasks/</code></td><td>Bulk delete all non-in-progress tasks for the user.</td></tr>
+    <tr><td><code>DELETE /api/tasks/:id</code></td><td>Delete single task, ownership-checked.</td></tr>
+  </tbody>
+</table>
+
+<h3 id="s11_3">11.3 Analytics — <code>src/routes/analytics.ts</code></h3>
+<h4>Time Calculation Helpers</h4>
+<p><code>mins(start, end, interruptions)</code> and <code>secs(start, end, interruptions)</code> compute net task duration by subtracting total interruption duration from gross elapsed time. Results are clamped to zero.</p>
+
+<h4><code>buildSummary(tasks)</code></h4>
+<p>Core analytics computation given an array of task objects. Produces: total tasks/minutes/interruptions, averages, breakdowns by category/outcome/date/hour-of-day/day-of-week/subcategory/interruptions-by-category, and a <strong>linear regression</strong> on daily task counts (slope, intercept, R² — computed when ≥ 3 date points exist).</p>
+
+<table>
+  <thead><tr><th>Endpoint</th><th>Description</th></tr></thead>
+  <tbody>
+    <tr><td><code>GET /api/analytics/session</code></td><td>Tasks for the current session date with summary. Session date is frozen at login time.</td></tr>
+    <tr><td><code>GET /api/analytics/history</code></td><td>Completed tasks from the past 30 days with optional date/category/duty/outcome filtering. Includes summary.</td></tr>
+    <tr><td><code>GET /api/analytics/export</code></td><td>Streams an <code>.xlsx</code> workbook. Mobile-only (User-Agent check; non-mobile gets 403). Two sheets: Tasks and Summary. ExcelJS streaming write to response.</td></tr>
+  </tbody>
+</table>
+
+<h3 id="s11_4">11.4 Dropdowns — <code>src/routes/dropdowns.ts</code></h3>
+<p>The <code>ALLOWED</code> constant whitelists: <code>'category'</code>, <code>'subcategory'</code>, <code>'outcome'</code>.</p>
+<h4>Three-tier option resolution (<code>GET /api/dropdowns/:field</code>)</h4>
+<ol>
+  <li><strong>Personal options</strong>: if the user has any rows in <code>user_dropdown_options</code>, return those.</li>
+  <li><strong>Group options</strong>: if no personal options, return the user's group options from <code>group_dropdown_options</code>.</li>
+  <li><strong>Global fallback</strong>: return all approved options for the field.</li>
+</ol>
+<h4>User proposal (<code>POST /api/dropdowns/propose</code>)</h4>
+<p>Inserts a pending option (<code>approved = 0</code>) for admin review. Idempotent — returns a message if already exists.</p>
+<h4>Admin endpoints</h4>
+<p><code>GET /admin/all</code>, <code>POST /admin</code> (directly adds approved + assigns to all groups), <code>PUT /admin/:id</code> (rename, unique check), <code>POST /admin/:id/approve</code> (approve + assign to all groups), <code>DELETE /admin/:id</code> (remove option; existing task records unaffected).</p>
+
+<h3 id="s11_5">11.5 Admin — <code>src/routes/admin.ts</code></h3>
+<p>All routes protected by <code>requireAuth, requireAdmin</code>. Multer configured with <code>dest: RESTORE_DIR</code> and 100 MB size limit.</p>
+<table>
+  <thead><tr><th>Category</th><th>Endpoints</th></tr></thead>
+  <tbody>
+    <tr><td>Stats &amp; Settings</td><td><code>GET /stats</code>, <code>GET/POST /settings</code> (3 valid modes each).</td></tr>
+    <tr><td>User management</td><td>List active/pending/awaiting-activation users. Create, reset password, unlock, approve, activate, delete users.</td></tr>
+    <tr><td>User groups</td><td>List, create (auto-seeded), rename, delete groups. Get/set group dropdown assignments (transactional).</td></tr>
+    <tr><td>Pending group proposals</td><td>List, approve (auto-seeded), reject.</td></tr>
+    <tr><td>Database</td><td><code>GET /backup</code> (streams raw <code>.db</code> file). <code>POST /restore</code> (upload + path-validation + <code>replaceDb</code>).</td></tr>
+  </tbody>
+</table>
+
+<hr>
+
+<h2 id="s12">12. Client-Side Application — <code>public/js/app.js</code></h2>
+
+<h3>12.1 Architecture: Single-Page Application</h3>
+<p>A single ~2,750-line JavaScript file with no framework, no JSX, no bundler, no TypeScript. The HTML shell contains a single <code>&lt;div id="app"&gt;</code>. View transitions are synchronous DOM replacements: <code>app().innerHTML = renderXxx()</code>.</p>
+
+<h3>12.2 Application State</h3>
+<p>A global <code>state</code> object holds all runtime state: <code>csrfToken</code>, <code>user</code>, <code>registrationConfig</code>, <code>appStats</code>, <code>activeTask</code>, timer intervals, <code>interruptStart</code>, <code>dropdowns</code>, <code>taskForm</code>, <code>editTask</code>, <code>charts</code>, <code>pendingTaskLog</code>, <code>recentHandledCount</code>.</p>
+
+<h3>12.3 API Helper (<code>api</code> function)</h3>
+<p>A thin <code>fetch</code> wrapper that: adds <code>X-CSRF-Token</code> and <code>Content-Type</code> headers; handles <code>401</code> (redirects to login), <code>429</code> (rate-limit message with wait time), and non-OK responses (extracts <code>error</code> from JSON body).</p>
+
+<h3>12.4 Initialisation (<code>init</code>)</h3>
+<p>Called on <code>DOMContentLoaded</code>: register SW → check asset version (cache purge + reload on version bump) → fetch CSRF token → call <code>/api/auth/me</code> → if authenticated, load dropdowns + active task + start activity tracking + render view; if not, render login.</p>
+
+<h3>12.5 View Navigation &amp; Browser History</h3>
+<p>Every view function calls <code>pushHistory(viewName)</code> or <code>replaceHistory(viewName)</code>, storing the view name in <code>window.history.state</code>. A <code>popstate</code> listener maps state names to render functions via <code>HISTORY_RENDER_MAP</code>, with auth guards preventing access to protected views when logged out.</p>
+
+<h3>12.6 Session Inactivity Tracking</h3>
+<p>Activity events (<code>click</code>, <code>touchstart</code>, <code>keydown</code>, <code>scroll</code>) update a <code>localStorage.tasker_last_active</code> timestamp. An interval checks this every 60 seconds. After 30 minutes of inactivity: server logout is called, client state is cleared, and an inactivity screen is shown. The <code>visibilitychange</code> event triggers an immediate check when the tab becomes visible. If a task was active during inactivity, the gap is automatically recorded as an interruption.</p>
+
+<h3>12.7 Combobox Component</h3>
+<p>A custom searchable dropdown with: trigger button, search input, options list, and "Add new" row. Keyboard-navigable (arrow keys, Enter, Escape). Only one open at a time. The <code>filterCombo</code> function re-renders the options list on each keystroke.</p>
+
+<h3>12.8 Chart Rendering</h3>
+<p><code>renderChart(canvasId, type, labels, datasets, options)</code> wraps <code>new Chart(ctx, {...})</code>. Instances stored in <code>state.charts</code> and destroyed by <code>clearCharts()</code> before any view transition. Charts include: category time (doughnut), outcome distribution (doughnut), avg duration by category (horizontal bar), duty/personal split (grouped bar), subcategory counts (horizontal bar), hour-of-day activity (bar), day-of-week activity (bar), task/time trend with regression overlay (line), interruptions trend (line).</p>
+
+<h3>12.9 XSS Prevention</h3>
+<p>All user-supplied data rendered into HTML is passed through <code>esc()</code> (HTML-entity encoding of <code>&amp;</code>, <code>&lt;</code>, <code>&gt;</code>, <code>"</code>, <code>'</code>). A secondary helper <code>safeId()</code> strips all non-alphanumeric/hyphen/underscore characters from strings used as DOM element ID suffixes.</p>
+
+<hr>
+
+<h2 id="s13">13. Progressive Web App (PWA) Layer</h2>
+
+<h3>13.1 Web App Manifest (<code>public/manifest.json</code>)</h3>
+<p><code>display: standalone</code> (removes browser chrome on home screen launch), <code>theme_color: #1a56db</code>, three icon sizes (SVG, 192px PNG, 512px PNG).</p>
+
+<h3>13.2 Service Worker (<code>public/sw.js</code>)</h3>
+<p>Cache name versioning (<code>tasker-v4</code>). Bumping the constant in a new release triggers cache invalidation for all users.</p>
+<ul>
+  <li><strong>Install:</strong> Pre-caches static assets using <code>Promise.allSettled</code> (one failure doesn't abort install). Calls <code>self.skipWaiting()</code>.</li>
+  <li><strong>Activate:</strong> Deletes stale caches. Calls <code>self.clients.claim()</code>.</li>
+  <li><strong>Fetch strategy — Network-first for <code>/api/*</code>:</strong> Always attempts network; returns <code>503</code> JSON on failure.</li>
+  <li><strong>Fetch strategy — Cache-first for everything else:</strong> Serves from cache; falls back to network (and caches the response). On failure, returns cached <code>/</code> for navigation requests.</li>
+</ul>
+<p>The <code>sw.js</code> file is served with <code>Cache-Control: no-cache</code>, ensuring the browser always revalidates it.</p>
+
+<hr>
+
+<h2 id="s14">14. Security Design</h2>
+
+<h3>14.1 Authentication</h3>
+<ul>
+  <li>Passwords hashed with bcrypt cost factor 12 (~250ms/hash).</li>
+  <li>Sessions use a server-side SQLite store; the client holds only a signed opaque cookie.</li>
+  <li>Sessions expire after 30 minutes of inactivity (server-side and client-side).</li>
+  <li>Sessions are terminated at midnight (server-side <code>sessionDate</code> check).</li>
+</ul>
+
+<h3>14.2 CSRF Protection</h3>
+<p>Token stored server-side in the session. Client sends it as a custom <code>X-CSRF-Token</code> header. Immune to cross-origin attacks because: cookies are <code>SameSite=strict</code>; the token cannot be read by a cross-origin script; custom headers cannot be set by HTML forms.</p>
+
+<h3>14.3 Content Security Policy</h3>
+<p>Blocks inline script (with <code>'unsafe-inline'</code> exception), external scripts except Chart.js CDN, external images, external styles, external connections except Chart.js CDN.</p>
+
+<h3>14.4 Rate Limiting</h3>
+<ul>
+  <li><strong>Auth limiter:</strong> 20 requests per 15 minutes per IP, <code>skipSuccessfulRequests: true</code>.</li>
+  <li><strong>API limiter:</strong> 200 requests per minute per IP.</li>
+</ul>
+<p>RFC 9110 <code>RateLimit-*</code> headers returned so the client can display informative wait-time messages.</p>
+
+<h3>14.5 Account Lockout</h3>
+<p>After 3 consecutive failed login attempts, <code>is_locked = 1</code> is set. Unlocking requires explicit administrator action. Remaining attempt count communicated in error messages.</p>
+
+<h3>14.6 Path Traversal Prevention</h3>
+<p>The database restore endpoint validates that the resolved uploaded file path starts with <code>path.resolve(RESTORE_DIR) + path.sep</code>, preventing path construction attacks.</p>
+
+<h3>14.7 Input Validation</h3>
+<ul>
+  <li>Dropdown <code>ALLOWED</code> constant whitelists three permitted field names.</li>
+  <li>Notes: 2,000-character server-side limit.</li>
+  <li>Dropdown values: 100-character limit.</li>
+  <li>Group names: 80-character limit.</li>
+  <li>Pending counts: integer, 0–9,999.</li>
+  <li>All values rendered into client HTML passed through <code>esc()</code>.</li>
+</ul>
+
+<hr>
+
+<h2 id="s15">15. Data Model</h2>
+
+<h3><code>users</code></h3>
+<table>
+  <thead><tr><th>Column</th><th>Type</th><th>Description</th></tr></thead>
+  <tbody>
+    <tr><td><code>id</code></td><td>INTEGER PK</td><td>Auto-increment</td></tr>
+    <tr><td><code>username</code></td><td>TEXT UNIQUE</td><td>Auto-generated word-pair</td></tr>
+    <tr><td><code>password_hash</code></td><td>TEXT</td><td>bcrypt hash</td></tr>
+    <tr><td><code>must_change_password</code></td><td>0/1</td><td>Forces password change on next login</td></tr>
+    <tr><td><code>is_admin</code></td><td>0/1</td><td>Admin flag</td></tr>
+    <tr><td><code>is_approved</code></td><td>0/1</td><td>Registration approval state</td></tr>
+    <tr><td><code>pending_activation</code></td><td>0/1</td><td>Awaiting admin activation post-password-change</td></tr>
+    <tr><td><code>failed_login_attempts</code></td><td>INTEGER</td><td>Count of consecutive login failures</td></tr>
+    <tr><td><code>is_locked</code></td><td>0/1</td><td>Account lockout flag</td></tr>
+    <tr><td><code>user_group_id</code></td><td>INTEGER FK</td><td>Nullable group membership</td></tr>
+    <tr><td><code>created_at</code></td><td>TEXT</td><td>ISO 8601 UTC timestamp</td></tr>
+  </tbody>
+</table>
+
+<h3><code>tasks</code></h3>
+<table>
+  <thead><tr><th>Column</th><th>Type</th><th>Description</th></tr></thead>
+  <tbody>
+    <tr><td><code>id</code></td><td>INTEGER PK</td><td></td></tr>
+    <tr><td><code>user_id</code></td><td>INTEGER FK</td><td>CASCADE DELETE</td></tr>
+    <tr><td><code>is_duty</code></td><td>0/1</td><td>Group task (1) vs personal task (0)</td></tr>
+    <tr><td><code>assigned_date</code></td><td>TEXT</td><td>Date the task was originally assigned</td></tr>
+    <tr><td><code>start_time</code></td><td>TEXT NOT NULL</td><td>ISO 8601 UTC</td></tr>
+    <tr><td><code>end_time</code></td><td>TEXT</td><td>NULL while in progress</td></tr>
+    <tr><td><code>category</code></td><td>TEXT</td><td>e.g. "Clinical"</td></tr>
+    <tr><td><code>subcategory</code></td><td>TEXT</td><td>e.g. "Documentation"</td></tr>
+    <tr><td><code>outcome</code></td><td>TEXT</td><td>e.g. "Completed"</td></tr>
+    <tr><td><code>interruptions</code></td><td>TEXT</td><td>JSON array: <code>[{ start: ISO, end: ISO }]</code></td></tr>
+    <tr><td><code>notes</code></td><td>TEXT</td><td>Plaintext or <code>enc:...</code> (AES-256-GCM)</td></tr>
+    <tr><td><code>status</code></td><td>TEXT</td><td><code>'in_progress'</code>, <code>'completed'</code>, <code>'discarded'</code></td></tr>
+    <tr><td><code>created_at</code></td><td>TEXT</td><td>Insert timestamp</td></tr>
+    <tr><td><code>updated_at</code></td><td>TEXT</td><td>Last update timestamp</td></tr>
+  </tbody>
+</table>
+
+<h3><code>dropdown_options</code></h3>
+<table>
+  <thead><tr><th>Column</th><th>Description</th></tr></thead>
+  <tbody>
+    <tr><td><code>id</code>, <code>field_name</code>, <code>value</code></td><td>Core identity. UNIQUE on (field_name, value).</td></tr>
+    <tr><td><code>approved</code></td><td>0 = pending, 1 = approved</td></tr>
+    <tr><td><code>proposed_by_user_id</code></td><td>FK (SET NULL on user delete)</td></tr>
+    <tr><td><code>created_at</code></td><td>Timestamp</td></tr>
+  </tbody>
+</table>
+
+<h3><code>events</code></h3>
+<p>Only stores <code>event_type</code> (string) and <code>created_at</code>. No user ID or task linkage. Examples: <code>'user_login'</code>, <code>'task_completed'</code>, <code>'admin_user_created'</code>.</p>
+
+<hr>
+
+<h2 id="s16">16. User Lifecycle &amp; Workflows</h2>
+
+<h3>16.1 Registration Modes</h3>
+<table>
+  <thead><tr><th>Mode</th><th>Behaviour</th></tr></thead>
+  <tbody>
+    <tr><td><code>disabled</code></td><td>Registration button hidden. No self-registration possible.</td></tr>
+    <tr><td><code>admin_approved</code></td><td>Account created with <code>is_approved=0</code> (self-reg) or <code>pending_activation=1</code> (invite). Cannot fully access the app until admin acts.</td></tr>
+    <tr><td><code>auto</code></td><td>Account immediately active.</td></tr>
+  </tbody>
+</table>
+
+<h3>16.2 Self-Registration Flow</h3>
+<pre><code>User visits login page → taps Register → enters password → accepts Policy
+→ POST /api/auth/register
+    ├─ (auto)           → is_approved=1 → user logs in immediately
+    └─ (admin_approved) → is_approved=0 → "awaiting approval" shown
+                          admin: POST /api/admin/users/:id/approve
+                          user can now log in</code></pre>
+
+<h3>16.3 Invited User Flow</h3>
+<pre><code>Existing user → "Invite a User" → POST /api/auth/invite
+→ username + temp password generated → shared via secure channel
+→ new user logs in → must_change_password=1 → forced password change
+→ if pending_activation=1 → renderAwaitActivation shown
+→ admin: POST /api/admin/users/:id/activate
+→ user can now log tasks</code></pre>
+
+<h3>16.4 Account Lockout &amp; Unlock</h3>
+<pre><code>Failed login → failed_login_attempts++ → if &gt;= 3 → is_locked=1
+User tries to log in while locked → 403 "Account locked"
+Admin: POST /api/admin/users/:id/unlock → failed_login_attempts=0, is_locked=0</code></pre>
+
+<hr>
+
+<h2 id="s17">17. Task Lifecycle &amp; Workflows</h2>
+<p>Only one <code>in_progress</code> task can exist per user at any time (enforced server-side).</p>
+
+<h3>17.1 Normal Task Flow</h3>
+<pre><code>User taps "Log Task"
+→ selects type (duty/personal), category, subcategory, assigned date
+→ POST /api/tasks/start → status='in_progress'
+→ Live timer display
+
+[Optional] User taps "Interrupted"
+→ showInterruptModal
+    a) Resume → interruption start/end recorded, back to timer
+    b) Manual entry of interruption times → saved
+    c) Discard → status='discarded'
+
+User taps "End Task"
+→ renderTaskReview: set outcome, adjust times, add notes (optional)
+→ review/delete interruptions
+→ PATCH /api/tasks/:id { status:'completed', end_time, outcome, ... }</code></pre>
+
+<h3>17.2 Inactivity Interruption Recording</h3>
+<pre><code>Tab becomes visible after ≥30 min inactivity &amp; task active
+→ checkInactivityInterruption()
+→ PATCH /api/tasks/:id { interruptions: [...current, { start: lastActive, end: now }] }
+→ UI updated to show new interruption count</code></pre>
+
+<hr>
+
+<h2 id="s18">18. Analytics Engine</h2>
+
+<h3>18.1 Session vs History</h3>
+<p>The session view shows data for the current calendar day (anchored to <code>session.sessionDate</code> at login — prevents cross-midnight data leakage). The history view queries the past 30 days (maximum retention window).</p>
+
+<h3>18.2 Linear Regression Algorithm</h3>
+<p>Ordinary least squares on daily task counts, pure JavaScript:</p>
+<pre><code>slope     = Σ(xi - x̄)(yi - ȳ) / Σ(xi - x̄)²
+intercept = ȳ - slope × x̄
+R²        = 1 - SS_res / SS_tot</code></pre>
+<p>Calculated when ≥ 3 distinct dates exist. Displayed as e.g. <em>+0.3 tasks/day (R²=0.85, increasing)</em>.</p>
+
+<h3>18.3 Client-Side Insight Generation</h3>
+<p><code>buildInsights(summary)</code> produces human-readable insight strings: busiest hour, busiest day of week, most time-consuming category, most interrupted category, average task duration classification, interruption rate (% of tasks with ≥1 interruption).</p>
+
+<hr>
+
+<h2 id="s19">19. Admin Workflows</h2>
+
+<h3>19.1 Admin Panel Initialisation</h3>
+<p><code>renderAdmin()</code> issues 8 parallel API requests in one <code>Promise.all</code> (stats, users, dropdown options, settings, pending users, awaiting-activation users, user groups, pending group proposals). All data is passed to <code>renderAdminContent()</code> in a single pass.</p>
+
+<h3>19.2 Group Dropdown Management</h3>
+<p>Managed via a modal dialog. <code>PUT /api/admin/user-groups/:id/dropdowns</code> atomically replaces the entire <code>group_dropdown_options</code> set inside a transaction. Users with pre-seeded personal options are not automatically updated.</p>
+
+<h3>19.3 Database Backup &amp; Restore</h3>
+<p>Backup streams the raw SQLite file (safe during operation in WAL mode). Restore is destructive and immediate: closes the DB handle, overwrites the file, re-opens on the next request.</p>
+
+<hr>
+
+<h2 id="s20">20. Testing Architecture</h2>
+<p>Located in <code>src/__tests__/</code>. Framework: Jest + ts-jest + supertest.</p>
+<ul>
+  <li><strong>Test database isolation:</strong> <code>TASKER_DB_PATH</code> env var set to a temp file. <code>closeDb()</code> called in <code>afterAll</code> hooks.</li>
+  <li><strong>Test app helper (<code>helpers/testApp.ts</code>):</strong> Creates a configured Express app without starting a TCP listener. Supertest makes direct calls to the app object.</li>
+  <li><strong>Security test coverage:</strong> CSRF enforcement, rate limiting, authentication gates, admin gates, password complexity, account lockout behaviour.</li>
+</ul>
+<p>Run all tests: <code>npm test</code>.</p>
+
+<hr>
+
+<h2 id="s21">21. Build &amp; Deployment Pipeline</h2>
+
+<h3>21.1 TypeScript Compilation</h3>
+<p><code>tsconfig.json</code>: target ES2020, module CommonJS, strict mode, <code>resolveJsonModule</code> (for version string import), output to <code>dist/</code>.</p>
+<table>
+  <thead><tr><th>Command</th><th>Action</th></tr></thead>
+  <tbody>
+    <tr><td><code>npm run build</code></td><td>Compiles <code>src/ → dist/</code></td></tr>
+    <tr><td><code>npm start</code></td><td>Runs <code>node dist/server.js</code></td></tr>
+    <tr><td><code>npm run dev</code></td><td>Runs <code>ts-node src/server.ts</code> (no compilation)</td></tr>
+    <tr><td><code>npm test</code></td><td>Runs Jest test suite</td></tr>
+  </tbody>
+</table>
+
+<h3>21.2 Runtime Data Directory</h3>
+<p><code>data/</code> and <code>data/restore-tmp/</code> are created automatically on first startup. Not tracked by git. No migration tool or setup script required — the database schema is self-initialising.</p>
+
+<hr>
+
+<h2 id="s22">22. Data Retention &amp; Privacy</h2>
+
+<h3>22.1 Automatic Task Deletion</h3>
+<pre><code>DELETE FROM tasks WHERE created_at &lt; datetime('now', '-30 days')</code></pre>
+<p>Runs on startup and every 24 hours. Result (rows deleted) is logged to console if non-zero.</p>
+
+<h3>22.2 User-Initiated Deletion</h3>
+<p>Users can delete their account from the Settings page. Requires typing username + password. Cascades to delete all associated task, option, and log data.</p>
+
+<h3>22.3 Privacy by Design</h3>
+<ul>
+  <li>Usernames are computer-generated and cannot be linked to real identities.</li>
+  <li>The <code>events</code> table stores only event type + timestamp — never user IDs.</li>
+  <li>A <strong>Privacy Splash</strong> is shown on every login, reinforcing the prohibition on entering patient-identifiable data.</li>
+  <li>Task notes (the only free-text field) are encrypted at rest when configured.</li>
+  <li>Aggregate statistics are shown publicly on the login page; individual data is always scoped to the authenticated user.</li>
+</ul>
+
+<hr>
+
+<h2 id="s23">23. Known Design Decisions &amp; Constraints</h2>
+<table>
+  <thead><tr><th>Decision</th><th>Rationale</th></tr></thead>
+  <tbody>
+    <tr><td>No front-end framework</td><td>Eliminates build complexity; entire front-end is a single deployable file. Trade-off: more manual DOM management; inline event handlers require <code>'unsafe-inline'</code> in CSP.</td></tr>
+    <tr><td><code>better-sqlite3</code> (synchronous)</td><td>Eliminates async complexity for a read-heavy, single-process workload. Would not scale beyond ~100 concurrent users without switching to an async driver.</td></tr>
+    <tr><td>Separate <code>sessions.db</code> file</td><td>Prevents session-churn fragmentation of the main database. <code>sessions.db</code> can be discarded without data loss.</td></tr>
+    <tr><td>Notes encrypted; category/subcategory/outcome not encrypted</td><td>Only the free-text field is likely to contain sensitive narrative content. Controlled-vocabulary fields are used in SQL aggregations and analytics — encrypting them would prevent these queries.</td></tr>
+    <tr><td>Mobile-only Excel export</td><td>Prevents accidental download of task data to a shared desktop computer. Mobile devices are typically personal devices.</td></tr>
+    <tr><td>Session terminated at midnight</td><td>Ensures task start/end times are always on the same calendar day as the session, keeping session analytics coherent.</td></tr>
+    <tr><td>Three-tier dropdown resolution</td><td>Allows the system to function for users without a group (global fallback) while letting groups and individuals see curated subsets.</td></tr>
+    <tr><td><code>mfa_enabled</code> column reserved</td><td>Column exists in the schema but MFA logic is not yet implemented — reserved for a future release.</td></tr>
+    <tr><td>Linear regression computed server-side</td><td>Keeps the calculation deterministic, auditable, and independent of client capabilities. No additional client-side library needed.</td></tr>
+  </tbody>
+</table>
+
+<hr>
+<p style="text-align:center;font-size:.85rem;color:#9ca3af;margin-top:40px">
+  Tasker Technical Reference Manual &nbsp;·&nbsp; v1.5.0 &nbsp;·&nbsp; April 2026<br>
+  This document is stored in <code>docs/</code> and is not served by the application.
+</p>
+
+</div>
+</body>
+</html>
