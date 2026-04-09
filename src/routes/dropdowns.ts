@@ -49,24 +49,25 @@ router.get('/:field', requireAuth, requirePasswordChange, requireActivation, (re
 
 router.post('/propose', requireAuth, requirePasswordChange, requireActivation, validateCsrf, (req: Request, res: Response) => {
   const s = req.session as any;
-  const { field_name, value } = req.body as { field_name: string; value: string };
+  const { field_name, value, scope } = req.body as { field_name: string; value: string; scope?: string };
   if (!ALLOWED.includes(field_name)) { res.status(400).json({ error: 'Invalid field.' }); return; }
   const clean = (value || '').trim();
   if (!clean || clean.length > 100) { res.status(400).json({ error: 'Invalid value.' }); return; }
+  const proposedScope = scope === 'team' ? 'team' : 'all';
   const db = getDb();
   const existing = db.prepare('SELECT id,approved FROM dropdown_options WHERE field_name=? AND value=?').get(field_name, clean) as any;
   if (existing) {
     res.json({ message: existing.approved ? 'Option already exists.' : 'Option already pending review.', value: clean });
     return;
   }
-  db.prepare('INSERT OR IGNORE INTO dropdown_options (field_name,value,approved,proposed_by_user_id) VALUES (?,?,0,?)').run(field_name, clean, s.userId);
+  db.prepare('INSERT OR IGNORE INTO dropdown_options (field_name,value,approved,proposed_by_user_id,proposed_scope) VALUES (?,?,0,?,?)').run(field_name, clean, s.userId, proposedScope);
   res.json({ message: 'Option submitted for admin review.', value: clean });
 });
 
 // Admin routes
 router.get('/admin/all', requireAdmin, (_req: Request, res: Response) => {
   const opts = getDb().prepare(
-    'SELECT id,field_name,value,approved,created_at FROM dropdown_options ORDER BY field_name,approved DESC,value'
+    'SELECT id,field_name,value,approved,proposed_scope,proposed_by_user_id,created_at FROM dropdown_options ORDER BY field_name,approved DESC,value'
   ).all();
   res.json({ options: opts });
 });
@@ -108,11 +109,38 @@ router.put('/admin/:id', requireAdmin, validateCsrf, (req: Request, res: Respons
 router.post('/admin/:id/approve', requireAdmin, validateCsrf, (req: Request, res: Response) => {
   const db = getDb();
   const optId = Number(req.params['id']);
-  db.prepare('UPDATE dropdown_options SET approved=1,proposed_by_user_id=NULL WHERE id=?').run(optId);
-  // Assign newly approved option to all user groups
-  db.prepare(
-    'INSERT OR IGNORE INTO group_dropdown_options (group_id, dropdown_option_id) SELECT id,? FROM user_groups'
-  ).run(optId);
+  const opt = db.prepare('SELECT id, proposed_by_user_id FROM dropdown_options WHERE id=?').get(optId) as { id: number; proposed_by_user_id: number | null } | undefined;
+  if (!opt) { res.status(404).json({ error: 'Option not found.' }); return; }
+
+  const { scope } = req.body as { scope?: string };
+  const approveScope = scope === 'team' ? 'team' : 'all';
+
+  if (approveScope === 'team') {
+    // Find the proposer's group and assign only to that group.
+    // Falls back to all groups if the proposer has no group assigned.
+    const proposerId = opt.proposed_by_user_id;
+    const groupRow = proposerId
+      ? (db.prepare('SELECT user_group_id FROM users WHERE id=?').get(proposerId) as { user_group_id: number | null } | undefined)
+      : undefined;
+    const groupId = groupRow?.user_group_id ?? null;
+
+    db.prepare('UPDATE dropdown_options SET approved=1,proposed_by_user_id=NULL WHERE id=?').run(optId);
+    if (groupId !== null) {
+      db.prepare('INSERT OR IGNORE INTO group_dropdown_options (group_id, dropdown_option_id) VALUES (?,?)').run(groupId, optId);
+    } else {
+      // Proposer has no group — assign to all groups so the option is not orphaned
+      db.prepare(
+        'INSERT OR IGNORE INTO group_dropdown_options (group_id, dropdown_option_id) SELECT id,? FROM user_groups'
+      ).run(optId);
+    }
+  } else {
+    db.prepare('UPDATE dropdown_options SET approved=1,proposed_by_user_id=NULL WHERE id=?').run(optId);
+    // Assign newly approved option to all user groups
+    db.prepare(
+      'INSERT OR IGNORE INTO group_dropdown_options (group_id, dropdown_option_id) SELECT id,? FROM user_groups'
+    ).run(optId);
+  }
+
   res.json({ success: true });
 });
 

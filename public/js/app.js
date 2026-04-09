@@ -161,6 +161,17 @@ function comboAddNew(id, field) {
   if (newDiv) { newDiv.style.display = 'flex'; document.getElementById(`${id}-new-input`)?.focus(); }
 }
 
+function setScopeNew(id, scope) {
+  const hidden = document.getElementById(`${id}-new-scope`);
+  if (hidden) hidden.value = scope;
+  const toggle = document.getElementById(`${id}-new`)?.querySelector('.scope-toggle');
+  if (toggle) {
+    toggle.querySelectorAll('.scope-btn').forEach(btn => {
+      btn.classList.toggle('scope-active', btn.dataset.scope === scope);
+    });
+  }
+}
+
 function comboKeydown(ev, id, field, hasNew) {
   const opts = document.querySelectorAll(`#${id}-opts .combo-opt:not(.combo-empty)`);
   const active = document.querySelector(`#${id}-opts .combo-active`);
@@ -217,6 +228,14 @@ function buildComboBox(field, label, options, id, hasNew, current) {
     </div>
     ${hasNew ? `<div id="${sid}-new" style="display:none" class="add-new-row">
       <input id="${sid}-new-input" class="input" type="text" placeholder="Type new ${esc(label.toLowerCase())}…">
+      <input type="hidden" id="${sid}-new-scope" value="team">
+      <div class="scope-row">
+        <span class="scope-row-label">Apply to:</span>
+        <span class="scope-toggle">
+          <button type="button" class="scope-btn scope-active" data-scope="team" onclick="setScopeNew('${sid}','team')">My team</button>
+          <button type="button" class="scope-btn" data-scope="all" onclick="setScopeNew('${sid}','all')">Everyone</button>
+        </span>
+      </div>
       <button class="btn btn-outline btn-sm" onclick="submitNewOption('${sid}','${sfield}')">Submit</button>
     </div>` : ''}
   </div>`;
@@ -755,6 +774,14 @@ function buildMyOptionsPage(groupName, options) {
       ${opts || '<p style="font-size:.85rem;color:#6b7280">No options available</p>'}
       <div class="add-new-row" style="margin-top:8px">
         <input id="co-new-${field}" class="input" style="flex:1" type="text" maxlength="100" placeholder="Suggest new ${fieldLabels[field].toLowerCase()}…">
+        <input type="hidden" id="co-scope-${field}" value="team">
+        <div class="scope-row">
+          <span class="scope-row-label">Apply to:</span>
+          <span class="scope-toggle">
+            <button type="button" class="scope-btn scope-active" data-scope="team" onclick="setScopeMyOpts('${field}','team')">My team</button>
+            <button type="button" class="scope-btn" data-scope="all" onclick="setScopeMyOpts('${field}','all')">Everyone</button>
+          </span>
+        </div>
         <button class="btn btn-outline btn-sm" onclick="proposeOptionFromCustomise('${field}')">Suggest</button>
       </div>
     </div>`;
@@ -798,12 +825,25 @@ function skipMyOptions() {
   if (_myOptionsCb) { const cb = _myOptionsCb; _myOptionsCb = null; cb(); }
 }
 
+function setScopeMyOpts(field, scope) {
+  const hidden = document.getElementById(`co-scope-${field}`);
+  if (hidden) hidden.value = scope;
+  const row = document.getElementById(`co-new-${field}`)?.closest('.add-new-row');
+  if (row) {
+    row.querySelectorAll('.scope-btn').forEach(btn => {
+      btn.classList.toggle('scope-active', btn.dataset.scope === scope);
+    });
+  }
+}
+
 async function proposeOptionFromCustomise(field) {
   const input = document.getElementById(`co-new-${field}`);
   const val = (input?.value || '').trim();
   if (!val) { showAlert('Please enter a value to suggest.', 'error', 'myopts-propose-alerts'); return; }
+  const scopeInput = document.getElementById(`co-scope-${field}`);
+  const scope = scopeInput?.value === 'team' ? 'team' : 'all';
   try {
-    const d = await api('POST', '/api/dropdowns/propose', { field_name: field, value: val });
+    const d = await api('POST', '/api/dropdowns/propose', { field_name: field, value: val, scope });
     if (input) input.value = '';
     showAlert(`"${esc(val)}" submitted for admin review.`, 'success', 'myopts-propose-alerts');
   } catch(e) { showAlert(e.message, 'error', 'myopts-propose-alerts'); }
@@ -1304,8 +1344,10 @@ async function submitNewOption(containerId, field) {
   const input = document.getElementById(`${containerId}-new-input`);
   const val = (input?.value || '').trim();
   if (!val) return;
+  const scopeInput = document.getElementById(`${containerId}-new-scope`);
+  const scope = scopeInput?.value === 'team' ? 'team' : 'all';
   try {
-    const d = await api('POST', '/api/dropdowns/propose', { field_name: field, value: val });
+    const d = await api('POST', '/api/dropdowns/propose', { field_name: field, value: val, scope });
     if (!d) return;
     // Update hidden input and combobox button
     const hidden = document.getElementById(`${containerId}-sel`);
@@ -1642,6 +1684,14 @@ function buildReviewOutcomeGroup(options, current) {
     </div>
     <div id="te-out-new" style="display:none" class="add-new-row">
       <input id="te-out-new-input" class="input" type="text" placeholder="Type new outcome…">
+      <input type="hidden" id="te-out-new-scope" value="team">
+      <div class="scope-row">
+        <span class="scope-row-label">Apply to:</span>
+        <span class="scope-toggle">
+          <button type="button" class="scope-btn scope-active" data-scope="team" onclick="setScopeNew('te-out','team')">My team</button>
+          <button type="button" class="scope-btn" data-scope="all" onclick="setScopeNew('te-out','all')">Everyone</button>
+        </span>
+      </div>
       <button class="btn btn-outline btn-sm" onclick="submitNewOutcomeEnd()">Add</button>
     </div>
   </div>`;
@@ -1655,8 +1705,10 @@ async function submitNewOutcomeEnd() {
   const input = document.getElementById('te-out-new-input');
   const val = (input?.value || '').trim();
   if (!val) return;
+  const scopeInput = document.getElementById('te-out-new-scope');
+  const scope = scopeInput?.value === 'team' ? 'team' : 'all';
   try {
-    await api('POST', '/api/dropdowns/propose', { field_name: 'outcome', value: val });
+    await api('POST', '/api/dropdowns/propose', { field_name: 'outcome', value: val, scope });
     const hidden = document.getElementById('te-outcome-sel');
     const btn    = document.getElementById('te-outcome-btn');
     if (hidden) hidden.value = val;
@@ -2223,19 +2275,29 @@ function renderAdminContent(stats, users, dropOpts, settings, pendingUsers, awai
     </div>`;
   }).join('');
 
-  const pendingCards = pending.length ? pending.map(o => `
+  const pendingCards = pending.length ? pending.map(o => {
+  const scopeHint = o.proposed_scope === 'team'
+    ? '<span class="badge badge-duty badge-sm">Requested: My team</span>'
+    : '<span class="badge badge-green badge-sm">Requested: Everyone</span>';
+  return `
   <div class="card" style="padding:12px">
-    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px">
       <div>
         <span style="font-size:.8rem;color:#6b7280">${esc(o.field_name)}</span>
         <span style="font-weight:700;margin-left:8px">${esc(o.value)}</span>
+        ${scopeHint}
       </div>
-      <div style="display:flex;gap:6px">
-        <button class="btn btn-primary btn-sm" onclick="approveDropdown(${o.id})">✓ Approve</button>
-        <button class="btn btn-danger btn-sm" onclick="deleteDropdown(${o.id})">✗ Reject</button>
+      <div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end">
+        <div style="font-size:.75rem;color:#6b7280;text-align:right">Approve for:</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end">
+          <button class="btn btn-outline btn-sm" onclick="approveDropdown(${o.id},'team')" title="Approve — visible to the proposer's team only" aria-label="Approve for team only">👥 Team only</button>
+          <button class="btn btn-primary btn-sm" onclick="approveDropdown(${o.id},'all')" title="Approve — visible to all users" aria-label="Approve for all users">🌐 All users</button>
+          <button class="btn btn-danger btn-sm" onclick="deleteDropdown(${o.id})">✗ Reject</button>
+        </div>
       </div>
     </div>
-  </div>`).join('') : '<p style="font-size:.85rem;color:#6b7280">No pending proposals.</p>';
+  </div>`;
+}).join('') : '<p style="font-size:.85rem;color:#6b7280">No pending proposals.</p>';
 
   const modeLabel = { disabled: 'Disabled', admin_approved: 'Administrator approval', auto: 'Automatic approval' };
   const modeOpts = (field, current) => ['disabled','admin_approved','auto'].map(m =>
@@ -2538,10 +2600,11 @@ async function addDropdown(field) {
   } catch(e) { showAlert(e.message, 'error', 'admin-alerts'); }
 }
 
-async function approveDropdown(id) {
+async function approveDropdown(id, scope) {
+  const approveScope = scope === 'team' ? 'team' : 'all';
   try {
-    await api('POST', `/api/dropdowns/admin/${id}/approve`, {});
-    showAlert('Option approved.', 'success', 'admin-alerts');
+    await api('POST', `/api/dropdowns/admin/${id}/approve`, { scope: approveScope });
+    showAlert(approveScope === 'team' ? 'Option approved for team only.' : 'Option approved for all users.', 'success', 'admin-alerts');
     renderAdmin();
   } catch(e) { showAlert(e.message, 'error', 'admin-alerts'); }
 }

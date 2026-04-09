@@ -97,6 +97,7 @@ function initSchema(db: Database.Database): void {
       value TEXT NOT NULL,
       approved INTEGER NOT NULL DEFAULT 0,
       proposed_by_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      proposed_scope TEXT NOT NULL DEFAULT 'all',
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       UNIQUE(field_name, value)
     );
@@ -149,6 +150,12 @@ function initSchema(db: Database.Database): void {
   const groupCols = (db.prepare("PRAGMA table_info(user_groups)").all() as { name: string }[]).map(c => c.name);
   if (!groupCols.includes('is_approved')) {
     db.exec('ALTER TABLE user_groups ADD COLUMN is_approved INTEGER NOT NULL DEFAULT 1');
+  }
+
+  // Migrate existing databases: add proposed_scope column to dropdown_options if missing
+  const dropdownCols = (db.prepare("PRAGMA table_info(dropdown_options)").all() as { name: string }[]).map(c => c.name);
+  if (!dropdownCols.includes('proposed_scope')) {
+    db.exec("ALTER TABLE dropdown_options ADD COLUMN proposed_scope TEXT NOT NULL DEFAULT 'all'");
   }
 
   // Migrate existing databases: add assigned_date column if missing
