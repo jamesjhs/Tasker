@@ -46,20 +46,33 @@ async function checkAssetVersion() {
     if (!r.ok) return false;
     const { version } = await r.json();
     const stored = localStorage.getItem('tasker_app_version');
-    if (stored !== null && stored !== version) {
+    // Clear cache whenever the stored version is missing or outdated.
+    // The stored !== null guard is intentionally absent so that users whose
+    // install pre-dates version tracking also get a cache flush.
+    if (stored !== version) {
       localStorage.setItem('tasker_app_version', version);
+      let needsReload = false;
       if ('caches' in window) {
         const keys = await caches.keys();
-        await Promise.all(keys.map(k => caches.delete(k)));
+        if (keys.length > 0) {
+          await Promise.all(keys.map(k => caches.delete(k)));
+          needsReload = true;
+        }
       }
       if ('serviceWorker' in navigator) {
         const regs = await navigator.serviceWorker.getRegistrations();
-        await Promise.all(regs.map(reg => reg.unregister()));
+        if (regs.length > 0) {
+          await Promise.all(regs.map(reg => reg.unregister()));
+          needsReload = true;
+        }
       }
-      window.location.reload();
-      return true;
+      // Only reload when there was something to clear; on a completely fresh
+      // install (no cached assets, no SW) a reload would be a no-op.
+      if (needsReload) {
+        window.location.reload();
+        return true;
+      }
     }
-    localStorage.setItem('tasker_app_version', version);
     return false;
   } catch (e) {
     return false;
@@ -554,6 +567,13 @@ async function doLogin() {
   try {
     const d = await api('POST', '/api/auth/login', { username, password });
     if (!d) return;
+    // Clear all SW caches on login so every authenticated session starts with
+    // the most recent assets, regardless of what the service worker had cached.
+    // Fire-and-forget: intentionally not awaited so it doesn't delay the login
+    // flow — the same pattern used in renderLogin().
+    if ('caches' in window) {
+      caches.keys().then(keys => Promise.all(keys.map(k => caches.delete(k)))).catch(() => {});
+    }
     state.user = { username, isAdmin: d.isAdmin, mustChangePassword: d.mustChangePassword, pendingActivation: d.pendingActivation, userGroupId: d.userGroupId ?? null, userGroupName: d.userGroupName ?? null };
     await refreshCsrf();
     if (d.mustChangePassword) { renderChangePassword(); return; }
