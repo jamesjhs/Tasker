@@ -1,6 +1,6 @@
 # Tasker — Maintenance and Troubleshooting Manual
 
-**Version 1.4.0 — April 2026**
+**Version 1.5.0 — April 2026**
 
 ---
 
@@ -11,12 +11,13 @@
 3. [Database restore](#database-restore)
 4. [Updating the application](#updating-the-application)
 5. [User management](#user-management)
-6. [Dropdown option management](#dropdown-option-management)
-7. [Health-check endpoint](#health-check-endpoint)
-8. [Log inspection](#log-inspection)
-9. [Troubleshooting guide](#troubleshooting-guide)
-10. [Security considerations](#security-considerations)
-11. [Data retention](#data-retention)
+6. [User group management](#user-group-management)
+7. [Dropdown option management](#dropdown-option-management)
+8. [Health-check endpoint](#health-check-endpoint)
+9. [Log inspection](#log-inspection)
+10. [Troubleshooting guide](#troubleshooting-guide)
+11. [Security considerations](#security-considerations)
+12. [Data retention](#data-retention)
 
 ---
 
@@ -195,23 +196,53 @@ Tap **🔑 Reset** next to the user. A new temporary password is generated. Shar
 
 If a user fails login too many times, their account is locked. Tap **🔓 Unlock** next to the user to re-enable access. No data is lost.
 
+### Assigning users to groups
+
+Tap **👥 Group** next to a user to assign them to a user group. User groups control which dropdown options appear in that user's task forms. A user without a group assigned will see all approved dropdown options.
+
 ### Deleting a user
 
 Tap **🗑** next to the user. This permanently and immediately deletes the account and all associated task data. This cannot be undone.
 
 ---
 
+## User group management
+
+User groups allow different teams or roles to see different sets of dropdown options in their task forms.
+
+### Creating a group
+
+In the **User Groups** section of the Admin Panel, tap **➕ Add User Group**, type a name, and confirm. The group is created with no options assigned — configure its options next.
+
+### Configuring group options
+
+Tap **⚙️ Options** next to a group. A dialog appears showing all approved dropdown options with tick-boxes. Tick the options that should appear for users in this group and tap **Save**.
+
+### Renaming a group
+
+Tap **✏️ Rename** next to the group, enter the new name, and confirm.
+
+### Reviewing group proposals
+
+Users can suggest new group names from the group-selection screen. Proposed groups appear in the **Pending Group Proposals** section of the Admin Panel. Tap **✓ Approve** to make the group visible to users, or **✗ Reject** to discard it. Approved groups have no options assigned by default — configure them via **⚙️ Options**.
+
+### Deleting a group
+
+Tap **🗑** next to the group. Users assigned to that group will have their group membership cleared (their task data is not affected).
+
+---
+
 ## Dropdown option management
 
-The **Dropdown Options** section of the Admin Panel controls which choices appear in the Task From (category), Task Type (subcategory), and Outcome fields.
+The **Dropdown Options** section of the Admin Panel controls which choices appear in the Task From (category), Task Type (subcategory), and Outcome fields across the whole system. Individual groups can be configured to show a subset of these options (see [User group management](#user-group-management) above).
 
 ### Adding options directly
 
-In the relevant section (Category, Subcategory, or Outcome), type the new option in the input field and tap **Add**.
+In the relevant section (Task from, Task type, or Outcome), type the new option in the input field and tap **Add**.
 
 ### Reviewing user proposals
 
-Users can suggest new options while recording tasks. These appear in the **Pending User Proposals** section. Tap **✓ Approve** to make an option available to all users, or **✗ Reject** to discard it.
+Users can suggest new options while recording tasks or from the ⚙️ Customise My Options screen. These appear in the **Pending User Proposals** section. Tap **✓ Approve** to make an option available to all users, or **✗ Reject** to discard it. Approved options are not automatically added to any group — assign them via the group's **⚙️ Options** dialog if needed.
 
 ### Removing options
 
@@ -229,7 +260,7 @@ Tasker exposes `GET /readyz` for uptime monitoring and heartbeat polling. No aut
 {
   "ok": true,
   "service": "Tasker",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "timestamp": "2026-04-04T12:09:26.477Z"
 }
 ```

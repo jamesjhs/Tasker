@@ -30,7 +30,7 @@
 <body>
   <a class="back-link" href="/" onclick="history.back();return false;">← Back</a>
   <h1>❓ Tasker — Help &amp; User Guide</h1>
-  <p><small>Version 1.4.0 — April 2026</small></p>
+  <p><small>Version 1.5.0 — April 2026</small></p>
 
   <div class="info-box">
     ℹ️ This guide explains how to use Tasker in plain language — no technical knowledge needed.
@@ -42,6 +42,7 @@
       <li><a href="#what-is-tasker">What is Tasker?</a></li>
       <li><a href="#getting-started">Getting started — your account</a></li>
       <li><a href="#logging-in">Logging in</a></li>
+      <li><a href="#your-group">Your group and dropdown options</a></li>
       <li><a href="#recording-a-task">Recording a task</a></li>
       <li><a href="#interruptions">Handling interruptions</a></li>
       <li><a href="#completing-a-task">Completing a task</a></li>
@@ -104,18 +105,43 @@
   <h3>If your account is locked</h3>
   <p>After several failed password attempts your account will be locked automatically. You will see a message saying so. Contact your administrator to unlock it — they can do this without seeing any of your data.</p>
 
-  <!-- ── 4 ─────────────────────────────────────────────────────────────────── -->
-  <h2 id="recording-a-task">4. Recording a task</h2>
+  <!-- ── 4 (new) ───────────────────────────────────────────────────────────── -->
+  <h2 id="your-group">4. Your group and dropdown options</h2>
+
+  <h3>Selecting your group</h3>
+  <p>After you first log in (or when asked by the system), you will be shown a list of groups. Choose the group that best matches your role — for example, <em>Nursing</em> or <em>General</em>. Your group determines the default set of options shown in the Task From, Task Type, and Outcome dropdowns.</p>
+  <p>If none of the listed groups fits your role, tap <strong>Suggest a group</strong>, type a name, and submit it. Your administrator will review the suggestion and add it if appropriate.</p>
+
+  <div class="warning-box">
+    ⚠️ Do not include your name, department, or any identifying information in a group suggestion.
+  </div>
+
+  <h3>Customising your own options</h3>
+  <p>After choosing a group, a <strong>⚙️ Customise My Options</strong> screen appears showing all the default options for your group with tick-boxes next to each one. All options are ticked by default.</p>
+  <ul>
+    <li><strong>Untick</strong> any option you never use — it will be hidden from your dropdowns.</li>
+    <li><strong>Re-tick</strong> it at any time to bring it back.</li>
+    <li>Tap <strong>✓ Save and continue</strong> to apply your choices.</li>
+    <li>Tap <strong>Use defaults as-is</strong> to keep all options and skip this step.</li>
+  </ul>
+  <p>You can return to this screen at any time from the <strong>⚙️ Settings</strong> page by tapping <strong>⚙️ Customise My Options</strong>.</p>
+
+  <div class="tip-box">
+    💡 Your personalised option list is stored with your account, so it follows you if you log in from a different device.
+  </div>
+
+  <!-- ── 5 ─────────────────────────────────────────────────────────────────── -->
+  <h2 id="recording-a-task">5. Recording a task</h2>
   <p>From the home screen, tap <strong>▶ Log Task</strong>. You will be asked a few quick questions before the timer starts.</p>
 
   <h3>Task type</h3>
   <p>Choose whether this is a <strong>My Group</strong> task (something you are doing as part of your normal role) or a <strong>Personal</strong> task (something for yourself, such as a break or self-directed learning). Tap the relevant button — it will turn highlighted.</p>
 
   <h3>Task From (category)</h3>
-  <p>Select where the task came from — for example, <em>Clinical</em>, <em>Administrative</em>, or <em>Teaching</em>. If the right option is not in the list, tap <strong>+ Add new option…</strong> and type it in. Your suggestion will be sent to the administrator for approval and immediately available for you to use.</p>
+  <p>Choose where the task came from — for example, <em>Clinical</em>, <em>Administrative</em>, or <em>Teaching</em>. The dropdown is a searchable combobox: tap the field and start typing any part of the word to filter the list instantly, then tap the option you want or use the arrow keys and press Enter. If the right option is not shown, tap <strong>+ Add new option…</strong> at the bottom of the list and type it in. Your suggestion will be sent to the administrator for review.</p>
 
   <h3>Task Type (subcategory)</h3>
-  <p>Select the type of activity — for example, <em>Direct patient care</em>, <em>Documentation</em>, or <em>Referral</em>. Again, you can suggest a new option if needed.</p>
+  <p>Choose the type of activity — for example, <em>Direct patient care</em>, <em>Documentation</em>, or <em>Referral</em>. The same searchable combobox applies here. You can suggest a new option the same way.</p>
 
   <h3>Date assigned</h3>
   <p>This is today's date by default. If the task was assigned on a different day (for example, you are catching up on something from yesterday), change it here.</p>
@@ -127,8 +153,8 @@
     💡 You can only have one task running at a time. If you already have one going, finish or discard it before starting a new one.
   </div>
 
-  <!-- ── 5 ─────────────────────────────────────────────────────────────────── -->
-  <h2 id="interruptions">5. Handling interruptions</h2>
+  <!-- ── 6 ─────────────────────────────────────────────────────────────────── -->
+  <h2 id="interruptions">6. Handling interruptions</h2>
   <p>If something interrupts you while a task is running, tap <strong>⏸️ Interrupted</strong>. A menu will appear with three choices:</p>
 
   <ul>
@@ -140,7 +166,7 @@
   <p>You can record more than one interruption on a single task. Each one will show up in the task summary when you complete the task, and you can remove any you added by mistake.</p>
 
   <!-- ── 6 ─────────────────────────────────────────────────────────────────── -->
-  <h2 id="completing-a-task">6. Completing a task</h2>
+  <h2 id="completing-a-task">7. Completing a task</h2>
   <p>When you have finished, tap <strong>⏹️ End Task</strong>. You will see a review screen where you can check and adjust the details before saving.</p>
 
   <h3>What you can change on this screen</h3>
@@ -160,7 +186,7 @@
   <p>Tap the red bin icon (🗑) if you want to discard and delete the task instead.</p>
 
   <!-- ── 7 ─────────────────────────────────────────────────────────────────── -->
-  <h2 id="viewing-your-work">7. Viewing your work and charts</h2>
+  <h2 id="viewing-your-work">8. Viewing your work and charts</h2>
   <p>Tap <strong>📊 Analytics</strong> in the menu bar at the bottom to see your data.</p>
 
   <h3>Today's session</h3>
@@ -184,13 +210,16 @@
   <p>Tap <strong>✏️ Edit</strong> on any task card to change its details. You can update the category, type, outcome, times, and notes.</p>
 
   <!-- ── 8 ─────────────────────────────────────────────────────────────────── -->
-  <h2 id="downloading">8. Downloading your data</h2>
+  <h2 id="downloading">9. Downloading your data</h2>
   <p>On the Analytics screen, tap <strong>⬇️ Download Excel</strong>. The app will download a spreadsheet file (<code>.xlsx</code>) containing all your recorded tasks. You can open this in Microsoft Excel, Google Sheets, or Apple Numbers.</p>
   <p>The file contains only your own data — no other user's information is included.</p>
 
   <!-- ── 9 ─────────────────────────────────────────────────────────────────── -->
-  <h2 id="settings">9. Settings and your account</h2>
+  <h2 id="settings">10. Settings and your account</h2>
   <p>Tap <strong>⚙️ Settings</strong> in the menu bar at the bottom.</p>
+
+  <h3>Customise My Options</h3>
+  <p>Tap <strong>⚙️ Customise My Options</strong> to review and change which dropdown options appear in your task forms. Untick any options you do not need and tick them again to restore them. This is the same screen shown after you first select your group.</p>
 
   <h3>Change your password</h3>
   <p>Tap <strong>🔑 Change Password</strong>. Enter your current password, then choose and confirm a new one. Passwords must be at least 8 characters long and include at least one special character.</p>
@@ -202,7 +231,7 @@
   <p>Tap <strong>🗑️ Delete My Account</strong> if you want to permanently remove your account and all your task data. You will need to confirm by typing your username and password. <strong>This cannot be undone.</strong></p>
 
   <!-- ── 10 ────────────────────────────────────────────────────────────────── -->
-  <h2 id="privacy">10. Your privacy and data safety</h2>
+  <h2 id="privacy">11. Your privacy and data safety</h2>
   <ul>
     <li>Your username is a random pair of words — it is not linked to your name or any personal detail.</li>
     <li>Your password is stored in a protected format that no one — including the administrator — can read.</li>
@@ -213,7 +242,7 @@
   <p>For full details, see the <a href="/policy" target="_blank">Data &amp; Use Policy</a>.</p>
 
   <!-- ── 11 ────────────────────────────────────────────────────────────────── -->
-  <h2 id="faqs">11. Common questions</h2>
+  <h2 id="faqs">12. Common questions</h2>
 
   <h3>I have forgotten my username. What do I do?</h3>
   <p>Unfortunately, usernames cannot be recovered — this is by design to protect your anonymity. If you cannot find the username you wrote down, contact your administrator. They can delete your old account and create a new one for you.</p>
@@ -231,7 +260,7 @@
   <p>Contact your administrator immediately. They can delete your account and all associated data, which removes the information from the system permanently.</p>
 
   <h3>The dropdown list does not have the option I need.</h3>
-  <p>Select <strong>+ Add new option…</strong> from the dropdown and type what you need. It will be sent to your administrator for review. In most cases it will be available straight away for your current task.</p>
+  <p>Tap the dropdown field to open it, type a few letters to search, and if your option is still not there, select <strong>+ Add new option…</strong> at the bottom of the list and type what you need. It will be sent to your administrator for review.</p>
 
   <h3>Can I use Tasker on more than one device?</h3>
   <p>Yes — log in with the same username and password on any device. Your account and task history will be the same on every device.</p>
@@ -240,7 +269,7 @@
   <p>No. The administrator can see only the total number of users and a count of events. They cannot see your tasks, timings, notes, or how you use the app.</p>
 
   <p style="margin-top: 2rem; font-size: .85rem; color: #6b7280;">
-    Tasker v1.4.0 — April 2026. For technical support, contact your administrator.
+    Tasker v1.5.0 — April 2026. For technical support, contact your administrator.
   </p>
 </body>
 </html>
