@@ -35,6 +35,10 @@ function buildSummary(tasks: any[]) {
   const byCategory: Record<string, { count: number; minutes: number }> = {};
   const byOutcome: Record<string, number> = {};
   const byDate: Record<string, { count: number; minutes: number; duty: number; personal: number }> = {};
+  const byHour: Record<number, { count: number; minutes: number }> = {};
+  const byDayOfWeek: Record<number, { count: number; minutes: number }> = {};
+  const bySubcategory: Record<string, { count: number; minutes: number }> = {};
+  const interruptionsByCategory: Record<string, number> = {};
 
   for (const t of tasks) {
     const cat = t.category || 'Uncategorised';
@@ -52,6 +56,25 @@ function buildSummary(tasks: any[]) {
       byDate[d].minutes += mins(t.start_time, t.end_time, t.interruptions);
       if (t.is_duty === 1) byDate[d].duty++; else byDate[d].personal++;
     }
+
+    if (t.start_time) {
+      const h = new Date(t.start_time).getHours();
+      if (!byHour[h]) byHour[h] = { count: 0, minutes: 0 };
+      byHour[h].count++;
+      byHour[h].minutes += mins(t.start_time, t.end_time, t.interruptions);
+
+      const dow = new Date(t.start_time).getDay();
+      if (!byDayOfWeek[dow]) byDayOfWeek[dow] = { count: 0, minutes: 0 };
+      byDayOfWeek[dow].count++;
+      byDayOfWeek[dow].minutes += mins(t.start_time, t.end_time, t.interruptions);
+    }
+
+    const sub = t.subcategory || 'Unspecified';
+    if (!bySubcategory[sub]) bySubcategory[sub] = { count: 0, minutes: 0 };
+    bySubcategory[sub].count++;
+    bySubcategory[sub].minutes += mins(t.start_time, t.end_time, t.interruptions);
+
+    interruptionsByCategory[cat] = (interruptionsByCategory[cat] || 0) + (t.interruptions?.length || 0);
   }
 
   // Linear regression on daily counts
@@ -77,16 +100,23 @@ function buildSummary(tasks: any[]) {
   }
 
   const totalInterruptions = tasks.reduce((s, t) => s + (t.interruptions?.length || 0), 0);
+  const avgDurMins = tasks.length > 0 ? Math.round(totalMins / tasks.length) : 0;
+  const avgInterruptionsPerTask = tasks.length > 0
+    ? Math.round((totalInterruptions / tasks.length) * 10) / 10
+    : 0;
 
   return {
     total: tasks.length,
     totalMins,
     totalInterruptions,
+    avgDurMins,
+    avgInterruptionsPerTask,
     dutyCount: duty.length,
     dutyMins: duty.reduce((s, t) => s + mins(t.start_time, t.end_time, t.interruptions), 0),
     personalCount: personal.length,
     personalMins: personal.reduce((s, t) => s + mins(t.start_time, t.end_time, t.interruptions), 0),
-    byCategory, byOutcome, byDate, dates, regression,
+    byCategory, byOutcome, byDate, byHour, byDayOfWeek, bySubcategory, interruptionsByCategory,
+    dates, regression,
   };
 }
 
@@ -101,13 +131,14 @@ router.get('/session', (req: Request, res: Response) => {
 
 router.get('/history', (req: Request, res: Response) => {
   const s = req.session as any;
-  const { from, to, is_duty, category, outcome } = req.query as Record<string, string>;
+  const { from, to, is_duty, category, subcategory, outcome } = req.query as Record<string, string>;
   let q = `SELECT * FROM tasks WHERE user_id=? AND status='completed' AND start_time>=datetime('now','-30 days')`;
   const p: any[] = [s.userId];
   if (from)                  { q += ' AND date(start_time)>=?'; p.push(from); }
   if (to)                    { q += ' AND date(start_time)<=?'; p.push(to); }
   if (is_duty !== undefined) { q += ' AND is_duty=?'; p.push(is_duty === 'true' ? 1 : 0); }
   if (category)              { q += ' AND category=?'; p.push(category); }
+  if (subcategory)           { q += ' AND subcategory=?'; p.push(subcategory); }
   if (outcome)               { q += ' AND outcome=?'; p.push(outcome); }
   q += ' ORDER BY start_time';
   const tasks = (getDb().prepare(q).all(...p) as any[]).map(t => ({ ...t, interruptions: JSON.parse(t.interruptions || '[]'), notes: decryptField(t.notes) }));

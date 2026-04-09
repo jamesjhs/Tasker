@@ -361,6 +361,35 @@ html, body {
 /* ── Filter bar ───────────────────────────────────────────────────── */
 .filter-bar { display: flex; flex-direction: column; gap: 10px; margin-bottom: 16px; }
 
+/* ── Date preset button group ─────────────────────────────────────── */
+.date-preset-group {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+.date-preset-group .btn { flex: 1; min-width: 70px; }
+
+/* ── Stat grid 3-column variant ───────────────────────────────────── */
+.stat-grid-3 { grid-template-columns: 1fr 1fr 1fr; }
+@media (max-width: 360px) { .stat-grid-3 { grid-template-columns: 1fr 1fr; } }
+
+/* ── Insight cards ────────────────────────────────────────────────── */
+.insights-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.insight-item {
+  background: #f0f4ff;
+  border-left: 3px solid #1a56db;
+  border-radius: 6px;
+  padding: 8px 12px;
+  font-size: .875rem;
+  line-height: 1.5;
+  color: #1a1a2e;
+}
+
 /* ── Dropdown add-new ─────────────────────────────────────────────── */
 .add-new-row { display: flex; gap: 8px; margin-top: 6px; }
 .add-new-row .input { flex: 1; }
