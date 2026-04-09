@@ -22,6 +22,7 @@ export function buildTestApp() {
       secret: 'test-secret',
       resave: false,
       saveUninitialized: false,
+      // secure:false is intentional in the test environment (no HTTPS in CI)
       cookie: { secure: false, sameSite: 'strict' },
     }),
   );

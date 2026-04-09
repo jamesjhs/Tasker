@@ -71,6 +71,8 @@ const app = () => document.getElementById('app');
 const esc = str => str == null ? '' : String(str)
   .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
   .replace(/"/g,'&quot;').replace(/'/g,'&#039;');
+// Sanitise values used as HTML attribute identifiers (strip everything except a-z A-Z 0-9 - _)
+const safeId = str => str == null ? '' : String(str).replace(/[^a-zA-Z0-9\-_]/g, '');
 
 // ── Combobox (integrated searchable dropdown) ────────────────────────────────
 let _comboOpenId = null;
@@ -114,15 +116,17 @@ function renderComboOpts(id, field, hasNew, query) {
   if (!container) return;
   const all = state.dropdowns[field] || [];
   const filtered = query ? all.filter(o => o.toLowerCase().includes(query.toLowerCase())) : all;
+  const sid = safeId(id);
+  const sfield = safeId(field);
   let html = '';
   if (filtered.length === 0 && !hasNew) {
     html = `<div class="combo-opt combo-empty">No matching options</div>`;
   } else {
     html = filtered.map((o,i) =>
-      `<div class="combo-opt" data-idx="${i}" onmousedown="selectComboOpt('${id}','${field}','${esc(o)}')">${esc(o)}</div>`
+      `<div class="combo-opt" data-idx="${i}" onmousedown="selectComboOpt('${sid}','${sfield}','${esc(o)}')">${esc(o)}</div>`
     ).join('');
   }
-  if (hasNew) html += `<div class="combo-opt combo-new" onmousedown="comboAddNew('${id}','${field}')">+ Add new option…</div>`;
+  if (hasNew) html += `<div class="combo-opt combo-new" onmousedown="comboAddNew('${sid}','${sfield}')">+ Add new option…</div>`;
   container.innerHTML = html;
 }
 
@@ -190,28 +194,30 @@ document.addEventListener('mousedown', (e) => {
 /** Build HTML for an integrated searchable combobox */
 function buildComboBox(field, label, options, id, hasNew, current) {
   const displayValue = current || '';
+  const sid = safeId(id);
+  const sfield = safeId(field);
   return `
-  <div class="form-group" id="${id}-group">
+  <div class="form-group" id="${sid}-group">
     <label>${esc(label)}</label>
-    <div class="combo-wrap" id="${id}-wrap">
-      <button type="button" id="${id}-btn"
+    <div class="combo-wrap" id="${sid}-wrap">
+      <button type="button" id="${sid}-btn"
               class="combo-btn${displayValue ? '' : ' placeholder'}"
-              onclick="openCombo('${id}','${field}',${hasNew})"
+              onclick="openCombo('${sid}','${sfield}',${hasNew ? 'true' : 'false'})"
               aria-haspopup="listbox" aria-expanded="false">
         ${displayValue ? esc(displayValue) : `— Select ${esc(label)} —`}
       </button>
-      <div class="combo-panel" id="${id}-panel" role="listbox">
-        <input class="combo-search" id="${id}-search" type="text" autocomplete="off"
+      <div class="combo-panel" id="${sid}-panel" role="listbox">
+        <input class="combo-search" id="${sid}-search" type="text" autocomplete="off"
                placeholder="Search…"
-               oninput="filterCombo('${id}','${field}',${hasNew})"
-               onkeydown="comboKeydown(event,'${id}','${field}',${hasNew})">
-        <div class="combo-opts" id="${id}-opts"></div>
+               oninput="filterCombo('${sid}','${sfield}',${hasNew ? 'true' : 'false'})"
+               onkeydown="comboKeydown(event,'${sid}','${sfield}',${hasNew ? 'true' : 'false'})">
+        <div class="combo-opts" id="${sid}-opts"></div>
       </div>
-      <input type="hidden" id="${id}-sel" value="${esc(displayValue)}">
+      <input type="hidden" id="${sid}-sel" value="${esc(displayValue)}">
     </div>
-    ${hasNew ? `<div id="${id}-new" style="display:none" class="add-new-row">
-      <input id="${id}-new-input" class="input" type="text" placeholder="Type new ${esc(label.toLowerCase())}…">
-      <button class="btn btn-outline btn-sm" onclick="submitNewOption('${id}','${field}')">Submit</button>
+    ${hasNew ? `<div id="${sid}-new" style="display:none" class="add-new-row">
+      <input id="${sid}-new-input" class="input" type="text" placeholder="Type new ${esc(label.toLowerCase())}…">
+      <button class="btn btn-outline btn-sm" onclick="submitNewOption('${sid}','${sfield}')">Submit</button>
     </div>` : ''}
   </div>`;
 }
