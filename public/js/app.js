@@ -117,7 +117,7 @@ function openCombo(id, field, hasNew) {
     search.value = '';
     // Only auto-focus search on non-touch devices to avoid triggering the
     // mobile soft keyboard when the user merely opens a dropdown.
-    if (!navigator.maxTouchPoints) setTimeout(() => search.focus(), 30);
+    if ((navigator.maxTouchPoints ?? 0) === 0) setTimeout(() => search.focus(), 30);
   }
 }
 
