@@ -1624,21 +1624,21 @@ function buildReviewOutcomeGroup(options, current) {
   return `
   <div class="form-group" id="te-out-group">
     <label>Outcome</label>
-    <div class="combo-wrap" id="te-outcome-wrap">
+    <div class="combo-wrap" id="te-outcome">
       <button type="button" id="te-outcome-btn"
               class="combo-btn${displayValue ? '' : ' placeholder'}"
-              onclick="openCombo('te-outcome-wrap','outcome',true)"
+              onclick="openCombo('te-outcome','outcome',true)"
               aria-haspopup="listbox" aria-expanded="false">
         ${displayValue ? esc(displayValue) : '— Select Outcome —'}
       </button>
-      <div class="combo-panel" id="te-outcome-wrap-panel" role="listbox">
-        <input class="combo-search" id="te-outcome-wrap-search" type="text" autocomplete="off"
+      <div class="combo-panel" id="te-outcome-panel" role="listbox">
+        <input class="combo-search" id="te-outcome-search" type="text" autocomplete="off"
                placeholder="Search…"
-               oninput="filterCombo('te-outcome-wrap','outcome',true)"
-               onkeydown="comboKeydown(event,'te-outcome-wrap','outcome',true)">
-        <div class="combo-opts" id="te-outcome-wrap-opts"></div>
+               oninput="filterCombo('te-outcome','outcome',true)"
+               onkeydown="comboKeydown(event,'te-outcome','outcome',true)">
+        <div class="combo-opts" id="te-outcome-opts"></div>
       </div>
-      <input type="hidden" id="te-outcome" value="${esc(displayValue)}">
+      <input type="hidden" id="te-outcome-sel" value="${esc(displayValue)}">
     </div>
     <div id="te-out-new" style="display:none" class="add-new-row">
       <input id="te-out-new-input" class="input" type="text" placeholder="Type new outcome…">
@@ -1657,7 +1657,7 @@ async function submitNewOutcomeEnd() {
   if (!val) return;
   try {
     await api('POST', '/api/dropdowns/propose', { field_name: 'outcome', value: val });
-    const hidden = document.getElementById('te-outcome');
+    const hidden = document.getElementById('te-outcome-sel');
     const btn    = document.getElementById('te-outcome-btn');
     if (hidden) hidden.value = val;
     if (btn) { btn.textContent = val + ' (pending)'; btn.classList.remove('placeholder'); }
@@ -1684,7 +1684,7 @@ async function submitTaskReview(taskId, isEdit, dest) {
   const start = document.getElementById('te-start')?.value;
   const end = document.getElementById('te-end')?.value;
   if (!end) { showAlert('Please set an end time.', 'error', 'te-alerts'); return; }
-  const outcome = document.getElementById('te-outcome')?.value || null;
+  const outcome = document.getElementById('te-outcome-sel')?.value || null;
   if (!outcome) { showAlert('Please select an Outcome.', 'error', 'te-alerts'); return; }
   const dutyEl = document.getElementById('te-duty');
   const categoryVal = document.getElementById('te-category-sel')?.value || t.category || null;
