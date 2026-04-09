@@ -444,7 +444,7 @@ html, body {
   min-height: 0;
 }
 .combo-search:focus { outline: none; background: #eff6ff; }
-.combo-opts { overflow-y: auto; max-height: 180px; }
+.combo-opts { overflow: auto; max-height: 180px; resize: vertical; min-height: 40px; }
 .combo-opt {
   padding: 10px 14px;
   cursor: pointer;
