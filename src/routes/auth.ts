@@ -204,7 +204,7 @@ router.post('/set-group', requireAuth, validateCsrf, (req: Request, res: Respons
   const { groupId } = req.body as { groupId: number | null };
   const db = getDb();
   if (groupId !== null) {
-    const group = db.prepare('SELECT id FROM user_groups WHERE id=?').get(groupId);
+    const group = db.prepare('SELECT id FROM user_groups WHERE id=? AND is_approved=1').get(groupId);
     if (!group) { res.status(400).json({ error: 'User group not found.' }); return; }
   }
   db.transaction(() => {

@@ -5,7 +5,8 @@ import fs from 'fs';
 const DATA_DIR = path.join(__dirname, '..', 'data');
 if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
 
-export const DB_PATH = path.join(DATA_DIR, 'tasker.db');
+// Allow tests to override the DB path via environment variable (e.g. ':memory:' or a temp file)
+export const DB_PATH = process.env['TASKER_DB_PATH'] || path.join(DATA_DIR, 'tasker.db');
 const RESTORE_DIR = path.join(DATA_DIR, 'restore-tmp');
 if (!fs.existsSync(RESTORE_DIR)) fs.mkdirSync(RESTORE_DIR, { recursive: true });
 export { RESTORE_DIR };

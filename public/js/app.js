@@ -72,43 +72,148 @@ const esc = str => str == null ? '' : String(str)
   .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
   .replace(/"/g,'&quot;').replace(/'/g,'&#039;');
 
-// ── Fuzzy search helper ──────────────────────────────────────────────────────
-function fuzzyMatch(query, str) {
-  if (!query) return true;
-  return str.toLowerCase().includes(query.toLowerCase());
+// ── Combobox (integrated searchable dropdown) ────────────────────────────────
+let _comboOpenId = null;
+
+/** Close all open combos except optionally one */
+function closeAllCombos(exceptId) {
+  if (_comboOpenId && _comboOpenId !== exceptId) {
+    const p = document.getElementById(`${_comboOpenId}-panel`);
+    const b = document.getElementById(`${_comboOpenId}-btn`);
+    if (p) p.classList.remove('open');
+    if (b) { b.classList.remove('open'); b.classList.remove('placeholder'); }
+    _comboOpenId = null;
+  }
 }
 
-/**
- * Filter a <select> element's options based on a search query.
- * Keeps the "— Select —" placeholder and optional "Add new" sentinel.
- * @param {HTMLInputElement} input  The search input element
- * @param {string}           selectId  ID of the <select> to filter
- * @param {string}           field  Key in state.dropdowns (category/subcategory/outcome)
- * @param {boolean}          hasNew  Whether the select has a "+ Add new" option
- */
-function filterSelectOpts(input, selectId, field, hasNew) {
-  const query = input.value.trim();
-  const sel = document.getElementById(selectId);
-  if (!sel) return;
-  const current = sel.value;
-  const allOpts = state.dropdowns[field] || [];
-  const filtered = allOpts.filter(o => fuzzyMatch(query, o));
-  sel.innerHTML = '';
-  const placeholder = document.createElement('option');
-  placeholder.value = ''; placeholder.textContent = '— Select —';
-  sel.appendChild(placeholder);
-  for (const o of filtered) {
-    const opt = document.createElement('option');
-    opt.value = o; opt.textContent = o;
-    if (o === current) opt.selected = true;
-    sel.appendChild(opt);
+function openCombo(id, field, hasNew) {
+  closeAllCombos(id);
+  const panel = document.getElementById(`${id}-panel`);
+  const btn   = document.getElementById(`${id}-btn`);
+  if (!panel) return;
+  const isOpen = panel.classList.contains('open');
+  if (isOpen) { closeCombo(id); return; }
+  panel.classList.add('open');
+  if (btn) btn.classList.add('open');
+  _comboOpenId = id;
+  renderComboOpts(id, field, hasNew, '');
+  const search = document.getElementById(`${id}-search`);
+  if (search) { search.value = ''; setTimeout(() => search.focus(), 30); }
+}
+
+function closeCombo(id) {
+  const panel = document.getElementById(`${id}-panel`);
+  const btn   = document.getElementById(`${id}-btn`);
+  if (panel) panel.classList.remove('open');
+  if (btn) btn.classList.remove('open');
+  if (_comboOpenId === id) _comboOpenId = null;
+}
+
+function renderComboOpts(id, field, hasNew, query) {
+  const container = document.getElementById(`${id}-opts`);
+  if (!container) return;
+  const all = state.dropdowns[field] || [];
+  const filtered = query ? all.filter(o => o.toLowerCase().includes(query.toLowerCase())) : all;
+  let html = '';
+  if (filtered.length === 0 && !hasNew) {
+    html = `<div class="combo-opt combo-empty">No matching options</div>`;
+  } else {
+    html = filtered.map((o,i) =>
+      `<div class="combo-opt" data-idx="${i}" onmousedown="selectComboOpt('${id}','${field}','${esc(o)}')">${esc(o)}</div>`
+    ).join('');
   }
-  if (hasNew) {
-    const newOpt = document.createElement('option');
-    newOpt.value = '__new__'; newOpt.textContent = '+ Add new option…';
-    sel.appendChild(newOpt);
+  if (hasNew) html += `<div class="combo-opt combo-new" onmousedown="comboAddNew('${id}','${field}')">+ Add new option…</div>`;
+  container.innerHTML = html;
+}
+
+function filterCombo(id, field, hasNew) {
+  const search = document.getElementById(`${id}-search`);
+  renderComboOpts(id, field, hasNew, search ? search.value.trim() : '');
+}
+
+function selectComboOpt(id, field, value) {
+  const hidden = document.getElementById(`${id}-sel`);
+  const btn    = document.getElementById(`${id}-btn`);
+  if (hidden) hidden.value = value;
+  if (btn) { btn.textContent = value; btn.classList.remove('placeholder'); }
+  state.taskForm[field] = value;
+  closeCombo(id);
+  // hide add-new row if it was open
+  const newDiv = document.getElementById(`${id}-new`);
+  if (newDiv) newDiv.style.display = 'none';
+}
+
+function clearComboSelection(id, field, label) {
+  const hidden = document.getElementById(`${id}-sel`);
+  const btn    = document.getElementById(`${id}-btn`);
+  if (hidden) hidden.value = '';
+  if (btn) { btn.textContent = `— Select ${label} —`; btn.classList.add('placeholder'); }
+  state.taskForm[field] = null;
+}
+
+function comboAddNew(id, field) {
+  closeCombo(id);
+  const newDiv = document.getElementById(`${id}-new`);
+  if (newDiv) { newDiv.style.display = 'flex'; document.getElementById(`${id}-new-input`)?.focus(); }
+}
+
+function comboKeydown(ev, id, field, hasNew) {
+  const opts = document.querySelectorAll(`#${id}-opts .combo-opt:not(.combo-empty)`);
+  const active = document.querySelector(`#${id}-opts .combo-active`);
+  let idx = active ? Array.from(opts).indexOf(active) : -1;
+  if (ev.key === 'ArrowDown') {
+    ev.preventDefault();
+    idx = Math.min(idx + 1, opts.length - 1);
+    opts.forEach((o, i) => o.classList.toggle('combo-active', i === idx));
+    opts[idx]?.scrollIntoView({ block: 'nearest' });
+  } else if (ev.key === 'ArrowUp') {
+    ev.preventDefault();
+    idx = Math.max(idx - 1, 0);
+    opts.forEach((o, i) => o.classList.toggle('combo-active', i === idx));
+    opts[idx]?.scrollIntoView({ block: 'nearest' });
+  } else if (ev.key === 'Enter') {
+    ev.preventDefault();
+    if (active) active.dispatchEvent(new MouseEvent('mousedown'));
+    else closeCombo(id);
+  } else if (ev.key === 'Escape') {
+    closeCombo(id);
   }
-  if (filtered.includes(current)) sel.value = current;
+}
+
+// Close combo on outside click
+document.addEventListener('mousedown', (e) => {
+  if (!_comboOpenId) return;
+  const wrap = document.getElementById(`${_comboOpenId}-wrap`);
+  if (wrap && !wrap.contains(e.target)) closeCombo(_comboOpenId);
+});
+
+/** Build HTML for an integrated searchable combobox */
+function buildComboBox(field, label, options, id, hasNew, current) {
+  const displayValue = current || '';
+  return `
+  <div class="form-group" id="${id}-group">
+    <label>${esc(label)}</label>
+    <div class="combo-wrap" id="${id}-wrap">
+      <button type="button" id="${id}-btn"
+              class="combo-btn${displayValue ? '' : ' placeholder'}"
+              onclick="openCombo('${id}','${field}',${hasNew})"
+              aria-haspopup="listbox" aria-expanded="false">
+        ${displayValue ? esc(displayValue) : `— Select ${esc(label)} —`}
+      </button>
+      <div class="combo-panel" id="${id}-panel" role="listbox">
+        <input class="combo-search" id="${id}-search" type="text" autocomplete="off"
+               placeholder="Search…"
+               oninput="filterCombo('${id}','${field}',${hasNew})"
+               onkeydown="comboKeydown(event,'${id}','${field}',${hasNew})">
+        <div class="combo-opts" id="${id}-opts"></div>
+      </div>
+      <input type="hidden" id="${id}-sel" value="${esc(displayValue)}">
+    </div>
+    ${hasNew ? `<div id="${id}-new" style="display:none" class="add-new-row">
+      <input id="${id}-new-input" class="input" type="text" placeholder="Type new ${esc(label.toLowerCase())}…">
+      <button class="btn btn-outline btn-sm" onclick="submitNewOption('${id}','${field}')">Submit</button>
+    </div>` : ''}
+  </div>`;
 }
 
 function isMobileDevice() {
@@ -1180,52 +1285,37 @@ function setDuty(isDuty) {
 }
 
 function buildDropdownGroup(field, label, options, containerId) {
-  const opts = options.map(o => `<option value="${esc(o)}">${esc(o)}</option>`).join('');
-  return `
-  <div class="form-group" id="${containerId}-group">
-    <label for="${containerId}-sel">${esc(label)}</label>
-    <input class="input" style="margin-bottom:4px" placeholder="Search ${esc(label.toLowerCase())}…" aria-label="Search ${esc(label.toLowerCase())}" oninput="filterSelectOpts(this,'${containerId}-sel','${field}',true)">
-    <select id="${containerId}-sel" class="select" onchange="onDropdownChange('${containerId}','${field}')">
-      <option value="">— Select —</option>
-      ${opts}
-      <option value="__new__">+ Add new option…</option>
-    </select>
-    <div id="${containerId}-new" style="display:none" class="add-new-row">
-      <input id="${containerId}-new-input" class="input" type="text" placeholder="Type new ${label.toLowerCase()}…">
-      <button class="btn btn-outline btn-sm" onclick="submitNewOption('${containerId}','${field}')">Submit</button>
-    </div>
-  </div>`;
+  return buildComboBox(field, label, options, containerId, true, null);
 }
 
 function onDropdownChange(containerId, field) {
+  // kept for backwards-compat — combobox now calls selectComboOpt directly
   const sel = document.getElementById(`${containerId}-sel`);
-  const newDiv = document.getElementById(`${containerId}-new`);
-  if (sel.value === '__new__') {
-    newDiv.style.display = 'flex';
-    sel.value = '';
-  } else {
-    newDiv.style.display = 'none';
-    state.taskForm[field] = sel.value || null;
-  }
+  if (sel) state.taskForm[field] = sel.value || null;
 }
 
 async function submitNewOption(containerId, field) {
   const input = document.getElementById(`${containerId}-new-input`);
-  const val = input.value.trim();
+  const val = (input?.value || '').trim();
   if (!val) return;
   try {
     const d = await api('POST', '/api/dropdowns/propose', { field_name: field, value: val });
     if (!d) return;
-    // Add to local dropdown
-    const sel = document.getElementById(`${containerId}-sel`);
-    const opt = document.createElement('option');
-    opt.value = val; opt.textContent = val + ' (pending)';
-    sel.insertBefore(opt, sel.lastElementChild);
-    sel.value = val;
+    // Update hidden input and combobox button
+    const hidden = document.getElementById(`${containerId}-sel`);
+    const btn    = document.getElementById(`${containerId}-btn`);
+    if (hidden) hidden.value = val;
+    if (btn) { btn.textContent = val + ' (pending)'; btn.classList.remove('placeholder'); }
     state.taskForm[field] = val;
-    document.getElementById(`${containerId}-new`).style.display = 'none';
-    showAlert('Option submitted for review.', 'success', 'ts-alerts');
-  } catch(e) { showAlert(e.message, 'error', 'ts-alerts'); }
+    if (input) input.value = '';
+    const newDiv = document.getElementById(`${containerId}-new`);
+    if (newDiv) newDiv.style.display = 'none';
+    const alertContainer = document.getElementById('ts-alerts') ? 'ts-alerts' : 'te-alerts';
+    showAlert('Option submitted for review.', 'success', alertContainer);
+  } catch(e) {
+    const alertContainer = document.getElementById('ts-alerts') ? 'ts-alerts' : 'te-alerts';
+    showAlert(e.message, 'error', alertContainer);
+  }
 }
 
 async function doStartTask() {
@@ -1520,27 +1610,30 @@ function renderTaskReview(t, isEdit) {
 }
 
 function buildReviewDropdown(field, label, options, current) {
-  const opts = options.map(o => `<option value="${esc(o)}" ${o === current ? 'selected' : ''}>${esc(o)}</option>`).join('');
-  return `
-  <div class="form-group">
-    <label for="te-${field}">${esc(label)}</label>
-    <input class="input" style="margin-bottom:4px" placeholder="Search ${esc(label.toLowerCase())}…" aria-label="Search ${esc(label.toLowerCase())}" oninput="filterSelectOpts(this,'te-${field}','${field}',false)">
-    <select id="te-${field}" class="select">
-      <option value="">— Select —</option>${opts}
-    </select>
-  </div>`;
+  return buildComboBox(field, label, options, `te-${field}`, false, current || null);
 }
 
 function buildReviewOutcomeGroup(options, current) {
-  const opts = options.map(o => `<option value="${esc(o)}" ${o === current ? 'selected' : ''}>${esc(o)}</option>`).join('');
+  const displayValue = current || '';
   return `
   <div class="form-group" id="te-out-group">
-    <label for="te-outcome">Outcome</label>
-    <input class="input" style="margin-bottom:4px" placeholder="Search outcome…" aria-label="Search outcome" oninput="filterSelectOpts(this,'te-outcome','outcome',true)">
-    <select id="te-outcome" class="select" onchange="onOutcomeEndChange()">
-      <option value="">— Select —</option>${opts}
-      <option value="__new__">+ Add new outcome…</option>
-    </select>
+    <label>Outcome</label>
+    <div class="combo-wrap" id="te-outcome-wrap">
+      <button type="button" id="te-outcome-btn"
+              class="combo-btn${displayValue ? '' : ' placeholder'}"
+              onclick="openCombo('te-outcome-wrap','outcome',true)"
+              aria-haspopup="listbox" aria-expanded="false">
+        ${displayValue ? esc(displayValue) : '— Select Outcome —'}
+      </button>
+      <div class="combo-panel" id="te-outcome-wrap-panel" role="listbox">
+        <input class="combo-search" id="te-outcome-wrap-search" type="text" autocomplete="off"
+               placeholder="Search…"
+               oninput="filterCombo('te-outcome-wrap','outcome',true)"
+               onkeydown="comboKeydown(event,'te-outcome-wrap','outcome',true)">
+        <div class="combo-opts" id="te-outcome-wrap-opts"></div>
+      </div>
+      <input type="hidden" id="te-outcome" value="${esc(displayValue)}">
+    </div>
     <div id="te-out-new" style="display:none" class="add-new-row">
       <input id="te-out-new-input" class="input" type="text" placeholder="Type new outcome…">
       <button class="btn btn-outline btn-sm" onclick="submitNewOutcomeEnd()">Add</button>
@@ -1549,29 +1642,21 @@ function buildReviewOutcomeGroup(options, current) {
 }
 
 function onOutcomeEndChange() {
-  const sel = document.getElementById('te-outcome');
-  const newDiv = document.getElementById('te-out-new');
-  if (sel.value === '__new__') {
-    newDiv.style.display = 'flex';
-    sel.value = '';
-  } else {
-    newDiv.style.display = 'none';
-  }
+  // no-op: handled by combobox now
 }
 
 async function submitNewOutcomeEnd() {
   const input = document.getElementById('te-out-new-input');
-  const val = input.value.trim();
+  const val = (input?.value || '').trim();
   if (!val) return;
   try {
     await api('POST', '/api/dropdowns/propose', { field_name: 'outcome', value: val });
-    const sel = document.getElementById('te-outcome');
-    const opt = document.createElement('option');
-    opt.value = val; opt.textContent = val;
-    sel.insertBefore(opt, sel.lastElementChild);
-    sel.value = val;
+    const hidden = document.getElementById('te-outcome');
+    const btn    = document.getElementById('te-outcome-btn');
+    if (hidden) hidden.value = val;
+    if (btn) { btn.textContent = val + ' (pending)'; btn.classList.remove('placeholder'); }
+    if (input) input.value = '';
     document.getElementById('te-out-new').style.display = 'none';
-    input.value = '';
     showAlert('Outcome added — pending admin approval.', 'success', 'te-alerts');
   } catch(e) { showAlert(e.message, 'error', 'te-alerts'); }
 }
@@ -1596,8 +1681,8 @@ async function submitTaskReview(taskId, isEdit, dest) {
   const outcome = document.getElementById('te-outcome')?.value || null;
   if (!outcome) { showAlert('Please select an Outcome.', 'error', 'te-alerts'); return; }
   const dutyEl = document.getElementById('te-duty');
-  const categoryVal = document.getElementById('te-category')?.value || t.category || null;
-  const subcategoryVal = document.getElementById('te-subcategory')?.value || t.subcategory || null;
+  const categoryVal = document.getElementById('te-category-sel')?.value || t.category || null;
+  const subcategoryVal = document.getElementById('te-subcategory-sel')?.value || t.subcategory || null;
   if (isEdit && !categoryVal) { showAlert('Please select a Task From.', 'error', 'te-alerts'); return; }
   if (isEdit && !subcategoryVal) { showAlert('Please select a Task Type.', 'error', 'te-alerts'); return; }
   const body = {
