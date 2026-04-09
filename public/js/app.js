@@ -113,7 +113,12 @@ function openCombo(id, field, hasNew) {
   _comboOpenId = id;
   renderComboOpts(id, field, hasNew, '');
   const search = document.getElementById(`${id}-search`);
-  if (search) { search.value = ''; setTimeout(() => search.focus(), 30); }
+  if (search) {
+    search.value = '';
+    // Only auto-focus search on non-touch devices to avoid triggering the
+    // mobile soft keyboard when the user merely opens a dropdown.
+    if (!navigator.maxTouchPoints) setTimeout(() => search.focus(), 30);
+  }
 }
 
 function closeCombo(id) {
@@ -1660,8 +1665,8 @@ function buildReviewOutcomeGroup(options, current) {
       </div>
       <input type="hidden" id="te-outcome-sel" value="${esc(displayValue)}">
     </div>
-    <div id="te-out-new" style="display:none" class="add-new-row">
-      <input id="te-out-new-input" class="input" type="text" placeholder="Type new outcome…">
+    <div id="te-outcome-new" style="display:none" class="add-new-row">
+      <input id="te-outcome-new-input" class="input" type="text" placeholder="Type new outcome…">
       <button class="btn btn-outline btn-sm" onclick="submitNewOutcomeEnd()">Add</button>
     </div>
   </div>`;
@@ -1672,7 +1677,7 @@ function onOutcomeEndChange() {
 }
 
 async function submitNewOutcomeEnd() {
-  const input = document.getElementById('te-out-new-input');
+  const input = document.getElementById('te-outcome-new-input');
   const val = (input?.value || '').trim();
   if (!val) return;
   try {
@@ -1682,7 +1687,7 @@ async function submitNewOutcomeEnd() {
     if (hidden) hidden.value = val;
     if (btn) { btn.textContent = val + ' (pending)'; btn.classList.remove('placeholder'); }
     if (input) input.value = '';
-    document.getElementById('te-out-new').style.display = 'none';
+    document.getElementById('te-outcome-new').style.display = 'none';
     showAlert('Outcome added — pending admin approval.', 'success', 'te-alerts');
   } catch(e) { showAlert(e.message, 'error', 'te-alerts'); }
 }
