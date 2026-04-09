@@ -549,6 +549,7 @@ async function renderLogin() {
     <div style="text-align:center;margin-top:16px;display:flex;flex-direction:column;gap:10px">
       ${showRegister ? `<button class="link-btn" onclick="renderRegister()">Don't have an account? Register</button>` : ''}
       <a href="/policy" target="_blank" style="font-size:.85rem;color:#6b7280">Data &amp; Use Policy</a>
+      <a href="/guide" target="_blank" style="font-size:.85rem;color:#1a56db;font-weight:600">📖 Quick Start Guide</a>
     </div>
     ${statsHTML}
     ${renderFooter()}
@@ -1045,6 +1046,7 @@ function renderHomeHTML() {
   <div class="view">
     <div class="view-header">
       <h1>👋 Tasker</h1>
+      <a href="/guide" target="_blank" style="font-size:.8rem;color:#1a56db;font-weight:600;text-decoration:none;white-space:nowrap">📖 Guide</a>
     </div>
     <div class="retention-notice">⏳ Your data is automatically deleted after 30 days.</div>
     ${midnightWarn ? '<div class="midnight-warn">⚠️ Approaching midnight — your session will end at midnight. Complete any active task.</div>' : ''}

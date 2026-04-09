@@ -1,0 +1,902 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Tasker — Quick Start Guide</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --blue:   #1a56db;
+      --blue-light: #dbeafe;
+      --green:  #16a34a;
+      --green-light: #dcfce7;
+      --amber:  #d97706;
+      --amber-light: #fef3c7;
+      --red:    #dc2626;
+      --red-light: #fee2e2;
+      --purple: #7c3aed;
+      --purple-light: #ede9fe;
+      --teal:   #0d9488;
+      --teal-light: #ccfbf1;
+      --gray:   #6b7280;
+      --bg:     #f0f4ff;
+      --text:   #1a1a2e;
+    }
+
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      padding: 0 0 60px;
+    }
+
+    /* ── Top banner ─────────────────────────────────────────── */
+    .hero {
+      background: linear-gradient(135deg, #1a56db 0%, #1e40af 100%);
+      color: #fff;
+      text-align: center;
+      padding: 32px 20px 28px;
+    }
+    .hero-icon { font-size: 3.5rem; margin-bottom: 10px; }
+    .hero h1  { font-size: 2rem; font-weight: 800; margin-bottom: 6px; }
+    .hero p   { font-size: 1rem; opacity: .88; max-width: 380px; margin: 0 auto 18px; }
+    .back-btn {
+      display: inline-block;
+      background: rgba(255,255,255,.18);
+      color: #fff;
+      text-decoration: none;
+      font-weight: 600;
+      font-size: .9rem;
+      padding: 8px 18px;
+      border-radius: 20px;
+      border: 1.5px solid rgba(255,255,255,.35);
+      cursor: pointer;
+    }
+    .back-btn:hover { background: rgba(255,255,255,.28); }
+
+    /* ── Page container ─────────────────────────────────────── */
+    .page { max-width: 700px; margin: 0 auto; padding: 0 16px; }
+
+    /* ── Section headings ───────────────────────────────────── */
+    .section {
+      margin-top: 32px;
+    }
+    .section-title {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 1.2rem;
+      font-weight: 700;
+      color: var(--blue);
+      border-bottom: 3px solid var(--blue-light);
+      padding-bottom: 8px;
+      margin-bottom: 16px;
+    }
+    .section-icon { font-size: 1.4rem; }
+
+    /* ── Cards ──────────────────────────────────────────────── */
+    .card {
+      background: #fff;
+      border-radius: 14px;
+      padding: 18px;
+      margin-bottom: 14px;
+      box-shadow: 0 1px 4px rgba(0,0,0,.06);
+    }
+
+    /* ── Callout boxes ──────────────────────────────────────── */
+    .callout {
+      border-radius: 12px;
+      padding: 14px 16px;
+      margin: 14px 0;
+      font-size: .95rem;
+      display: flex;
+      gap: 10px;
+      align-items: flex-start;
+    }
+    .callout-icon { font-size: 1.3rem; flex-shrink: 0; margin-top: 1px; }
+    .callout-blue   { background: var(--blue-light);   border: 1.5px solid var(--blue);   color: #1e3a8a; }
+    .callout-green  { background: var(--green-light);  border: 1.5px solid var(--green);  color: #14532d; }
+    .callout-amber  { background: var(--amber-light);  border: 1.5px solid var(--amber);  color: #78350f; }
+    .callout-red    { background: var(--red-light);    border: 1.5px solid var(--red);    color: #7f1d1d; font-weight: 600; }
+
+    /* ── Numbered steps ─────────────────────────────────────── */
+    .steps { display: flex; flex-direction: column; gap: 12px; }
+    .step  { display: flex; gap: 14px; align-items: flex-start; }
+    .step-num {
+      width: 30px; height: 30px;
+      background: var(--blue);
+      color: #fff;
+      font-weight: 700;
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+      font-size: .9rem;
+    }
+    .step-body { flex: 1; padding-top: 4px; }
+    .step-body strong { color: var(--blue); }
+
+    /* ── Flow arrows ────────────────────────────────────────── */
+    .flow {
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+      align-items: flex-start;
+      margin: 12px 0;
+    }
+    .flow-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      background: #fff;
+      border: 1.5px solid #e5e7eb;
+      border-radius: 10px;
+      padding: 10px 14px;
+      width: 100%;
+      font-size: .95rem;
+    }
+    .flow-item + .flow-item { margin-top: 4px; }
+    .flow-arrow {
+      text-align: center;
+      color: var(--gray);
+      font-size: 1.1rem;
+      padding: 2px 0;
+      width: 100%;
+    }
+    .flow-icon { font-size: 1.3rem; flex-shrink: 0; }
+    .flow-label { flex: 1; }
+    .flow-label strong { display: block; font-size: .9rem; color: var(--text); }
+    .flow-label span   { font-size: .8rem; color: var(--gray); }
+
+    /* ── Tag/pill grid ──────────────────────────────────────── */
+    .tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 10px;
+    }
+    .tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 5px 12px;
+      border-radius: 20px;
+      font-size: .82rem;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+    .tag-blue   { background: var(--blue-light);   color: #1e3a8a; }
+    .tag-green  { background: var(--green-light);  color: #14532d; }
+    .tag-amber  { background: var(--amber-light);  color: #78350f; }
+    .tag-red    { background: var(--red-light);    color: #7f1d1d; }
+    .tag-purple { background: var(--purple-light); color: #4c1d95; }
+    .tag-teal   { background: var(--teal-light);   color: #134e4a; }
+    .tag-gray   { background: #f3f4f6;             color: #374151; }
+
+    /* ── Two-col grid ───────────────────────────────────────── */
+    .grid-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-top: 12px;
+    }
+    @media (max-width: 440px) { .grid-2 { grid-template-columns: 1fr; } }
+    .grid-card {
+      background: #fff;
+      border: 1.5px solid #e5e7eb;
+      border-radius: 12px;
+      padding: 14px;
+      text-align: center;
+    }
+    .grid-card .gc-icon { font-size: 1.8rem; margin-bottom: 6px; }
+    .grid-card .gc-title { font-size: .9rem; font-weight: 700; margin-bottom: 4px; }
+    .grid-card .gc-desc  { font-size: .78rem; color: var(--gray); line-height: 1.5; }
+
+    /* ── Three-col icon row ─────────────────────────────────── */
+    .icon-row {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      justify-content: center;
+      margin: 12px 0;
+    }
+    .icon-chip {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+      background: #fff;
+      border: 1.5px solid #e5e7eb;
+      border-radius: 10px;
+      padding: 10px 14px;
+      min-width: 90px;
+      flex: 1;
+      text-align: center;
+    }
+    .icon-chip .ic-icon  { font-size: 1.5rem; }
+    .icon-chip .ic-label { font-size: .75rem; font-weight: 600; color: var(--text); }
+
+    /* ── Outcome item ───────────────────────────────────────── */
+    .outcome-list {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      margin-top: 10px;
+    }
+    .outcome-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: #fff;
+      border: 1.5px solid #e5e7eb;
+      border-radius: 8px;
+      padding: 8px 12px;
+      font-size: .88rem;
+    }
+    .outcome-dot {
+      width: 10px; height: 10px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    /* ── Divider ────────────────────────────────────────────── */
+    .divider { border: none; border-top: 2px dashed #e5e7eb; margin: 28px 0 4px; }
+
+    /* ── Screen mock ────────────────────────────────────────── */
+    .screen-mock {
+      background: #1a1a2e;
+      border-radius: 20px;
+      padding: 16px;
+      max-width: 280px;
+      margin: 14px auto;
+      box-shadow: 0 6px 20px rgba(0,0,0,.18);
+    }
+    .screen-mock .sm-bar {
+      width: 60px; height: 5px;
+      background: #fff;
+      border-radius: 3px;
+      margin: 0 auto 14px;
+      opacity: .25;
+    }
+    .screen-mock .sm-title {
+      color: #fff;
+      text-align: center;
+      font-weight: 700;
+      font-size: 1.1rem;
+      margin-bottom: 14px;
+    }
+    .sm-field {
+      background: #fff;
+      border-radius: 8px;
+      padding: 10px 12px;
+      margin-bottom: 8px;
+      font-size: .82rem;
+      color: #374151;
+    }
+    .sm-field label { display: block; font-size: .7rem; color: #9ca3af; margin-bottom: 2px; }
+    .sm-btn-primary {
+      display: block;
+      width: 100%;
+      background: var(--blue);
+      color: #fff;
+      text-align: center;
+      padding: 11px;
+      border-radius: 8px;
+      font-weight: 700;
+      font-size: .88rem;
+      margin-top: 10px;
+    }
+    .sm-btn-secondary {
+      display: block;
+      width: 100%;
+      background: transparent;
+      color: #9ca3af;
+      text-align: center;
+      padding: 8px;
+      font-size: .8rem;
+      margin-top: 6px;
+    }
+
+    /* ── Progress bar ───────────────────────────────────────── */
+    .progress-wrap {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      justify-content: center;
+      margin: 16px 0 4px;
+    }
+    .progress-step {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+      flex: 1;
+      max-width: 80px;
+      font-size: .7rem;
+      color: var(--gray);
+      text-align: center;
+    }
+    .progress-circle {
+      width: 30px; height: 30px;
+      border-radius: 50%;
+      background: #e5e7eb;
+      display: flex; align-items: center; justify-content: center;
+      font-size: .8rem;
+    }
+    .progress-circle.active { background: var(--blue); color: #fff; font-weight: 700; }
+    .progress-circle.done   { background: var(--green); color: #fff; }
+    .progress-line { flex: 1; height: 3px; background: #e5e7eb; max-width: 30px; margin-bottom: 16px; }
+    .progress-line.done { background: var(--green); }
+
+    /* ── Table of contents ──────────────────────────────────── */
+    .toc {
+      background: #fff;
+      border: 1.5px solid #e5e7eb;
+      border-radius: 14px;
+      padding: 16px 20px;
+      margin: 20px 0 28px;
+    }
+    .toc strong { color: var(--blue); }
+    .toc ol { padding-left: 1.4rem; margin-top: 8px; }
+    .toc li { margin-bottom: 5px; }
+    .toc a  { color: var(--blue); text-decoration: none; font-size: .9rem; }
+    .toc a:hover { text-decoration: underline; }
+
+    /* ── Footer ─────────────────────────────────────────────── */
+    footer {
+      text-align: center;
+      font-size: .78rem;
+      color: var(--gray);
+      margin-top: 40px;
+      padding: 0 16px;
+    }
+    footer a { color: var(--gray); }
+  </style>
+</head>
+<body>
+
+<!-- ═══ HERO ════════════════════════════════════════════════════════════════ -->
+<div class="hero">
+  <div class="hero-icon">📱</div>
+  <h1>Tasker Quick Start Guide</h1>
+  <p>Everything you need to start recording tasks in under 5 minutes.</p>
+  <a class="back-btn" href="/" onclick="history.back();return false;">← Back to Tasker</a>
+</div>
+
+<div class="page">
+
+  <!-- ─── TABLE OF CONTENTS ──────────────────────────────────────────────── -->
+  <nav class="toc">
+    <strong>📖 In this guide</strong>
+    <ol>
+      <li><a href="#what-it-does">What does Tasker do?</a></li>
+      <li><a href="#your-account">Creating your account &amp; logging in</a></li>
+      <li><a href="#record-task">Recording a task — step by step</a></li>
+      <li><a href="#task-from">Who sent the task? (Task From)</a></li>
+      <li><a href="#task-type">What kind of task is it? (Task Type)</a></li>
+      <li><a href="#interruptions">If you get interrupted</a></li>
+      <li><a href="#outcomes">Finishing a task (Outcome)</a></li>
+      <li><a href="#after">Viewing your records</a></li>
+      <li><a href="#privacy">Your privacy</a></li>
+    </ol>
+  </nav>
+
+  <!-- ─── 1. WHAT IT DOES ─────────────────────────────────────────────────── -->
+  <div class="section" id="what-it-does">
+    <div class="section-title">
+      <span class="section-icon">💡</span>
+      <span>1. What does Tasker do?</span>
+    </div>
+
+    <div class="card">
+      <p style="font-size:1rem;line-height:1.7">
+        Tasker is a <strong>simple timer and record-keeper</strong> for your working day.
+        Each time you start a piece of work, you tap a button — Tasker starts the clock.
+        When you finish, you tap stop and choose a couple of options to describe what the task was.
+        Over time you build up a picture of where your time goes.
+      </p>
+    </div>
+
+    <div class="grid-2">
+      <div class="grid-card">
+        <div class="gc-icon">⏱️</div>
+        <div class="gc-title">Built-in stopwatch</div>
+        <div class="gc-desc">Automatically times each task — no mental arithmetic needed.</div>
+      </div>
+      <div class="grid-card">
+        <div class="gc-icon">📊</div>
+        <div class="gc-title">Instant charts</div>
+        <div class="gc-desc">See exactly how you spent your day the moment you finish.</div>
+      </div>
+      <div class="grid-card">
+        <div class="gc-icon">🔒</div>
+        <div class="gc-title">Fully anonymous</div>
+        <div class="gc-desc">No names, no patient details — just task types and times.</div>
+      </div>
+      <div class="grid-card">
+        <div class="gc-icon">📥</div>
+        <div class="gc-title">Download your data</div>
+        <div class="gc-desc">Export a spreadsheet of your records any time you like.</div>
+      </div>
+    </div>
+
+    <div class="callout callout-red" style="margin-top:16px">
+      <span class="callout-icon">⛔</span>
+      <div><strong>Never</strong> type patient names, initials, NHS numbers, or anything that could identify a person. Record <em>task type</em> only — not <em>who</em> was involved.</div>
+    </div>
+  </div>
+
+  <hr class="divider">
+
+  <!-- ─── 2. ACCOUNT & LOGIN ───────────────────────────────────────────────── -->
+  <div class="section" id="your-account">
+    <div class="section-title">
+      <span class="section-icon">🔑</span>
+      <span>2. Creating your account &amp; logging in</span>
+    </div>
+
+    <div class="card">
+      <p style="margin-bottom:12px;font-weight:700">First time? Choose one of these routes:</p>
+      <div class="grid-2">
+        <div class="grid-card" style="border-color:#1a56db">
+          <div class="gc-icon">🙋</div>
+          <div class="gc-title" style="color:#1a56db">Self-register</div>
+          <div class="gc-desc">Tap <strong>"Don't have an account? Register"</strong> on the sign-in screen, choose a password, and accept the data policy.</div>
+        </div>
+        <div class="grid-card" style="border-color:#16a34a">
+          <div class="gc-icon">👩‍💼</div>
+          <div class="gc-title" style="color:#16a34a">Admin-created</div>
+          <div class="gc-desc">Your administrator gives you a username and a one-time password. You set your own permanent password at first sign-in.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="callout callout-amber">
+      <span class="callout-icon">✍️</span>
+      <div><strong>Write down your username immediately.</strong> It is shown only once. It is two random words joined together (for example <em>SilverMango</em>) — it is <em>not</em> your real name and cannot be recovered if lost.</div>
+    </div>
+
+    <div class="card">
+      <p style="font-weight:700;margin-bottom:14px">Signing in — three quick steps</p>
+      <div class="steps">
+        <div class="step">
+          <div class="step-num">1</div>
+          <div class="step-body">Type your <strong>username</strong> in the box (upper or lower case is fine).</div>
+        </div>
+        <div class="step">
+          <div class="step-num">2</div>
+          <div class="step-body">Type your <strong>password</strong>. Tap the 👁️ icon to check what you typed.</div>
+        </div>
+        <div class="step">
+          <div class="step-num">3</div>
+          <div class="step-body">Tap <strong>Log in</strong>. You will land on the home screen.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- screen mock -->
+    <div class="screen-mock">
+      <div class="sm-bar"></div>
+      <div class="sm-title">📱 Tasker</div>
+      <div class="sm-field">
+        <label>Username</label>
+        SilverMango
+      </div>
+      <div class="sm-field">
+        <label>Password</label>
+        ••••••••••
+      </div>
+      <div class="sm-btn-primary">Log in</div>
+      <div class="sm-btn-secondary">Don't have an account? Register</div>
+      <div class="sm-btn-secondary">📖 Quick Start Guide</div>
+    </div>
+
+    <div class="callout callout-blue">
+      <span class="callout-icon">ℹ️</span>
+      <div>Your session closes automatically after <strong>30 minutes</strong> of no activity, or at <strong>midnight</strong>. If you are mid-task when that happens, start a new task and correct the start time on the review screen.</div>
+    </div>
+  </div>
+
+  <hr class="divider">
+
+  <!-- ─── 3. RECORDING A TASK ──────────────────────────────────────────────── -->
+  <div class="section" id="record-task">
+    <div class="section-title">
+      <span class="section-icon">▶️</span>
+      <span>3. Recording a task — step by step</span>
+    </div>
+
+    <!-- visual progress flow -->
+    <div class="progress-wrap" aria-label="Task recording steps">
+      <div class="progress-step">
+        <div class="progress-circle active">1</div>
+        <span>Tap<br>Log Task</span>
+      </div>
+      <div class="progress-line done"></div>
+      <div class="progress-step">
+        <div class="progress-circle active">2</div>
+        <span>Choose<br>Task From</span>
+      </div>
+      <div class="progress-line done"></div>
+      <div class="progress-step">
+        <div class="progress-circle active">3</div>
+        <span>Choose<br>Task Type</span>
+      </div>
+      <div class="progress-line done"></div>
+      <div class="progress-step">
+        <div class="progress-circle active">4</div>
+        <span>Tap<br>Start Timer</span>
+      </div>
+      <div class="progress-line done"></div>
+      <div class="progress-step">
+        <div class="progress-circle active">5</div>
+        <span>Tap<br>End Task</span>
+      </div>
+      <div class="progress-line done"></div>
+      <div class="progress-step">
+        <div class="progress-circle active">6</div>
+        <span>Choose<br>Outcome &amp; Save</span>
+      </div>
+    </div>
+
+    <div class="steps">
+      <div class="step">
+        <div class="step-num">1</div>
+        <div class="step-body">From the home screen, tap the big blue <strong>▶ Log Task</strong> button.</div>
+      </div>
+      <div class="step">
+        <div class="step-num">2</div>
+        <div class="step-body">
+          Choose <strong>My Group</strong> (work done as part of a shared group, e.g. Duty Doctors or INR Group) or <strong>Personal</strong> (just you).
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">3</div>
+        <div class="step-body">
+          Pick who sent the task from the <strong>Task From</strong> dropdown — for example, <em>Doctors</em> or <em>Dispensary/Pharmacy</em>. See the full list in Section 4 below.
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">4</div>
+        <div class="step-body">
+          Pick the <strong>Task Type</strong> — for example, <em>Pathology result</em> or <em>Sick note request</em>. See the full list in Section 5 below.
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">5</div>
+        <div class="step-body">
+          Check the <strong>date assigned</strong>. It defaults to today — change it only if the task was from a different day.
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">6</div>
+        <div class="step-body">Tap <strong>▶ Start Timer</strong>. The clock begins running.</div>
+      </div>
+      <div class="step">
+        <div class="step-num">7</div>
+        <div class="step-body">Do your work. When you finish, tap <strong>⏹️ End Task</strong>.</div>
+      </div>
+      <div class="step">
+        <div class="step-num">8</div>
+        <div class="step-body">On the review screen, choose an <strong>Outcome</strong> and tap <strong>Save</strong>. Done!</div>
+      </div>
+    </div>
+
+    <div class="callout callout-green">
+      <span class="callout-icon">💡</span>
+      <div><strong>Tip:</strong> You can only run one task at a time. If one is already going, finish or abandon it before starting another.</div>
+    </div>
+  </div>
+
+  <hr class="divider">
+
+  <!-- ─── 4. TASK FROM ─────────────────────────────────────────────────────── -->
+  <div class="section" id="task-from">
+    <div class="section-title">
+      <span class="section-icon">📨</span>
+      <span>4. Who sent the task? — Task From</span>
+    </div>
+
+    <p style="margin-bottom:12px;font-size:.95rem">
+      This tells Tasker <strong>where the task came from</strong>. Tap the dropdown and pick from the list below, or start typing to search.
+    </p>
+
+    <div class="tags">
+      <span class="tag tag-blue">👩‍⚕️ Admin team</span>
+      <span class="tag tag-teal">🤝 Allied professionals</span>
+      <span class="tag tag-purple">💊 Dispensary/Pharmacy</span>
+      <span class="tag tag-blue">👨‍⚕️ Doctors</span>
+      <span class="tag tag-teal">🏥 External clinical</span>
+      <span class="tag tag-green">🩺 HCAs</span>
+      <span class="tag tag-amber">🙋 Me</span>
+      <span class="tag tag-green">👩‍⚕️ Nurses</span>
+    </div>
+
+    <div class="callout callout-blue" style="margin-top:14px">
+      <span class="callout-icon">➕</span>
+      <div>Can't find the right option? Tap the dropdown, start typing, and choose <strong>"+ Add new option…"</strong> at the bottom. Your suggestion goes to your administrator for review.</div>
+    </div>
+  </div>
+
+  <hr class="divider">
+
+  <!-- ─── 5. TASK TYPE ─────────────────────────────────────────────────────── -->
+  <div class="section" id="task-type">
+    <div class="section-title">
+      <span class="section-icon">📋</span>
+      <span>5. What kind of task is it? — Task Type</span>
+    </div>
+
+    <p style="margin-bottom:12px;font-size:.95rem">
+      Choose the option that best describes <strong>the nature of the work</strong>. They are grouped below to make them easier to find.
+    </p>
+
+    <!-- Urgent -->
+    <div class="card" style="border-left:4px solid var(--red)">
+      <p style="font-weight:700;color:var(--red);margin-bottom:8px">🚨 Urgent</p>
+      <div class="tags">
+        <span class="tag tag-red">Urgent clinical</span>
+        <span class="tag tag-red">Urgent letter</span>
+        <span class="tag tag-red">Urgent prescription request</span>
+        <span class="tag tag-red">Visit request</span>
+      </div>
+    </div>
+
+    <!-- Routine clinical -->
+    <div class="card" style="border-left:4px solid var(--blue)">
+      <p style="font-weight:700;color:var(--blue);margin-bottom:8px">🩺 Clinical</p>
+      <div class="tags">
+        <span class="tag tag-blue">Action today</span>
+        <span class="tag tag-blue">Action 48h</span>
+        <span class="tag tag-blue">Routine clinical</span>
+        <span class="tag tag-blue">Blood pressure</span>
+        <span class="tag tag-blue">INR or ECG review</span>
+        <span class="tag tag-blue">Long-term condition / Medication review</span>
+        <span class="tag tag-blue">Pathology result</span>
+        <span class="tag tag-blue">Referral</span>
+        <span class="tag tag-blue">Urine sample</span>
+      </div>
+    </div>
+
+    <!-- Medicines -->
+    <div class="card" style="border-left:4px solid var(--purple)">
+      <p style="font-weight:700;color:var(--purple);margin-bottom:8px">💊 Medicines &amp; prescriptions</p>
+      <div class="tags">
+        <span class="tag tag-purple">Prescription medication enquiries</span>
+        <span class="tag tag-purple">Shared care medication query</span>
+      </div>
+    </div>
+
+    <!-- Admin -->
+    <div class="card" style="border-left:4px solid var(--teal)">
+      <p style="font-weight:700;color:var(--teal);margin-bottom:8px">📄 Administrative</p>
+      <div class="tags">
+        <span class="tag tag-teal">Routine letter</span>
+        <span class="tag tag-teal">Sick note request</span>
+        <span class="tag tag-teal">For information only</span>
+        <span class="tag tag-teal">Safeguarding</span>
+      </div>
+    </div>
+
+    <div class="callout callout-green">
+      <span class="callout-icon">💡</span>
+      <div><strong>Tip:</strong> Start typing in the dropdown box to filter the list instantly — you don't need to scroll through all the options.</div>
+    </div>
+  </div>
+
+  <hr class="divider">
+
+  <!-- ─── 6. INTERRUPTIONS ─────────────────────────────────────────────────── -->
+  <div class="section" id="interruptions">
+    <div class="section-title">
+      <span class="section-icon">⏸️</span>
+      <span>6. If you get interrupted</span>
+    </div>
+
+    <p style="margin-bottom:12px;font-size:.95rem">
+      Interruptions happen! While a task is running, tap <strong>⏸️ Interrupted</strong>. A menu appears with three choices:
+    </p>
+
+    <div class="flow">
+      <div class="flow-item" style="border-color:#16a34a">
+        <span class="flow-icon">▶</span>
+        <div class="flow-label">
+          <strong>Resume — continue from here</strong>
+          <span>The interruption is already over. Keep the clock going. The time away is not counted.</span>
+        </div>
+      </div>
+      <div class="flow-item" style="border-color:#d97706">
+        <span class="flow-icon">📝</span>
+        <div class="flow-label">
+          <strong>Enter interruption times manually</strong>
+          <span>Type in when it started and ended so that exact time is removed from the task total.</span>
+        </div>
+      </div>
+      <div class="flow-item" style="border-color:#dc2626">
+        <span class="flow-icon">🗑</span>
+        <div class="flow-label">
+          <strong>Discard this task</strong>
+          <span>Throw the whole task away and start fresh.</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="callout callout-blue">
+      <span class="callout-icon">ℹ️</span>
+      <div>You can record more than one interruption on the same task. Each one will appear on the review screen, and you can delete any added by mistake before saving.</div>
+    </div>
+  </div>
+
+  <hr class="divider">
+
+  <!-- ─── 7. OUTCOMES ──────────────────────────────────────────────────────── -->
+  <div class="section" id="outcomes">
+    <div class="section-title">
+      <span class="section-icon">✅</span>
+      <span>7. Finishing a task — Outcome</span>
+    </div>
+
+    <p style="margin-bottom:12px;font-size:.95rem">
+      When you tap <strong>⏹️ End Task</strong>, you land on a review screen. Scroll down to choose an <strong>Outcome</strong> — what happened when the task was done.
+    </p>
+
+    <div class="outcome-list">
+      <div class="outcome-item"><div class="outcome-dot" style="background:#16a34a"></div>Advice given to patient via team</div>
+      <div class="outcome-item"><div class="outcome-dot" style="background:#16a34a"></div>Advice given to staff</div>
+      <div class="outcome-item"><div class="outcome-dot" style="background:#1a56db"></div>Appointment offered</div>
+      <div class="outcome-item"><div class="outcome-dot" style="background:#6b7280"></div>Completed without action</div>
+      <div class="outcome-item"><div class="outcome-dot" style="background:#d97706"></div>Forwarded (for action)</div>
+      <div class="outcome-item"><div class="outcome-dot" style="background:#d97706"></div>Forwarded (for info)</div>
+      <div class="outcome-item"><div class="outcome-dot" style="background:#dc2626"></div>Forwarded (wrong recipient)</div>
+      <div class="outcome-item"><div class="outcome-dot" style="background:#7c3aed"></div>Medication issued</div>
+      <div class="outcome-item"><div class="outcome-dot" style="background:#1a56db"></div>Patient contacted</div>
+      <div class="outcome-item"><div class="outcome-dot" style="background:#0d9488"></div>Replied to for action</div>
+      <div class="outcome-item"><div class="outcome-dot" style="background:#0d9488"></div>Replied to for future visit</div>
+      <div class="outcome-item"><div class="outcome-dot" style="background:#1a56db"></div>Results/ECG assessed</div>
+      <div class="outcome-item"><div class="outcome-dot" style="background:#16a34a"></div>Routine referral sent</div>
+      <div class="outcome-item"><div class="outcome-dot" style="background:#16a34a"></div>Sick note issued</div>
+      <div class="outcome-item"><div class="outcome-dot" style="background:#dc2626"></div>Urgent referral sent</div>
+    </div>
+
+    <div class="callout callout-blue" style="margin-top:14px">
+      <span class="callout-icon">💡</span>
+      <div>
+        On the review screen you can also:
+        <ul style="margin-top:6px;padding-left:1.2rem">
+          <li>Adjust the <strong>start and end times</strong> if you forgot to tap at exactly the right moment.</li>
+          <li>Add a short <strong>note</strong> (task details only — never patient names).</li>
+          <li>Remove any interruptions added by mistake.</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:14px">
+      <p style="font-weight:700;margin-bottom:10px">Two ways to save</p>
+      <div class="flow">
+        <div class="flow-item" style="border-color:#1a56db">
+          <span class="flow-icon">➕</span>
+          <div class="flow-label">
+            <strong>Submit &amp; add another</strong>
+            <span>Saves this task and immediately starts a new one.</span>
+          </div>
+        </div>
+        <div class="flow-item" style="border-color:#16a34a">
+          <span class="flow-icon">📊</span>
+          <div class="flow-label">
+            <strong>Submit &amp; analytics</strong>
+            <span>Saves this task and shows you today's charts.</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <hr class="divider">
+
+  <!-- ─── 8. AFTER ─────────────────────────────────────────────────────────── -->
+  <div class="section" id="after">
+    <div class="section-title">
+      <span class="section-icon">📊</span>
+      <span>8. Viewing your records</span>
+    </div>
+
+    <div class="icon-row">
+      <div class="icon-chip">
+        <span class="ic-icon">🏠</span>
+        <span class="ic-label">Home</span>
+      </div>
+      <div class="icon-chip" style="border-color:#1a56db">
+        <span class="ic-icon">📊</span>
+        <span class="ic-label">Analytics</span>
+      </div>
+      <div class="icon-chip">
+        <span class="ic-icon">⚙️</span>
+        <span class="ic-label">Settings</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <p style="font-weight:700;margin-bottom:6px">📊 Analytics screen</p>
+      <ul style="padding-left:1.4rem;font-size:.92rem;line-height:1.8">
+        <li>A breakdown of today's tasks by type and time spent.</li>
+        <li>A bar chart of <em>My Group</em> vs <em>Personal</em> time.</li>
+        <li>Tap <strong>📅 Long-term History</strong> to see up to 30 days of records.</li>
+        <li>Filter by date, task type, or outcome using the filter bar.</li>
+        <li>Tap <strong>✏️ Edit</strong> on any task to correct its details.</li>
+        <li>Tap <strong>⬇️ Download Excel</strong> to save a spreadsheet to your device.</li>
+      </ul>
+    </div>
+
+    <div class="callout callout-amber">
+      <span class="callout-icon">⏳</span>
+      <div>All task records are <strong>automatically deleted after 30 days</strong>. If you want to keep your data, download the spreadsheet before then.</div>
+    </div>
+  </div>
+
+  <hr class="divider">
+
+  <!-- ─── 9. PRIVACY ───────────────────────────────────────────────────────── -->
+  <div class="section" id="privacy">
+    <div class="section-title">
+      <span class="section-icon">🔒</span>
+      <span>9. Your privacy</span>
+    </div>
+
+    <div class="card">
+      <ul style="padding-left:1.3rem;font-size:.92rem;line-height:2">
+        <li>Your username is <strong>random words</strong> — not your real name.</li>
+        <li>Your password is stored in a form no one can read back, including the administrator.</li>
+        <li>The administrator can see <em>how many</em> users exist and <em>how many</em> tasks have been recorded — but <strong>not</strong> any task details, timings, or notes.</li>
+        <li>No data is shared with any outside organisation.</li>
+        <li>Records are deleted automatically after 30 days.</li>
+      </ul>
+    </div>
+
+    <div class="callout callout-red">
+      <span class="callout-icon">⛔</span>
+      <div>If you accidentally type identifying information in a notes field, contact your administrator immediately. They can delete your account and all associated data permanently.</div>
+    </div>
+
+    <p style="margin-top:12px;font-size:.9rem">For full details, see the <a href="/policy" target="_blank" style="color:var(--blue)">Data &amp; Use Policy</a>.</p>
+  </div>
+
+  <hr class="divider">
+
+  <!-- ─── TEAMS REFERENCE ──────────────────────────────────────────────────── -->
+  <div class="section" id="teams">
+    <div class="section-title">
+      <span class="section-icon">👥</span>
+      <span>Teams in the system</span>
+    </div>
+    <p style="margin-bottom:10px;font-size:.95rem">When you first log in you will be asked to pick the team that best matches your role:</p>
+    <div class="tags">
+      <span class="tag tag-blue">👨‍⚕️ Doctors</span>
+      <span class="tag tag-green">🩺 HCAs</span>
+      <span class="tag tag-green">👩‍⚕️ Nurses</span>
+      <span class="tag tag-teal">👩‍💼 Patient-facing admin</span>
+      <span class="tag tag-purple">💊 Pharmacy/Dispensary</span>
+      <span class="tag tag-amber">📝 Secretarial</span>
+    </div>
+    <div class="callout callout-blue" style="margin-top:14px">
+      <span class="callout-icon">ℹ️</span>
+      <div>Your team determines which <em>Task From</em>, <em>Task Type</em>, and <em>Outcome</em> options are shown by default. You can then untick any options you never use from <strong>⚙️ Settings → Customise My Options</strong>.</div>
+    </div>
+  </div>
+
+  <!-- ─── FOOTER ───────────────────────────────────────────────────────────── -->
+  <footer>
+    <p>Tasker v1.5.0 — April 2026</p>
+    <p style="margin-top:4px">
+      <a href="/help" target="_blank">Full Help &amp; User Guide</a>
+      &nbsp;·&nbsp;
+      <a href="/policy" target="_blank">Data &amp; Use Policy</a>
+      &nbsp;·&nbsp;
+      <a href="/" onclick="history.back();return false;">← Back to Tasker</a>
+    </p>
+  </footer>
+
+</div><!-- /page -->
+</body>
+</html>
