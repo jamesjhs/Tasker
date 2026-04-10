@@ -334,6 +334,9 @@ async function forceSessionExpiry() {
   state.activeTask = null;
   state.csrfToken = null;
   state.registrationConfig = null;
+  if ('caches' in window) {
+    try { await Promise.all((await caches.keys()).map(k => caches.delete(k))); } catch(e) {}
+  }
   renderInactivityLogout();
 }
 
@@ -536,7 +539,7 @@ async function renderLogin() {
   replaceHistory('login');
   // Force a refresh of the local SW cache so stale assets can't cause CSRF token mismatches
   if ('caches' in window) {
-    caches.keys().then(keys => Promise.all(keys.map(k => caches.delete(k)))).catch(() => {});
+    try { await Promise.all((await caches.keys()).map(k => caches.delete(k))); } catch(e) {}
   }
   // Fetch registration config and public stats in parallel
   try {
@@ -600,10 +603,8 @@ async function doLogin() {
     if (!d) return;
     // Clear all SW caches on login so every authenticated session starts with
     // the most recent assets, regardless of what the service worker had cached.
-    // Fire-and-forget: intentionally not awaited so it doesn't delay the login
-    // flow — the same pattern used in renderLogin().
     if ('caches' in window) {
-      caches.keys().then(keys => Promise.all(keys.map(k => caches.delete(k)))).catch(() => {});
+      try { await Promise.all((await caches.keys()).map(k => caches.delete(k))); } catch(e) {}
     }
     state.user = { username, isAdmin: d.isAdmin, mustChangePassword: d.mustChangePassword, pendingActivation: d.pendingActivation, userGroupId: d.userGroupId ?? null, userGroupName: d.userGroupName ?? null };
     await refreshCsrf();
