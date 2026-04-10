@@ -5,6 +5,8 @@
 
 // ── State ───────────────────────────────────────────────────────────────────
 const INACTIVITY_MS = 30 * 60 * 1000; // 30 minutes
+const VERSION_CHECK_DEBOUNCE_MS = 60 * 1000; // 60 seconds — min gap between version checks
+const VERSION_POLL_INTERVAL_MS  = 5 * 60 * 1000; // 5 minutes — background version poll
 
 const state = {
   csrfToken: null,
@@ -309,7 +311,7 @@ function startActivityTracking() {
   ACTIVITY_EVENTS.forEach(evt => document.addEventListener(evt, updateLastActive, { passive: true }));
   state.inactivityCheckInterval = setInterval(checkClientInactivity, 60000);
   // Poll for new app versions every 5 minutes while the user is logged in.
-  state.versionPollInterval = setInterval(() => checkAssetVersion(), 5 * 60 * 1000);
+  state.versionPollInterval = setInterval(() => checkAssetVersion(), VERSION_POLL_INTERVAL_MS);
 }
 
 function stopActivityTracking() {
@@ -2908,7 +2910,7 @@ document.addEventListener('visibilitychange', async () => {
     // Throttled to once per 60 s to avoid redundant fetches when the user rapidly
     // switches apps.  checkAssetVersion() itself records the timestamp, so the
     // periodic poll (Option 2) and this path share the same cooldown.
-    if (Date.now() - _lastVersionCheckAt > 60000) {
+    if (Date.now() - _lastVersionCheckAt > VERSION_CHECK_DEBOUNCE_MS) {
       if (await checkAssetVersion()) return; // new version detected — page is reloading
     }
     if (state.user && !state.user.isAdmin && state.activeTask) {
