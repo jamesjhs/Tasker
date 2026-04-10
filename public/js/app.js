@@ -5,6 +5,8 @@
 
 // ── State ───────────────────────────────────────────────────────────────────
 const INACTIVITY_MS = 30 * 60 * 1000; // 30 minutes
+const VERSION_CHECK_DEBOUNCE_MS = 60 * 1000; // 60 seconds — min gap between version checks
+const VERSION_POLL_INTERVAL_MS  = 5 * 60 * 1000; // 5 minutes — background version poll
 
 const state = {
   csrfToken: null,
@@ -15,6 +17,7 @@ const state = {
   timerInterval: null,
   activityInterval: null,
   inactivityCheckInterval: null,
+  versionPollInterval: null,
   interruptStart: null, // ISO string set when interrupt modal opens
   currentView: null,
   dropdowns: { category: [], subcategory: [], outcome: [] },
@@ -48,7 +51,10 @@ function replaceHistory(view) {
 }
 
 // ── Asset version check ───────────────────────────────────────────────────────
+let _lastVersionCheckAt = 0; // epoch ms — used to debounce foreground/poll checks
+
 async function checkAssetVersion() {
+  _lastVersionCheckAt = Date.now();
   try {
     const r = await fetch('/api/version', { cache: 'no-store', credentials: 'same-origin' });
     if (!r.ok) return false;
@@ -304,11 +310,14 @@ function startActivityTracking() {
   state.activityInterval = setInterval(updateLastActive, 60000);
   ACTIVITY_EVENTS.forEach(evt => document.addEventListener(evt, updateLastActive, { passive: true }));
   state.inactivityCheckInterval = setInterval(checkClientInactivity, 60000);
+  // Poll for new app versions every 5 minutes while the user is logged in.
+  state.versionPollInterval = setInterval(() => checkAssetVersion(), VERSION_POLL_INTERVAL_MS);
 }
 
 function stopActivityTracking() {
   if (state.activityInterval) { clearInterval(state.activityInterval); state.activityInterval = null; }
   if (state.inactivityCheckInterval) { clearInterval(state.inactivityCheckInterval); state.inactivityCheckInterval = null; }
+  if (state.versionPollInterval) { clearInterval(state.versionPollInterval); state.versionPollInterval = null; }
   ACTIVITY_EVENTS.forEach(evt => document.removeEventListener(evt, updateLastActive));
 }
 
@@ -2897,6 +2906,13 @@ document.addEventListener('visibilitychange', async () => {
   if (document.hidden) {
     updateLastActive();
   } else {
+    // On every foreground resume, check whether a new app version has been deployed.
+    // Throttled to once per 60 s to avoid redundant fetches when the user rapidly
+    // switches apps.  checkAssetVersion() itself records the timestamp, so the
+    // periodic poll (Option 2) and this path share the same cooldown.
+    if (Date.now() - _lastVersionCheckAt > VERSION_CHECK_DEBOUNCE_MS) {
+      if (await checkAssetVersion()) return; // new version detected — page is reloading
+    }
     if (state.user && !state.user.isAdmin && state.activeTask) {
       try {
         const interrupted = await checkInactivityInterruption();
