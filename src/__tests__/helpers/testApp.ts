@@ -15,6 +15,7 @@ import adminRouter from '../../routes/admin';
 import flagsRouter from '../../routes/flags';
 import messagesRouter from '../../routes/messages';
 import analyticsRouter from '../../routes/analytics';
+import reviewRouter from '../../routes/review';
 
 export function buildTestApp() {
   const app = express();
@@ -36,6 +37,7 @@ export function buildTestApp() {
   app.use('/api/flags', flagsRouter);
   app.use('/api/messages', messagesRouter);
   app.use('/api/analytics', analyticsRouter);
+  app.use('/suggest/review', reviewRouter);
   return app;
 }
 

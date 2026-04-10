@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { getDb } from '../db';
 import { requireAuth, requireAdmin, validateCsrf, requirePasswordChange, requireActivation } from '../middleware/index';
 import { sendEmail } from '../email';
+import crypto from 'crypto';
 
 const router = Router();
 
@@ -23,14 +24,28 @@ router.post('/propose', requireAuth, requirePasswordChange, requireActivation, v
   const existing = getDb().prepare('SELECT id FROM task_flag_options WHERE value=?').get(clean);
   if (existing) { res.json({ message: 'This flag option already exists.' }); return; }
 
-  const username = (getDb().prepare('SELECT username FROM users WHERE id=?').get(s.userId) as any)?.username || 'Unknown';
+  const reviewToken = crypto.randomBytes(32).toString('hex');
+  let proposalId: number | bigint;
+  try {
+    const ins = getDb().prepare('INSERT INTO flag_proposals (review_token) VALUES (?)').run(reviewToken);
+    proposalId = ins.lastInsertRowid;
+  } catch (err) {
+    console.error('[flags] Failed to insert flag proposal record:', err);
+    res.status(500).json({ error: 'Could not record proposal. Please try again.' });
+    return;
+  }
+
+  const appBase = `${req.protocol}://${req.get('host')}`;
+  const reviewLink = `${appBase}/suggest/review?token=${reviewToken}`;
+
   try {
     await sendEmail(
       'Tasker: New task flag suggestion',
-      `User "${username}" has suggested a new task flag option:\n\n"${clean}"\n\nPlease log in to the Tasker admin panel to review and add this option if appropriate.`,
+      `A new task flag option has been suggested:\n\n"${clean}"\n\nTo review and add this flag option, click the link below. You will be asked to enter the approved wording before it is added to the system:\n\n${reviewLink}\n\nIf this suggestion is not appropriate, no action is needed.`,
     );
     res.json({ message: 'Your suggestion has been sent to the administrator.' });
   } catch (e: any) {
+    getDb().prepare('DELETE FROM flag_proposals WHERE id=?').run(proposalId);
     res.status(503).json({ error: `Could not send suggestion: ${e?.message || 'SMTP error'}` });
   }
 });

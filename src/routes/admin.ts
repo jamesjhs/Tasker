@@ -350,9 +350,8 @@ router.delete('/notices/:id', validateCsrf, (req: Request, res: Response) => {
 
 router.get('/dropdown-proposals', (_req: Request, res: Response) => {
   const proposals = getDb().prepare(
-    `SELECT dp.id, dp.field_name, dp.created_at, u.username
+    `SELECT dp.id, dp.field_name, dp.review_token, dp.created_at
      FROM dropdown_proposals dp
-     LEFT JOIN users u ON u.id=dp.user_id
      ORDER BY dp.created_at DESC`
   ).all();
   res.json({ proposals });

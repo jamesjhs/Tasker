@@ -37,6 +37,7 @@ const state = {
   analyticsData: null,           // { data, mode, pendingLog } for re-rendering on toggle
   userMessages: [],              // [{ id, message, read, created_at }]
   notices: [],                   // [{ id, message, created_at }]
+  noticesPanelOpen: false,       // whether Notices and Feedback panel is expanded
 };
 
 // ── History management ────────────────────────────────────────────────────────
@@ -1120,12 +1121,25 @@ function renderHomeHTML() {
   const midnightWarn = checkMidnightWarn();
   const statsHTML = renderStatsCards(state.appStats, '16px');
 
-  // Notices section
-  const noticesHtml = state.notices.length ? `
+  // Notices and Feedback section (collapsible, unread badge via localStorage)
+  const unreadNoticeCount = countUnreadNotices();
+  const noticesPanelHtml = `
     <div class="card" style="margin-top:12px;border-left:4px solid #1a56db">
-      <div class="card-title" style="color:#1a56db">📢 Notices</div>
-      ${state.notices.map(n => `<p style="font-size:.9rem;color:#374151;margin-bottom:6px;border-bottom:1px solid #f3f4f6;padding-bottom:6px">${esc(n.message)}</p>`).join('')}
-    </div>` : '';
+      <div style="display:flex;justify-content:space-between;align-items:center;cursor:pointer" onclick="toggleNoticesPanel()">
+        <div class="card-title" style="color:#1a56db;margin:0">📢 Notices and Feedback${unreadNoticeCount > 0 ? ` <span class="badge badge-warn" style="margin-left:6px">${unreadNoticeCount}</span>` : ''}</div>
+        <span style="font-size:.85rem;color:#6b7280">${state.noticesPanelOpen ? '▲' : '▼'}</span>
+      </div>
+      ${state.noticesPanelOpen ? `
+      <div style="margin-top:10px">
+        ${state.notices.length ? state.notices.map(n => `<p style="font-size:.9rem;color:#374151;margin-bottom:6px;border-bottom:1px solid #f3f4f6;padding-bottom:6px">${esc(n.message)}</p>`).join('') : '<p style="font-size:.85rem;color:#6b7280;margin-bottom:10px">No active notices.</p>'}
+        <div style="margin-top:12px;border-top:1px solid #f3f4f6;padding-top:12px">
+          <div class="card-title" style="color:#374151;font-size:.875rem;margin-bottom:6px">💬 Send suggestion to developers</div>
+          <textarea id="feedback-text" class="textarea" placeholder="Type your suggestion or feedback…" style="margin-bottom:8px;min-height:70px"></textarea>
+          <div id="feedback-alerts"></div>
+          <button class="btn btn-outline btn-sm" onclick="submitFeedback()">Send</button>
+        </div>
+      </div>` : ''}
+    </div>`;
 
   // User messages section
   const unread = state.userMessages.filter(m => !m.read);
@@ -1151,7 +1165,7 @@ function renderHomeHTML() {
     <div class="retention-notice">⏳ Your data is automatically deleted after 30 days.</div>
     ${midnightWarn ? '<div class="midnight-warn">⚠️ Approaching midnight — your session will end at midnight. Complete any active task.</div>' : ''}
     <div id="home-alerts"></div>
-    ${noticesHtml}
+    ${noticesPanelHtml}
     ${messagesHtml}
     ${t ? `
     <div class="card" style="border: 2px solid #f59e0b;margin-top:12px">
@@ -1253,6 +1267,43 @@ async function markAllMessagesRead() {
     app().innerHTML = renderHomeHTML();
     if (state.pendingGraphDays) await renderPendingChart(state.pendingGraphDays);
   } catch(e) {}
+}
+
+// ── Notices panel helpers ─────────────────────────────────────────────────────
+
+function getSeenNoticeIds() {
+  try { return JSON.parse(localStorage.getItem('tasker_seen_notices') || '[]'); } catch { return []; }
+}
+
+function countUnreadNotices() {
+  const seen = getSeenNoticeIds();
+  return state.notices.filter(n => !seen.includes(n.id)).length;
+}
+
+function markNoticesRead() {
+  const seen = getSeenNoticeIds();
+  for (const n of state.notices) {
+    if (!seen.includes(n.id)) seen.push(n.id);
+  }
+  localStorage.setItem('tasker_seen_notices', JSON.stringify(seen));
+}
+
+async function toggleNoticesPanel() {
+  state.noticesPanelOpen = !state.noticesPanelOpen;
+  if (state.noticesPanelOpen) markNoticesRead();
+  app().innerHTML = renderHomeHTML();
+  if (state.pendingGraphDays) await renderPendingChart(state.pendingGraphDays);
+}
+
+async function submitFeedback() {
+  const msg = document.getElementById('feedback-text')?.value.trim();
+  if (!msg) { showAlert('Please enter a message.', 'error', 'feedback-alerts'); return; }
+  try {
+    await api('POST', '/api/auth/feedback', { message: msg });
+    showAlert('Feedback sent — thank you!', 'success', 'feedback-alerts');
+    const ta = document.getElementById('feedback-text');
+    if (ta) ta.value = '';
+  } catch(e) { showAlert(e.message, 'error', 'feedback-alerts'); }
 }
 
 
@@ -2537,8 +2588,8 @@ function renderAdminContent(stats, users, dropOpts, settings, pendingUsers, awai
     <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
       <div>
         <span style="font-size:.8rem;color:#6b7280">${esc(p.field_name)}</span>
-        <span style="font-weight:600;margin-left:8px">${esc(p.username || '?')}</span>
-        <span style="font-size:.75rem;color:#6b7280;display:block;margin-top:2px">Submitted ${new Date(p.created_at+'Z').toLocaleString()} — check your email for the suggested value</span>
+        <span style="font-size:.75rem;color:#6b7280;display:block;margin-top:2px">Submitted ${new Date(p.created_at+'Z').toLocaleString()}</span>
+        ${p.review_token ? `<a href="/suggest/review?token=${p.review_token}" target="_blank" class="btn btn-outline btn-sm" style="margin-top:6px;display:inline-block">🔗 Review suggestion</a>` : ''}
       </div>
       <button class="btn btn-outline btn-sm" onclick="dismissProposal(${p.id})">✓ Done</button>
     </div>
@@ -2675,7 +2726,7 @@ function renderAdminContent(stats, users, dropOpts, settings, pendingUsers, awai
     </div>
 
     <div class="section-heading">Pending Email Proposals ${proposals.length ? `<span class="badge badge-warn" style="margin-left:6px">${proposals.length}</span>` : ''}</div>
-    <p style="font-size:.85rem;color:#6b7280;margin-bottom:10px">These users suggested a dropdown option which was emailed to you. Add the option above, then mark each as done.</p>
+    <p style="font-size:.85rem;color:#6b7280;margin-bottom:10px">A dropdown suggestion was emailed to you with a review link. Click "Review suggestion" to open the dedicated page and enter the approved wording. Mark as done once handled.</p>
     ${proposalCards}
 
     <div class="section-heading">Pending Group Proposals ${pendingGroups.length ? `<span class="badge badge-warn" style="margin-left:6px">${pendingGroups.length}</span>` : ''}</div>

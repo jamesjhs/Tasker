@@ -161,6 +161,13 @@ function initSchema(db: Database.Database): void {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       field_name TEXT NOT NULL,
+      review_token TEXT UNIQUE,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS flag_proposals (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      review_token TEXT NOT NULL UNIQUE,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
 
@@ -197,6 +204,12 @@ function initSchema(db: Database.Database): void {
   const taskCols = (db.prepare("PRAGMA table_info(tasks)").all() as { name: string }[]).map(c => c.name);
   if (!taskCols.includes('assigned_date')) {
     db.exec('ALTER TABLE tasks ADD COLUMN assigned_date TEXT');
+  }
+
+  // Migrate existing databases: add review_token to dropdown_proposals if missing
+  const proposalCols = (db.prepare("PRAGMA table_info(dropdown_proposals)").all() as { name: string }[]).map(c => c.name);
+  if (!proposalCols.includes('review_token')) {
+    db.exec('ALTER TABLE dropdown_proposals ADD COLUMN review_token TEXT');
   }
 
   // Seed default registration settings if not present

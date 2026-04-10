@@ -4,6 +4,7 @@ import crypto from 'crypto';
 import { getDb, getSetting } from '../db';
 import { generateUsername } from '../words';
 import { requireAuth, validateCsrf, logEvent, requirePasswordChange, requireActivation } from '../middleware/index';
+import { sendEmail } from '../email';
 
 const router = Router();
 const PASSWORD_RE = /^(?=.*[!@#$%^&*()\-_=+\[\]{};:'",.<>/?\\|`~]).{8,}$/;
@@ -275,6 +276,24 @@ router.get('/notices', requireAuth, requirePasswordChange, requireActivation, (_
     'SELECT id, message, created_at FROM notices WHERE active=1 ORDER BY created_at DESC'
   ).all();
   res.json({ notices });
+});
+
+// ── Feedback / "Send suggestion to developers" ────────────────────────────────
+// CSRF: X-CSRF-Token header required (mutating). No username stored or sent.
+
+router.post('/feedback', requireAuth, requirePasswordChange, requireActivation, validateCsrf, async (req: Request, res: Response) => {
+  const { message } = req.body as { message: string };
+  const clean = (message || '').trim();
+  if (!clean || clean.length > 1000) { res.status(400).json({ error: 'Message must be 1–1000 characters.' }); return; }
+  try {
+    await sendEmail(
+      'Tasker: Feedback / suggestion from a user',
+      `A user has submitted a suggestion or piece of feedback:\n\n"${clean}"\n\n(No identifying information is attached to this message.)`,
+    );
+    res.json({ message: 'Your feedback has been sent. Thank you!' });
+  } catch (e: any) {
+    res.status(503).json({ error: `Could not send feedback: ${e?.message || 'SMTP error'}` });
+  }
 });
 
 export default router;

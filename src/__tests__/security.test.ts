@@ -1464,3 +1464,142 @@ describe('Unintended use / edge cases', () => {
     }
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 21. SUGGESTION REVIEW PAGE — token-gated, no login required
+// ─────────────────────────────────────────────────────────────────────────────
+describe('Suggestion review page', () => {
+  test('GET /suggest/review — no token → 400', async () => {
+    const res = await request(app).get('/suggest/review');
+    expect(res.status).toBe(400);
+    expect(res.text).toMatch(/missing review token/i);
+  });
+
+  test('GET /suggest/review — invalid token → 404', async () => {
+    const res = await request(app).get('/suggest/review?token=invalidtoken123');
+    expect(res.status).toBe(404);
+    expect(res.text).toMatch(/invalid or has already been used/i);
+  });
+
+  test('POST /suggest/review — invalid token → 404', async () => {
+    const res = await request(app).post('/suggest/review')
+      .send('token=badtoken&value=TestValue')
+      .set('Content-Type', 'application/x-www-form-urlencoded');
+    expect(res.status).toBe(404);
+  });
+
+  test('POST /suggest/review — valid dropdown token → adds option and returns success page', async () => {
+    const db = getDb();
+    const adminId = (db.prepare('SELECT id FROM users WHERE is_admin=1 LIMIT 1').get() as any).id;
+    const tok = 'cccc' + 'd'.repeat(60);
+    db.prepare('INSERT INTO dropdown_proposals (user_id, field_name, review_token) VALUES (?,?,?)').run(adminId, 'outcome', tok);
+    const res = await request(app).post('/suggest/review')
+      .send(`token=${tok}&value=ReviewedOutcome`)
+      .set('Content-Type', 'application/x-www-form-urlencoded');
+    expect(res.status).toBe(200);
+    expect(res.text).toMatch(/ReviewedOutcome/);
+    expect(res.text).toMatch(/added/i);
+    const remaining = db.prepare('SELECT id FROM dropdown_proposals WHERE review_token=?').get(tok);
+    expect(remaining).toBeUndefined();
+    const opt = db.prepare("SELECT id FROM dropdown_options WHERE field_name='outcome' AND value='ReviewedOutcome'").get();
+    expect(opt).toBeTruthy();
+  });
+
+  test('POST /suggest/review — valid flag proposal token → adds flag option', async () => {
+    const db = getDb();
+    const tok = 'eeee' + 'f'.repeat(60);
+    db.prepare('INSERT INTO flag_proposals (review_token) VALUES (?)').run(tok);
+    const res = await request(app).post('/suggest/review')
+      .send(`token=${tok}&value=ReviewedFlagOption`)
+      .set('Content-Type', 'application/x-www-form-urlencoded');
+    expect(res.status).toBe(200);
+    expect(res.text).toMatch(/ReviewedFlagOption/);
+    const remaining = db.prepare('SELECT id FROM flag_proposals WHERE review_token=?').get(tok);
+    expect(remaining).toBeUndefined();
+    const flag = db.prepare("SELECT id FROM task_flag_options WHERE value='ReviewedFlagOption'").get();
+    expect(flag).toBeTruthy();
+  });
+
+  test('POST /suggest/review — duplicate dropdown value → 409', async () => {
+    const db = getDb();
+    const adminId = (db.prepare('SELECT id FROM users WHERE is_admin=1 LIMIT 1').get() as any).id;
+    db.prepare('INSERT OR IGNORE INTO dropdown_options (field_name,value,approved) VALUES (?,?,1)').run('category', 'ExistingOpt');
+    const tok = 'gggg' + 'h'.repeat(60);
+    db.prepare('INSERT INTO dropdown_proposals (user_id, field_name, review_token) VALUES (?,?,?)').run(adminId, 'category', tok);
+    const res = await request(app).post('/suggest/review')
+      .send(`token=${tok}&value=ExistingOpt`)
+      .set('Content-Type', 'application/x-www-form-urlencoded');
+    expect(res.status).toBe(409);
+    db.prepare('DELETE FROM dropdown_proposals WHERE review_token=?').run(tok);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 22. FEEDBACK — "Send suggestion to developers"
+// ─────────────────────────────────────────────────────────────────────────────
+describe('User feedback endpoint', () => {
+  test('POST /api/auth/feedback — unauthenticated → 401', async () => {
+    const res = await request(app).post('/api/auth/feedback').send({ message: 'hello' });
+    expect(res.status).toBe(401);
+  });
+
+  test('POST /api/auth/feedback — no CSRF → 403', async () => {
+    const a = agent();
+    await createUserSession(a);
+    const res = await a.post('/api/auth/feedback').send({ message: 'hello' });
+    expect(res.status).toBe(403);
+  });
+
+  test('POST /api/auth/feedback — empty message → 400', async () => {
+    const a = agent();
+    const { csrf } = await createUserSession(a);
+    const res = await a.post('/api/auth/feedback').set('X-CSRF-Token', csrf).send({ message: '' });
+    expect(res.status).toBe(400);
+  });
+
+  test('POST /api/auth/feedback — message >1000 chars → 400', async () => {
+    const a = agent();
+    const { csrf } = await createUserSession(a);
+    const res = await a.post('/api/auth/feedback').set('X-CSRF-Token', csrf).send({ message: 'A'.repeat(1001) });
+    expect(res.status).toBe(400);
+  });
+
+  test('POST /api/auth/feedback — SMTP not configured → 503', async () => {
+    const a = agent();
+    const { csrf } = await createUserSession(a);
+    const db = getDb();
+    db.prepare("DELETE FROM settings WHERE key IN ('smtp_host','smtp_to')").run();
+    const res = await a.post('/api/auth/feedback').set('X-CSRF-Token', csrf).send({ message: 'Great app!' });
+    expect(res.status).toBe(503);
+    expect(res.body.error).toMatch(/smtp/i);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 23. ANONYMOUS PROPOSALS — no username exposed
+// ─────────────────────────────────────────────────────────────────────────────
+describe('Anonymous proposals', () => {
+  test('Admin GET /api/admin/dropdown-proposals — no username field returned', async () => {
+    const a = agent();
+    const { csrf } = await createAdminSession(a);
+    const res = await a.get('/api/admin/dropdown-proposals').set('X-CSRF-Token', csrf);
+    expect(res.status).toBe(200);
+    for (const p of (res.body.proposals || [])) {
+      expect(p).not.toHaveProperty('username');
+    }
+  });
+
+  test('Admin GET /api/admin/dropdown-proposals — review_token included per proposal', async () => {
+    const db = getDb();
+    const adminId = (db.prepare('SELECT id FROM users WHERE is_admin=1 LIMIT 1').get() as any).id;
+    const tok = 'iiii' + 'j'.repeat(60);
+    db.prepare('INSERT INTO dropdown_proposals (user_id, field_name, review_token) VALUES (?,?,?)').run(adminId, 'category', tok);
+    const a = agent();
+    const { csrf } = await createAdminSession(a);
+    const res = await a.get('/api/admin/dropdown-proposals').set('X-CSRF-Token', csrf);
+    expect(res.status).toBe(200);
+    const found = res.body.proposals.find((p: any) => p.review_token === tok);
+    expect(found).toBeTruthy();
+    db.prepare('DELETE FROM dropdown_proposals WHERE review_token=?').run(tok);
+  });
+});

@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { getDb } from '../db';
 import { requireAuth, requireAdmin, validateCsrf, requirePasswordChange, requireActivation } from '../middleware/index';
 import { sendEmail } from '../email';
+import crypto from 'crypto';
 
 const router = Router();
 const ALLOWED = ['category', 'subcategory', 'outcome'];
@@ -60,12 +61,12 @@ router.post('/propose', requireAuth, requirePasswordChange, requireActivation, v
   if (existing?.approved) { res.json({ message: 'Option already exists.', value: clean }); return; }
 
   const fieldLabels: Record<string, string> = { category: 'Task From', subcategory: 'Task Type', outcome: 'Outcome' };
-  const username = (getDb().prepare('SELECT username FROM users WHERE id=?').get(s.userId) as any)?.username || 'Unknown';
 
-  // Store a metadata-only proposal record (no free-text value stored in DB)
+  // Store a metadata-only proposal record with a unique review token
+  const reviewToken = crypto.randomBytes(32).toString('hex');
   let proposalId: number | bigint;
   try {
-    const proposalResult = getDb().prepare('INSERT INTO dropdown_proposals (user_id, field_name) VALUES (?,?)').run(s.userId, field_name);
+    const proposalResult = getDb().prepare('INSERT INTO dropdown_proposals (user_id, field_name, review_token) VALUES (?,?,?)').run(s.userId, field_name, reviewToken);
     proposalId = proposalResult.lastInsertRowid;
   } catch (err) {
     console.error('[dropdowns] Failed to insert proposal record:', err);
@@ -73,10 +74,13 @@ router.post('/propose', requireAuth, requirePasswordChange, requireActivation, v
     return;
   }
 
+  const appBase = `${req.protocol}://${req.get('host')}`;
+  const reviewLink = `${appBase}/suggest/review?token=${reviewToken}`;
+
   try {
     await sendEmail(
       `Tasker: New dropdown suggestion — ${fieldLabels[field_name] || field_name}`,
-      `User "${username}" has suggested a new option for "${fieldLabels[field_name] || field_name}":\n\n"${clean}"\n\nPlease log in to the Tasker admin panel, add this option manually, and approve it so the user sees it in their dropdown.`,
+      `A new option has been suggested for the "${fieldLabels[field_name] || field_name}" dropdown:\n\n"${clean}"\n\nTo review and add this option, click the link below. You will be asked to enter the approved wording before it is added to the system:\n\n${reviewLink}\n\nIf this suggestion is not appropriate, you can dismiss it from the admin panel.`,
     );
     res.json({ message: 'Your suggestion has been sent to the administrator by email.', value: clean });
   } catch (e: any) {
