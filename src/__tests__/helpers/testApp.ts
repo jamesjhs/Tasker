@@ -12,6 +12,9 @@ import authRouter from '../../routes/auth';
 import tasksRouter from '../../routes/tasks';
 import dropdownsRouter from '../../routes/dropdowns';
 import adminRouter from '../../routes/admin';
+import flagsRouter from '../../routes/flags';
+import messagesRouter from '../../routes/messages';
+import analyticsRouter from '../../routes/analytics';
 
 export function buildTestApp() {
   const app = express();
@@ -30,6 +33,9 @@ export function buildTestApp() {
   app.use('/api/tasks', tasksRouter);
   app.use('/api/dropdowns', dropdownsRouter);
   app.use('/api/admin', adminRouter);
+  app.use('/api/flags', flagsRouter);
+  app.use('/api/messages', messagesRouter);
+  app.use('/api/analytics', analyticsRouter);
   return app;
 }
 

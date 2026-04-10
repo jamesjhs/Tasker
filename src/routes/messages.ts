@@ -14,7 +14,7 @@ router.get('/', requireAuth, requirePasswordChange, requireActivation, (req: Req
   res.json({ messages });
 });
 
-router.post('/:id/read', requireAuth, validateCsrf, (req: Request, res: Response) => {
+router.post('/:id/read', requireAuth, requirePasswordChange, requireActivation, validateCsrf, (req: Request, res: Response) => {
   const s = req.session as any;
   const msgId = Number(req.params['id']);
   const msg = getDb().prepare('SELECT id FROM user_messages WHERE id=? AND user_id=?').get(msgId, s.userId);
@@ -23,7 +23,7 @@ router.post('/:id/read', requireAuth, validateCsrf, (req: Request, res: Response
   res.json({ success: true });
 });
 
-router.post('/read-all', requireAuth, validateCsrf, (req: Request, res: Response) => {
+router.post('/read-all', requireAuth, requirePasswordChange, requireActivation, validateCsrf, (req: Request, res: Response) => {
   const s = req.session as any;
   getDb().prepare('UPDATE user_messages SET read=1 WHERE user_id=?').run(s.userId);
   res.json({ success: true });

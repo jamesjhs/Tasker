@@ -131,18 +131,31 @@ function buildSummary(tasks: any[]) {
   };
 }
 
+/** Batch-fetch flag labels for an array of tasks. Returns the same tasks with flag_labels populated. */
+function attachFlagLabels(db: ReturnType<typeof getDb>, tasks: any[]): any[] {
+  if (tasks.length === 0) return tasks;
+  const placeholders = tasks.map(() => '?').join(',');
+  const flagRows = db.prepare(
+    `SELECT tf.task_id, tfo.value FROM task_flags tf
+     JOIN task_flag_options tfo ON tfo.id=tf.flag_option_id
+     WHERE tf.task_id IN (${placeholders})`
+  ).all(...tasks.map(t => t.id)) as { task_id: number; value: string }[];
+  const flagMap = new Map<number, string[]>();
+  for (const r of flagRows) {
+    if (!flagMap.has(r.task_id)) flagMap.set(r.task_id, []);
+    flagMap.get(r.task_id)!.push(r.value);
+  }
+  return tasks.map(t => ({ ...t, flag_labels: flagMap.get(t.id) || [] }));
+}
+
 router.get('/session', (req: Request, res: Response) => {
   const s = req.session as any;
   const db = getDb();
   const dateStr = s.sessionDate || new Date().toISOString().split('T')[0];
-  const tasks = (db.prepare(
+  const raw = (db.prepare(
     `SELECT * FROM tasks WHERE user_id=? AND status='completed' AND date(start_time)=? ORDER BY start_time`
-  ).all(s.userId, dateStr) as any[]).map(t => {
-    const flagLabels = (db.prepare(
-      `SELECT tfo.value FROM task_flags tf JOIN task_flag_options tfo ON tfo.id=tf.flag_option_id WHERE tf.task_id=?`
-    ).all(t.id) as any[]).map(r => r.value);
-    return { ...t, interruptions: JSON.parse(t.interruptions || '[]'), flag_labels: flagLabels };
-  });
+  ).all(s.userId, dateStr) as any[]).map(t => ({ ...t, interruptions: JSON.parse(t.interruptions || '[]') }));
+  const tasks = attachFlagLabels(db, raw);
   res.json({ tasks, summary: buildSummary(tasks) });
 });
 
@@ -159,38 +172,30 @@ router.get('/history', (req: Request, res: Response) => {
   if (outcome)               { q += ' AND outcome=?'; p.push(outcome); }
   q += ' ORDER BY start_time';
   const db = getDb();
-  const tasks = (db.prepare(q).all(...p) as any[]).map(t => {
-    const flagLabels = (db.prepare(
-      `SELECT tfo.value FROM task_flags tf JOIN task_flag_options tfo ON tfo.id=tf.flag_option_id WHERE tf.task_id=?`
-    ).all(t.id) as any[]).map(r => r.value);
-    return { ...t, interruptions: JSON.parse(t.interruptions || '[]'), flag_labels: flagLabels };
-  });
+  const raw = (db.prepare(q).all(...p) as any[]).map(t => ({ ...t, interruptions: JSON.parse(t.interruptions || '[]') }));
+  const tasks = attachFlagLabels(db, raw);
   res.json({ tasks, summary: buildSummary(tasks) });
 });
 
 router.get('/export', async (req: Request, res: Response) => {
   const s = req.session as any;
   const db = getDb();
-  const tasks = (db.prepare(
+  const raw = (db.prepare(
     `SELECT * FROM tasks WHERE user_id=? AND status='completed' AND start_time>=datetime('now','-30 days') ORDER BY start_time`
-  ).all(s.userId) as any[]).map(t => {
-    const interruptions = JSON.parse(t.interruptions || '[]');
-    const flagLabels = (db.prepare(
-      `SELECT tfo.value FROM task_flags tf JOIN task_flag_options tfo ON tfo.id=tf.flag_option_id WHERE tf.task_id=?`
-    ).all(t.id) as any[]).map(r => r.value);
-    return {
-      'Type': t.is_duty ? 'Duty' : 'Personal',
-      'Task From': t.category || '',
-      'Task Type': t.subcategory || '',
-      'Outcome': t.outcome || '',
-      'Date Assigned': t.assigned_date ? new Date(/^\d{4}-\d{2}-\d{2}$/.test(t.assigned_date) ? t.assigned_date + 'T00:00:00' : t.assigned_date) : '',
-      'Start Time': t.start_time ? new Date(t.start_time) : '',
-      'End Time': t.end_time ? new Date(t.end_time) : '',
-      'Duration (secs)': secs(t.start_time, t.end_time, interruptions),
-      'Interruptions': interruptions.length,
-      'Flags': flagLabels.join('; '),
-    };
-  });
+  ).all(s.userId) as any[]).map(t => ({ ...t, interruptions: JSON.parse(t.interruptions || '[]') }));
+  const tasksWithFlags = attachFlagLabels(db, raw);
+  const tasks = tasksWithFlags.map(t => ({
+    'Type': t.is_duty ? 'Duty' : 'Personal',
+    'Task From': t.category || '',
+    'Task Type': t.subcategory || '',
+    'Outcome': t.outcome || '',
+    'Date Assigned': t.assigned_date ? new Date(/^\d{4}-\d{2}-\d{2}$/.test(t.assigned_date) ? t.assigned_date + 'T00:00:00' : t.assigned_date) : '',
+    'Start Time': t.start_time ? new Date(t.start_time) : '',
+    'End Time': t.end_time ? new Date(t.end_time) : '',
+    'Duration (secs)': secs(t.start_time, t.end_time, t.interruptions),
+    'Interruptions': t.interruptions.length,
+    'Flags': (t.flag_labels as string[]).join('; '),
+  }));
 
   const pendingLog = db.prepare(
     `SELECT count, logged_at FROM pending_task_logs WHERE user_id=? ORDER BY logged_at DESC LIMIT 1`

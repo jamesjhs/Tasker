@@ -51,6 +51,7 @@ function initSchema(db: Database.Database): void {
     CREATE TABLE IF NOT EXISTS user_groups (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT NOT NULL UNIQUE,
+      is_approved INTEGER NOT NULL DEFAULT 1,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
 

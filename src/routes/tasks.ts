@@ -118,7 +118,12 @@ router.patch('/:id', validateCsrf, (req: Request, res: Response) => {
     if (flag_ids !== undefined && Array.isArray(flag_ids)) {
       db.prepare('DELETE FROM task_flags WHERE task_id=?').run(taskId);
       const insFlag = db.prepare('INSERT OR IGNORE INTO task_flags (task_id, flag_option_id) VALUES (?,?)');
-      for (const fid of flag_ids) insFlag.run(taskId, Number(fid));
+      for (const fid of flag_ids) {
+        const n = Number(fid);
+        if (!Number.isInteger(n) || n <= 0) continue;
+        // Only insert if the flag option exists (SQLite does not suppress FK violations via INSERT OR IGNORE)
+        if (db.prepare('SELECT 1 FROM task_flag_options WHERE id=?').get(n)) insFlag.run(taskId, n);
+      }
     }
   })();
   if (status === 'completed') logEvent('task_completed');
@@ -139,10 +144,24 @@ router.get('/', (req: Request, res: Response) => {
   if (qs)                    { q += ' AND status=?'; p.push(qs); }
   q += ' ORDER BY start_time DESC';
   const db = getDb();
-  const tasks = (db.prepare(q).all(...p) as any[]).map(t => {
-    const flag_ids = (db.prepare('SELECT flag_option_id FROM task_flags WHERE task_id=?').all(t.id) as any[]).map(r => r.flag_option_id);
-    return { ...t, interruptions: JSON.parse(t.interruptions || '[]'), flag_ids };
-  });
+  const raw = db.prepare(q).all(...p) as any[];
+
+  // Batch-fetch all flag_ids for the returned tasks (avoids N+1)
+  const flagIdsMap = new Map<number, number[]>();
+  if (raw.length > 0) {
+    const placeholders = raw.map(() => '?').join(',');
+    (db.prepare(`SELECT task_id, flag_option_id FROM task_flags WHERE task_id IN (${placeholders})`).all(...raw.map(t => t.id)) as any[])
+      .forEach(r => {
+        if (!flagIdsMap.has(r.task_id)) flagIdsMap.set(r.task_id, []);
+        flagIdsMap.get(r.task_id)!.push(r.flag_option_id);
+      });
+  }
+
+  const tasks = raw.map(t => ({
+    ...t,
+    interruptions: JSON.parse(t.interruptions || '[]'),
+    flag_ids: flagIdsMap.get(t.id) || [],
+  }));
   res.json({ tasks });
 });
 
