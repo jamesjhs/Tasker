@@ -1,6 +1,6 @@
 {
   "name": "tasker",
-  "version": "1.6.0",
+  "version": "1.6.1",
   "description": "Anonymous task logger for healthcare staff",
   "main": "dist/server.js",
   "scripts": {
@@ -38,12 +38,17 @@
   "jest": {
     "preset": "ts-jest",
     "testEnvironment": "node",
-    "testMatch": ["**/src/__tests__/**/*.test.ts"],
+    "testMatch": [
+      "**/src/__tests__/**/*.test.ts"
+    ],
     "testTimeout": 30000,
     "transform": {
-      "^.+\\.tsx?$": ["ts-jest", {
-        "tsconfig": "src/__tests__/tsconfig.json"
-      }]
+      "^.+\\.tsx?$": [
+        "ts-jest",
+        {
+          "tsconfig": "src/__tests__/tsconfig.json"
+        }
+      ]
     }
   },
   "overrides": {
