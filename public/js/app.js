@@ -2134,7 +2134,7 @@ function renderAnalyticsContent(data, mode, pendingLog) {
     </div>` : ''}
     ` : '<div class="card"><p style="color:#6b7280;text-align:center;padding:20px">No completed tasks yet.</p></div>'}
     <div style="display:flex;gap:10px;margin-bottom:12px;flex-wrap:wrap">
-      <button class="btn btn-secondary" style="flex:1" onclick="downloadExport()">⬇️ Download Excel</button>
+      <button class="btn btn-secondary" style="flex:1" onclick="downloadExport()">⬇️ Download Log (.xlsx)</button>
     </div>
     <div style="display:flex;align-items:center;justify-content:space-between;margin:20px 0 10px">
       <div class="section-heading" style="margin:0">Tasks</div>
