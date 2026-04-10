@@ -39,7 +39,7 @@
 <body>
   <a class="back-link" href="/" onclick="history.back();return false;">← Back</a>
   <h1>🛡️ Tasker — Data Protection Impact Assessment (DPIA)</h1>
-  <p><small>Version 1.0 — Completed April 2026 &nbsp;|&nbsp; Application Version 1.7.0 &nbsp;|&nbsp; Prepared in accordance with UK GDPR Article 35 and ICO guidance</small></p>
+  <p><small>Version 1.0 — Completed April 2026 &nbsp;|&nbsp; Application Version 1.7.1 &nbsp;|&nbsp; Prepared in accordance with UK GDPR Article 35 and ICO guidance</small></p>
 
   <div class="info-box">
     ℹ️ This DPIA was conducted to assess the privacy risks of the Tasker application used by NHS clinical and non-clinical staff to log anonymous task-workload data. It covers all application functions documented in the Data and Use Policy.
@@ -161,7 +161,7 @@
     <tr><td>Staff users</td><td>Task metadata</td><td>Task type, start/end times, category, subcategory, outcome, interrupt events</td><td>No — no names or identifiers in structured fields</td></tr>
     <tr><td>Staff users</td><td>Free-text notes</td><td>Optional, unstructured text about a task; encrypted at rest</td><td>Potentially — if user enters identifiable data in violation of policy</td></tr>
     <tr><td>Staff users</td><td>Session tokens</td><td>Server-side session identifiers; auto-expire after 30 minutes inactivity</td><td>No — opaque tokens</td></tr>
-    <tr><td>All data subjects</td><td>IP addresses</td><td>Used by the web server for rate limiting and NHS network controls only; not logged to database</td><td>Potentially — handled by server infrastructure only</td></tr>
+    <tr><td>All data subjects</td><td>IP addresses</td><td>Used by the web server for rate limiting only; not logged to database</td><td>Potentially — handled by server infrastructure only</td></tr>
   </table>
 
   <!-- ─── Section 7 ──────────────────────────────────────────────────────── -->
@@ -210,14 +210,6 @@
     </tr>
     <tr>
       <td>R6</td>
-      <td>Application used on NHS network / device contrary to policy</td>
-      <td>Medium</td><td>High</td>
-      <td><span class="badge badge-high">High</span></td>
-      <td>Policy explicitly prohibits use on NHS systems or NHS Wi-Fi; privacy splash and Data &amp; Use Policy reinforce this; Administrator responsible for communicating acceptable use</td>
-      <td><span class="badge badge-med">Medium</span></td>
-    </tr>
-    <tr>
-      <td>R7</td>
       <td>Data retained beyond 30-day retention period</td>
       <td>Very Low</td><td>Low</td>
       <td><span class="badge badge-low">Low</span></td>
@@ -225,7 +217,7 @@
       <td><span class="badge badge-low">Low</span></td>
     </tr>
     <tr>
-      <td>R8</td>
+      <td>R7</td>
       <td>Loss of server / data by Administrator</td>
       <td>Medium</td><td>Low</td>
       <td><span class="badge badge-low">Low</span></td>
@@ -233,7 +225,7 @@
       <td><span class="badge badge-low">Low</span></td>
     </tr>
     <tr>
-      <td>R9</td>
+      <td>R8</td>
       <td>Brute-force or credential-stuffing attacks against login</td>
       <td>Low</td><td>Medium</td>
       <td><span class="badge badge-med">Medium</span></td>
@@ -241,7 +233,7 @@
       <td><span class="badge badge-low">Low</span></td>
     </tr>
     <tr>
-      <td>R10</td>
+      <td>R9</td>
       <td>Supply chain risk via CDN (Chart.js from jsDelivr)</td>
       <td>Very Low</td><td>Medium</td>
       <td><span class="badge badge-low">Low</span></td>
@@ -274,13 +266,13 @@
   <h2 id="s9">9. Residual Risks &amp; Recommendations</h2>
 
   <div class="amber-box">
-    ⚠️ <strong>Action Required (R1 / R6):</strong> The two medium residual risks (accidental PII entry; use on NHS network) cannot be fully mitigated by technical controls alone and require organisational safeguards.
+    ⚠️ <strong>Action Required (R1):</strong> The medium residual risk (accidental PII entry) cannot be fully mitigated by technical controls alone and requires organisational safeguards.
   </div>
 
   <ol>
     <li><strong>Communicate acceptable use before staff on-boarding</strong> — Provide all users with a written summary of what data may and may not be entered, emphasising the free-text notes field. Include a reference to this DPIA.</li>
     <li><strong>Obtain a copy of organisational IG sign-off</strong> — The Administrator must share this DPIA with their NHS organisation's DPO or IG lead and obtain documented approval before clinical staff use the service.</li>
-    <li><strong>Consider self-hosting Chart.js</strong> — In high-security environments, self-host the Chart.js library to eliminate the CDN dependency and reduce supply-chain risk (R10).</li>
+    <li><strong>Consider self-hosting Chart.js</strong> — In high-security environments, self-host the Chart.js library to eliminate the CDN dependency and reduce supply-chain risk (R9).</li>
     <li><strong>Ensure ENCRYPTION_KEY is set</strong> — The <code>ENCRYPTION_KEY</code> environment variable must be set to a 64-character hexadecimal string; without it, notes are stored as plaintext. The Administrator must verify this before deployment.</li>
     <li><strong>Log and monitor access anomalies</strong> — The Administrator should review server logs periodically for unusual login patterns and investigate any account that appears to be sharing credentials.</li>
     <li><strong>Review this DPIA annually</strong> — Or immediately following any material change to the application's functionality, data flows, or deployment environment.</li>

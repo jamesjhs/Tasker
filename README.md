@@ -1,6 +1,6 @@
 # Tasker
 
-**v1.5.0** — An anonymous task-logging PWA for healthcare staff. Built with TypeScript, Express 5, SQLite, and vanilla JS.
+**v1.7.1** — An anonymous task-logging PWA for healthcare staff. Built with TypeScript, Express 5, SQLite, and vanilla JS.
 
 ---
 
@@ -19,7 +19,7 @@
 - **User invitations** — logged-in users can invite others using the same temp-password flow as admins (subject to the configured policy).
 - **30-day data retention** — task data is automatically deleted after 30 days.
 - **Health-check endpoint** — `GET /readyz` returns a JSON status response for uptime/heartbeat monitoring (no authentication required).
-- **Asset version endpoint** — `GET /api/version` returns `{"version":"1.5.0"}` for client-side cache-busting.
+- **Asset version endpoint** — `GET /api/version` returns `{"version":"1.7.1"}` for client-side cache-busting.
 
 ---
 
@@ -147,6 +147,10 @@ See [`/policy`](/policy) for the full Data and Use Policy.
 ---
 
 ## Changelog
+
+### v1.7.1 (April 2026)
+
+- **Policy update** — Removed restriction on use over NHS networks or NHS Wi-Fi. The application may now be accessed from any network. Updated Data and Use Policy, DPIA, and all supporting documentation accordingly.
 
 ### v1.5.0 (April 2026)
 

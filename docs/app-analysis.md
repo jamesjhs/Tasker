@@ -1,6 +1,6 @@
 # Tasker — Detailed Application Analysis
 
-> Generated April 2026. Covers repository state at v1.7.0.
+> Generated April 2026. Covers repository state at v1.7.1.
 > Intended for non-developer stakeholders and external analysis engines.
 
 ---
@@ -238,7 +238,7 @@ This is the most heavily enforced non-technical constraint. It appears at multip
 - **Lines 26–28** (red warning box): *"⚠️ CRITICAL: You must NEVER enter any patient names, initials, NHS numbers, dates of birth, staff names, or any other information that could identify a patient or staff member."*
 - **Lines 46–48**: Lists what is *never* collected (NHS numbers, real names, emails, etc.)
 - **Lines 51–53** (blue info box): *"The free-text notes field is provided for task metadata only. You are personally responsible for ensuring no identifiable information — including patient or staff names — is entered into it."*
-- **Lines 68–76** (User Responsibilities): detailed bullet list of prohibitions including *"must use this application only on your personal device and personal network — not on NHS systems or NHS Wi-Fi."*
+- **Lines 68–76** (User Responsibilities): detailed bullet list of prohibitions; user is responsible for keeping their device and network connection secure.
 
 ### Help guide (`public/help.html`)
 
