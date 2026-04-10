@@ -51,6 +51,20 @@ self.addEventListener('fetch', event => {
     return;
   }
 
+  // For SPA navigation requests (all HTML page loads except the standalone pages
+  // that have their own content), always serve the precached root shell ('/').
+  // This guarantees that navigating directly to a client-side route (e.g.
+  // /analytics, /settings, or any other SPA path) always loads the latest
+  // app shell that the SW precached on install, instead of accidentally serving
+  // a stale per-URL entry from the browser's HTTP cache.
+  const STANDALONE_PAGES = ['/policy', '/help', '/guide'];
+  if (event.request.mode === 'navigate' && !STANDALONE_PAGES.includes(url.pathname)) {
+    event.respondWith(
+      caches.match('/').then(cached => cached || fetch('/'))
+    );
+    return;
+  }
+
   // Cache-first for static assets
   event.respondWith(
     caches.match(event.request).then(cached => {
@@ -62,7 +76,6 @@ self.addEventListener('fetch', event => {
         }
         return response;
       }).catch(() => {
-        if (event.request.mode === 'navigate') return caches.match('/');
         return new Response('Offline', { status: 503 });
       });
     })
