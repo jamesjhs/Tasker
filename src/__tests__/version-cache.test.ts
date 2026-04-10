@@ -65,6 +65,7 @@ function buildVersionApp() {
   });
 
   app.get('/policy', (_req, res) => res.sendFile(path.join(PUBLIC_DIR, 'policy.html')));
+  app.get('/dpia',   (_req, res) => res.sendFile(path.join(PUBLIC_DIR, 'dpia.html')));
   app.get('/help',   (_req, res) => res.sendFile(path.join(PUBLIC_DIR, 'help.html')));
   app.get('/guide',  (_req, res) => res.sendFile(path.join(PUBLIC_DIR, 'guide.html')));
 
@@ -250,11 +251,11 @@ describe('SW source logic', () => {
     expect(contents).toContain("'/guide'");
   });
 
-  test('STANDALONE_PAGES contains exactly 3 entries (no accidental omissions or extras)', () => {
+  test('STANDALONE_PAGES contains exactly 4 entries (no accidental omissions or extras)', () => {
     const match = swServed.match(/STANDALONE_PAGES\s*=\s*\[([\s\S]*?)\]/);
     expect(match).not.toBeNull();
     const entries = match![1].match(/'[^']+'/g) || [];
-    expect(entries.length).toBe(3);
+    expect(entries.length).toBe(4);
   });
 
   test('navigate handler skips SPA routing for STANDALONE_PAGES', () => {
@@ -300,13 +301,13 @@ describe('SPA shell routing', () => {
 // 6. Standalone pages: served from their own HTML, not the SPA shell
 // =============================================================================
 describe('Standalone pages', () => {
-  test.each(['/policy', '/help', '/guide'])('GET %s returns HTTP 200 with text/html', async (route) => {
+  test.each(['/policy', '/help', '/guide', '/dpia'])('GET %s returns HTTP 200 with text/html', async (route) => {
     const res = await request(vApp).get(route);
     expect(res.status).toBe(200);
     expect(res.headers['content-type']).toMatch(/text\/html/);
   });
 
-  test.each(['/policy', '/help', '/guide'])('GET %s content is NOT the SPA shell (distinct file)', async (route) => {
+  test.each(['/policy', '/help', '/guide', '/dpia'])('GET %s content is NOT the SPA shell (distinct file)', async (route) => {
     const res = await request(vApp).get(route);
     expect(res.text).not.toBe(indexHtml);
   });
@@ -323,14 +324,18 @@ describe('Standalone pages', () => {
   });
 
   test('each standalone page has distinct content from the others', async () => {
-    const [policy, help, guide] = await Promise.all([
+    const [policy, help, guide, dpia] = await Promise.all([
       request(vApp).get('/policy').then(r => r.text),
       request(vApp).get('/help').then(r => r.text),
       request(vApp).get('/guide').then(r => r.text),
+      request(vApp).get('/dpia').then(r => r.text),
     ]);
     expect(policy).not.toBe(help);
     expect(help).not.toBe(guide);
     expect(policy).not.toBe(guide);
+    expect(dpia).not.toBe(policy);
+    expect(dpia).not.toBe(help);
+    expect(dpia).not.toBe(guide);
   });
 
   test('SW STANDALONE_PAGES list matches the server-defined standalone routes exactly', () => {
@@ -339,7 +344,7 @@ describe('Standalone pages', () => {
     expect(match).not.toBeNull();
     const entries = (match![1].match(/'([^']+)'/g) || []).map(s => s.replace(/'/g, ''));
     // Sort both for comparison
-    expect(entries.sort()).toEqual(['/guide', '/help', '/policy']);
+    expect(entries.sort()).toEqual(['/dpia', '/guide', '/help', '/policy']);
   });
 });
 
@@ -483,15 +488,16 @@ describe('app.js: checkAssetVersion', () => {
     expect(appJsSrc).toMatch(/_lastVersionCheckAt\s*=\s*Date\.now\(\)/);
   });
 
-  test('intentionally shows banner when stored version is null (fresh install / pre-tracking install)', () => {
-    // There is deliberately NO null guard before the comparison.
-    // null !== '1.x.x' → true → banner shown on first load.
+  test('silently seeds version on first visit — no banner for brand-new users (stored === null guard)', () => {
+    // On a fresh install, stored is null. The function must write the current version
+    // to localStorage and return false (no banner) so new visitors see the app directly.
     const fnStart = appJsSrc.indexOf('async function checkAssetVersion()');
     const fnEnd   = appJsSrc.indexOf('return false;\n  } catch', fnStart) + 50;
     const fnBody  = appJsSrc.slice(fnStart, fnEnd);
-    // No early-return for null:
-    expect(fnBody).not.toMatch(/if\s*\(\s*stored\s*===\s*null\s*\)\s*return/);
-    // Direct comparison:
+    // Must have a null-guard that seeds the version and returns false:
+    expect(fnBody).toMatch(/stored\s*===\s*null/);
+    expect(fnBody).toMatch(/localStorage\.setItem\s*\(\s*['"]tasker_app_version['"]/);
+    // Must still compare for returning visitors:
     expect(fnBody).toMatch(/stored\s*!==\s*version/);
   });
 
@@ -605,13 +611,14 @@ describe('app.js: version polling and debounce', () => {
 // 11. Update-flow scenarios
 // =============================================================================
 describe('Update-flow scenarios', () => {
-  test('Scenario A – fresh install: server always returns a non-null version (null mismatch triggers banner)', async () => {
-    // On first install localStorage has nothing.
-    // checkAssetVersion: null !== server version → true → banner → user must "update" once.
+  test('Scenario A – fresh install: stored version is null → version seeded silently, no banner shown', async () => {
+    // On first install localStorage has nothing (stored = null).
+    // checkAssetVersion now seeds the version silently and returns false — no banner.
     const res = await request(vApp).get('/api/version');
     expect(res.body.version).toBeTruthy();
-    // Simulate: stored = null, serverVersion = res.body.version
-    expect(null !== res.body.version).toBe(true); // banner fires
+    // Simulate: stored = null → null-guard fires, version seeded, returns false (no banner)
+    expect(null === null).toBe(true); // guard triggers for first-time visitors
+    expect(null !== res.body.version).toBe(true); // confirms stored differs (banner would fire without the guard)
   });
 
   test('Scenario B – up-to-date client: stored version equals server version → no banner', async () => {

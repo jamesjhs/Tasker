@@ -114,8 +114,9 @@ app.use('/api/dropdowns', apiLimiter, dropdownsRouter);
 app.use('/api/admin', apiLimiter, adminRouter);
 
 app.get('/policy', apiLimiter, (_req, res) => res.sendFile(path.join(__dirname, '..', 'public', 'policy.html')));
-app.get('/help', apiLimiter, (_req, res) => res.sendFile(path.join(__dirname, '..', 'public', 'help.html')));
-app.get('/guide', apiLimiter, (_req, res) => res.sendFile(path.join(__dirname, '..', 'public', 'guide.html')));
+app.get('/dpia',   apiLimiter, (_req, res) => res.sendFile(path.join(__dirname, '..', 'public', 'dpia.html')));
+app.get('/help',   apiLimiter, (_req, res) => res.sendFile(path.join(__dirname, '..', 'public', 'help.html')));
+app.get('/guide',  apiLimiter, (_req, res) => res.sendFile(path.join(__dirname, '..', 'public', 'guide.html')));
 app.get('/{*path}', apiLimiter, (_req, res) => {
   res.setHeader('Cache-Control', 'no-cache');
   res.sendFile(path.join(__dirname, '..', 'public', 'index.html'));
