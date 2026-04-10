@@ -519,8 +519,7 @@ function renderBottomNav(active) {
     <button class="nav-btn ${active==='settings'?'active':''}" onclick="renderSettings()">
       <span class="nav-icon">⚙️</span><span>Settings</span>
     </button>
-  </nav>
-  ${renderFooter()}`;
+  </nav>`;
 }
 
 // ── STATS CARDS ──────────────────────────────────────────────────────────────
@@ -910,6 +909,7 @@ function renderRegister() {
       </div>
       <button class="btn btn-primary btn-full" id="r-btn" onclick="doRegister()">Register</button>
     </div>
+    ${renderFooter()}
   </div>`;
 }
 
@@ -995,6 +995,7 @@ function renderAwaitActivation() {
       Please check back later. Once activated, log in again to access Tasker.
     </div>
     <button class="btn btn-secondary btn-full" style="margin-top:16px" onclick="doLogout()">🚪 Log Out</button>
+    ${renderFooter()}
   </div>`;
 }
 
@@ -1033,6 +1034,7 @@ function renderChangePassword() {
       </div>
       <button class="btn btn-primary btn-full" id="cp-btn" onclick="doChangePassword(${isForced})">Save new password</button>
     </div>
+    ${renderFooter()}
   </div>`;
   const cpEnter = e => { if (e.key === 'Enter') doChangePassword(isForced); };
   document.getElementById('cp-new').addEventListener('keydown', cpEnter);
@@ -1118,6 +1120,7 @@ function renderHomeHTML() {
       </div>
       ${state.pendingGraphDays ? `<div class="chart-container" style="height:180px;margin-top:12px"><canvas id="chart-pending"></canvas></div>` : ''}
     </div>
+  ${renderFooter()}
   </div>
   ${renderBottomNav('home')}`;
 }
@@ -1246,6 +1249,7 @@ function renderSettings() {
       <div class="divider"></div>
       <button class="btn btn-danger btn-full" onclick="renderDeleteAccount()">🗑️ Delete My Account</button>
     </div>
+  ${renderFooter()}
   </div>
   ${renderBottomNav('settings')}`;
 }
@@ -2140,6 +2144,7 @@ function renderAnalyticsContent(data, mode, pendingLog) {
       ${tasks.length > 0 ? `<div style="display:flex;justify-content:flex-end;margin-bottom:8px"><button class="btn btn-danger btn-sm" onclick="clearAllTasks()">🗑️ Clear All</button></div>` : ''}
       ${groupedTaskCards}
     ` : ''}
+  ${renderFooter()}
   </div>
   ${renderBottomNav('analytics')}`;
 
