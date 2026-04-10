@@ -24,6 +24,12 @@ const state = {
   charts: {},
   pendingTaskLog: null,  // { count, logged_at } — most recent pending task snapshot
   recentHandledCount: null,  // number — tasks completed in the last 7 days
+  pendingGraphDays: null,       // null, 7, or 30 — currently shown pending graph
+  analyticsQuickPeriod: 'today', // 'today', '7d', '30d', or null
+  analyticsQuickFrom: '',        // date string set by quick filter
+  analyticsQuickTo: '',          // date string set by quick filter
+  analyticsTasksExpanded: false, // whether task list is expanded in analytics
+  analyticsData: null,           // { data, mode, pendingLog } for re-rendering on toggle
 };
 
 // ── History management ────────────────────────────────────────────────────────
@@ -1087,6 +1093,7 @@ function renderHomeHTML() {
     ${statsHTML}
     <div class="card" style="margin-top:16px">
       <div class="card-title">📋 Pending Tasks</div>
+      <p style="font-size:.85rem;color:#6b7280;margin-bottom:8px">How many tasks do you have currently?</p>
       ${state.pendingTaskLog ? `<p style="font-size:.85rem;color:#6b7280;margin-bottom:8px">Last logged: <strong>${state.pendingTaskLog.count}</strong> (${formatDateShort(state.pendingTaskLog.logged_at)} ${formatTimeShort(state.pendingTaskLog.logged_at)})</p>` : ''}
       ${state.recentHandledCount !== null ? `<p style="font-size:.85rem;color:#6b7280;margin-bottom:8px">Tasks handled (last 7 days): <strong>${state.recentHandledCount}</strong></p>` : ''}
       <div style="display:flex;gap:8px;align-items:center">
@@ -1094,6 +1101,11 @@ function renderHomeHTML() {
         <button class="btn btn-primary" onclick="doLogPendingCount()">Log</button>
       </div>
       <div id="pending-count-alerts" style="margin-top:8px"></div>
+      <div style="display:flex;gap:8px;margin-top:12px">
+        <button class="btn btn-sm ${state.pendingGraphDays === 7 ? 'btn-primary' : 'btn-secondary'}" onclick="togglePendingGraph(7)">📈 7 days</button>
+        <button class="btn btn-sm ${state.pendingGraphDays === 30 ? 'btn-primary' : 'btn-secondary'}" onclick="togglePendingGraph(30)">📈 30 days</button>
+      </div>
+      ${state.pendingGraphDays ? `<div class="chart-container" style="height:180px;margin-top:12px"><canvas id="chart-pending"></canvas></div>` : ''}
     </div>
   </div>
   ${renderBottomNav('home')}`;
@@ -1119,7 +1131,10 @@ async function renderHome() {
   } else {
     stopActivityTracking();
   }
-  if (state.currentView === 'home') app().innerHTML = renderHomeHTML();
+  if (state.currentView === 'home') {
+    app().innerHTML = renderHomeHTML();
+    if (state.pendingGraphDays) await renderPendingChart(state.pendingGraphDays);
+  }
 }
 
 function checkMidnightWarn() {
@@ -1152,7 +1167,43 @@ async function doLogPendingCount() {
     state.pendingTaskLog = d;
     if (input) input.value = '';
     showAlert('Pending task count logged.', 'success', 'pending-count-alerts');
+    if (state.pendingGraphDays) await renderPendingChart(state.pendingGraphDays);
   } catch(e) { showAlert(e.message, 'error', 'pending-count-alerts'); }
+}
+
+async function togglePendingGraph(days) {
+  if (state.pendingGraphDays === days) {
+    state.pendingGraphDays = null;
+    if (state.charts['chart-pending']) { state.charts['chart-pending'].destroy(); delete state.charts['chart-pending']; }
+    app().innerHTML = renderHomeHTML();
+    return;
+  }
+  state.pendingGraphDays = days;
+  app().innerHTML = renderHomeHTML();
+  await renderPendingChart(days);
+}
+
+async function renderPendingChart(days) {
+  try {
+    const res = await fetch(`/api/tasks/pending-count/history?days=${days}`, { credentials: 'same-origin' });
+    if (!res.ok) return;
+    const logs = await res.json();
+    if (!logs.length) return;
+    const labels = logs.map(l => `${formatDateShort(l.logged_at)} ${formatTimeShort(l.logged_at)}`);
+    const counts = logs.map(l => l.count);
+    renderChart('chart-pending', 'line', labels, [{
+      label: 'Pending tasks',
+      data: counts,
+      borderColor: '#1a56db',
+      backgroundColor: 'rgba(26,86,219,0.1)',
+      fill: true,
+      tension: 0.3,
+      pointRadius: 3,
+    }], {
+      plugins: { legend: { display: false } },
+      scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } }, x: { ticks: { maxRotation: 45 } } },
+    });
+  } catch(e) {}
 }
 
 // ── SETTINGS ─────────────────────────────────────────────────────────────────
@@ -1792,6 +1843,7 @@ async function clearAllTasks() {
 // ── ANALYTICS — SESSION ──────────────────────────────────────────────────────
 async function renderAnalyticsSession() {
   stopTimer(); clearCharts(); state.currentView = 'analytics-session';
+  state.analyticsQuickPeriod = 'today';
   pushHistory('analytics-session');
   app().innerHTML = `<div class="view"><p class="loading">Loading analytics…</p></div>`;
   try {
@@ -1822,8 +1874,8 @@ async function renderAnalyticsHistory() {
 }
 
 function buildHistoryParams() {
-  const from = document.getElementById('h-from')?.value || '';
-  const to = document.getElementById('h-to')?.value || '';
+  const from = document.getElementById('h-from')?.value || state.analyticsQuickFrom || '';
+  const to = document.getElementById('h-to')?.value || state.analyticsQuickTo || '';
   const isDuty = document.getElementById('h-duty')?.value || '';
   const cat = document.getElementById('h-cat')?.value || '';
   const sub = document.getElementById('h-sub')?.value || '';
@@ -1839,6 +1891,9 @@ function buildHistoryParams() {
 }
 
 function setDatePreset(days) {
+  state.analyticsQuickPeriod = null;
+  state.analyticsQuickFrom = '';
+  state.analyticsQuickTo = '';
   const to = new Date();
   const from = new Date();
   from.setDate(from.getDate() - days + 1);
@@ -1850,16 +1905,48 @@ function setDatePreset(days) {
   renderAnalyticsHistory();
 }
 
+function applyHistoryFilters() {
+  state.analyticsQuickPeriod = null;
+  renderAnalyticsHistory();
+}
+
+function setAnalyticsQuickFilter(period) {
+  state.analyticsQuickPeriod = period;
+  if (period === 'today') {
+    state.analyticsQuickFrom = '';
+    state.analyticsQuickTo = '';
+    renderAnalyticsSession();
+  } else {
+    const days = period === '30d' ? 30 : 7;
+    const to = new Date();
+    const from = new Date();
+    from.setDate(from.getDate() - days + 1);
+    const fmt = d => d.toISOString().split('T')[0];
+    state.analyticsQuickFrom = fmt(from);
+    state.analyticsQuickTo = fmt(to);
+    renderAnalyticsHistory();
+  }
+}
+
 function renderAnalyticsContent(data, mode, pendingLog) {
+  state.analyticsData = { data, mode, pendingLog };
   const { tasks, summary: s } = data;
   const isHistory = mode === 'history';
   const pendingLabel = pendingLog
     ? `${pendingLog.count} <span style="font-size:.65rem;display:block;color:#6b7280;margin-top:2px">(${formatDateShort(pendingLog.logged_at)})</span>`
     : '—';
 
+  const qp = state.analyticsQuickPeriod;
+  const timingBar = `
+  <div class="date-preset-group" style="margin-bottom:14px">
+    <button class="btn btn-sm ${qp === 'today' ? 'btn-primary' : 'btn-secondary'}" onclick="setAnalyticsQuickFilter('today')">Today</button>
+    <button class="btn btn-sm ${qp === '7d' ? 'btn-primary' : 'btn-secondary'}" onclick="setAnalyticsQuickFilter('7d')">Last 7 days</button>
+    <button class="btn btn-sm ${qp === '30d' ? 'btn-primary' : 'btn-secondary'}" onclick="setAnalyticsQuickFilter('30d')">Last 30 days</button>
+  </div>`;
+
   const filterBar = isHistory ? `
   <div class="card filter-card" style="margin-bottom:14px">
-    <div class="card-title">🔍 Filter & Date Range</div>
+    <div class="card-title">🔍 Advanced Filters</div>
     <div class="date-preset-group">
       <button class="btn btn-sm btn-secondary" onclick="setDatePreset(7)">7 days</button>
       <button class="btn btn-sm btn-secondary" onclick="setDatePreset(14)">14 days</button>
@@ -1903,27 +1990,39 @@ function renderAnalyticsContent(data, mode, pendingLog) {
           ${state.dropdowns.outcome.map(o => `<option value="${esc(o)}">${esc(o)}</option>`).join('')}
         </select>
       </div>
-      <button class="btn btn-primary btn-full" onclick="renderAnalyticsHistory()">Apply Filters</button>
+      <button class="btn btn-primary btn-full" onclick="applyHistoryFilters()">Apply Filters</button>
     </div>
   </div>` : '';
 
-  const taskCards = tasks.map(t => {
-    const dur = calcDurMins(t);
-    return `
-    <div class="card task-card">
-      <div class="task-card-row">
-        <span class="badge ${t.is_duty ? 'badge-duty' : 'badge-personal'}">${t.is_duty ? 'My Group' : 'Personal'}</span>
-        <span class="task-card-meta">${formatTimeShort(t.start_time)} — ${formatTimeShort(t.end_time) || '?'} (${dur}m)</span>
-      </div>
-      <div class="task-card-title">${esc(t.category || 'Uncategorised')}${t.subcategory ? ' › ' + esc(t.subcategory) : ''}</div>
-      ${t.outcome ? `<div class="task-card-meta">Outcome: ${esc(t.outcome)}</div>` : ''}
-      ${t.interruptions?.length ? `<div class="task-card-meta">⚠️ ${t.interruptions.length} interruption(s)</div>` : ''}
-      <div class="task-card-actions">
-        <button class="btn btn-outline btn-sm" onclick="loadAndEditTask(${t.id})">✏️ Edit</button>
-        <button class="btn btn-danger btn-sm" onclick="deleteTask(${t.id})">🗑️ Delete</button>
-      </div>
-    </div>`;
-  }).join('');
+  // Build task cards grouped by Task From (category)
+  const groupedTaskCards = (() => {
+    if (!tasks.length) return '<p style="color:#6b7280;font-size:.9rem">No tasks found.</p>';
+    const groups = {};
+    tasks.forEach(t => {
+      const cat = t.category || 'Uncategorised';
+      if (!groups[cat]) groups[cat] = [];
+      groups[cat].push(t);
+    });
+    return Object.entries(groups).map(([cat, catTasks]) => `
+      <div class="section-heading" style="margin-top:8px;margin-bottom:6px">${esc(cat)}</div>
+      ${catTasks.map(t => {
+        const dur = calcDurMins(t);
+        return `<div class="card task-card">
+          <div class="task-card-row">
+            <span class="badge ${t.is_duty ? 'badge-duty' : 'badge-personal'}">${t.is_duty ? 'My Group' : 'Personal'}</span>
+            <span class="task-card-meta">${formatTimeShort(t.start_time)} — ${formatTimeShort(t.end_time) || '?'} (${dur}m)</span>
+          </div>
+          <div class="task-card-title">${esc(t.category || 'Uncategorised')}${t.subcategory ? ' › ' + esc(t.subcategory) : ''}</div>
+          ${t.outcome ? `<div class="task-card-meta">Outcome: ${esc(t.outcome)}</div>` : ''}
+          ${t.interruptions?.length ? `<div class="task-card-meta">⚠️ ${t.interruptions.length} interruption(s)</div>` : ''}
+          <div class="task-card-actions">
+            <button class="btn btn-outline btn-sm" onclick="loadAndEditTask(${t.id})">✏️ Edit</button>
+            <button class="btn btn-danger btn-sm" onclick="deleteTask(${t.id})">🗑️ Delete</button>
+          </div>
+        </div>`;
+      }).join('')}
+    `).join('');
+  })();
 
   const regressionNote = s.regression ? `
   <div class="alert alert-info" style="font-size:.85rem">
@@ -1949,9 +2048,10 @@ function renderAnalyticsContent(data, mode, pendingLog) {
   app().innerHTML = `
   <div class="view">
     <div class="view-header">
-      <h1>${isHistory ? '📅 History' : '📊 Today\'s Session'}</h1>
+      <h1>📊 Analytics</h1>
     </div>
     <div class="retention-notice">⏳ Your data is automatically deleted after 30 days.</div>
+    ${timingBar}
     ${filterBar}
     <div class="stat-grid stat-grid-3">
       <div class="stat-card"><div class="stat-number">${s.total}</div><div class="stat-label">Total tasks</div></div>
@@ -2009,12 +2109,16 @@ function renderAnalyticsContent(data, mode, pendingLog) {
     </div>` : ''}
     ` : '<div class="card"><p style="color:#6b7280;text-align:center;padding:20px">No completed tasks yet.</p></div>'}
     <div style="display:flex;gap:10px;margin-bottom:12px;flex-wrap:wrap">
-      ${!isHistory ? '<button class="btn btn-outline" style="flex:1" onclick="renderAnalyticsHistory()">📅 Long-term History</button>' : ''}
-      ${isMobileDevice() ? '<button class="btn btn-secondary" style="flex:1" onclick="downloadExport()">⬇️ Download Excel</button>' : ''}
+      <button class="btn btn-secondary" style="flex:1" onclick="downloadExport()">⬇️ Download Excel</button>
     </div>
-    <div class="section-heading">Tasks</div>
-    ${tasks.length > 0 ? `<div style="display:flex;justify-content:flex-end;margin-bottom:8px"><button class="btn btn-danger btn-sm" onclick="clearAllTasks()">🗑️ Clear All</button></div>` : ''}
-    ${taskCards || '<p style="color:#6b7280;font-size:.9rem">No tasks found.</p>'}
+    <div style="display:flex;align-items:center;justify-content:space-between;margin:20px 0 10px">
+      <div class="section-heading" style="margin:0">Tasks</div>
+      <button class="btn btn-outline btn-sm" onclick="toggleAnalyticsTasks()">${state.analyticsTasksExpanded ? '▲ Collapse' : '▼ Expand'}</button>
+    </div>
+    ${state.analyticsTasksExpanded ? `
+      ${tasks.length > 0 ? `<div style="display:flex;justify-content:flex-end;margin-bottom:8px"><button class="btn btn-danger btn-sm" onclick="clearAllTasks()">🗑️ Clear All</button></div>` : ''}
+      ${groupedTaskCards}
+    ` : ''}
   </div>
   ${renderBottomNav('analytics')}`;
 
@@ -2190,11 +2294,15 @@ async function loadAndEditTask(taskId) {
   } catch(e) { showAlert(e.message); }
 }
 
-async function downloadExport() {
-  if (!isMobileDevice()) {
-    showAlert('Excel export is only available on mobile devices.', 'error');
-    return;
+function toggleAnalyticsTasks() {
+  state.analyticsTasksExpanded = !state.analyticsTasksExpanded;
+  if (state.analyticsData) {
+    clearCharts();
+    renderAnalyticsContent(state.analyticsData.data, state.analyticsData.mode, state.analyticsData.pendingLog);
   }
+}
+
+async function downloadExport() {
   window.location.href = '/api/analytics/export';
 }
 
