@@ -14,7 +14,6 @@
     "better-sqlite3": "^12.8.0",
     "better-sqlite3-session-store": "^0.1.0",
     "dotenv": "^17.4.0",
-    "nodemailer": "^8.0.5",
     "exceljs": "^4.4.0",
     "express": "^5.2.1",
     "express-rate-limit": "^8.3.2",

@@ -162,6 +162,8 @@ function initSchema(db: Database.Database): void {
       field_name TEXT NOT NULL,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
+
+    CREATE INDEX IF NOT EXISTS idx_dropdown_proposals_field ON dropdown_proposals(field_name);
   `);
 
   // Migrate existing databases: add lockout columns if missing

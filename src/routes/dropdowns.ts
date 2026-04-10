@@ -63,7 +63,8 @@ router.post('/propose', requireAuth, requirePasswordChange, requireActivation, v
   const username = (getDb().prepare('SELECT username FROM users WHERE id=?').get(s.userId) as any)?.username || 'Unknown';
 
   // Store a metadata-only proposal record (no free-text value stored in DB)
-  getDb().prepare('INSERT INTO dropdown_proposals (user_id, field_name) VALUES (?,?)').run(s.userId, field_name);
+  const proposalResult = getDb().prepare('INSERT INTO dropdown_proposals (user_id, field_name) VALUES (?,?)').run(s.userId, field_name);
+  const proposalId = proposalResult.lastInsertRowid;
 
   try {
     await sendEmail(
@@ -73,7 +74,7 @@ router.post('/propose', requireAuth, requirePasswordChange, requireActivation, v
     res.json({ message: 'Your suggestion has been sent to the administrator by email.', value: clean });
   } catch (e: any) {
     // Remove the proposal record if email failed
-    getDb().prepare('DELETE FROM dropdown_proposals WHERE user_id=? AND field_name=? AND id=(SELECT MAX(id) FROM dropdown_proposals WHERE user_id=? AND field_name=?)').run(s.userId, field_name, s.userId, field_name);
+    getDb().prepare('DELETE FROM dropdown_proposals WHERE id=?').run(proposalId);
     res.status(503).json({ error: `Could not send suggestion: ${e?.message || 'SMTP error'}` });
   }
 });

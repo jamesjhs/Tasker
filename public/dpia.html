@@ -159,7 +159,7 @@
     <tr><td>Staff users</td><td>Anonymous username</td><td>Two-word computer-generated identifier (e.g. "CalmRiver")</td><td>No — not linked to any real identity</td></tr>
     <tr><td>Staff users</td><td>Password hash</td><td>bcrypt hash of user's chosen password</td><td>No — irreversible hash, not the password itself</td></tr>
     <tr><td>Staff users</td><td>Task metadata</td><td>Task type, start/end times, category, subcategory, outcome, interrupt events</td><td>No — no names or identifiers in structured fields</td></tr>
-    <tr><td>Staff users</td><td>Task flag options (structured).*Administrator-defined list, no free text.*No personal data</td></tr>
+    <tr><td>Staff users</td><td>Task flag options (structured)</td><td>Administrator-defined list, no free text</td><td>No — no personal data</td></tr>
     <tr><td>Staff users</td><td>Session tokens</td><td>Server-side session identifiers; auto-expire after 30 minutes inactivity</td><td>No — opaque tokens</td></tr>
     <tr><td>All data subjects</td><td>IP addresses</td><td>Used by the web server for rate limiting only; not logged to database</td><td>Potentially — handled by server infrastructure only</td></tr>
   </table>
@@ -173,7 +173,7 @@
       <td>Accidental data entry risk (mitigated by removal of free-text notes)</td>
       <td>Medium</td><td>High</td>
       <td><span class="badge badge-high">High</span></td>
-      <td>Privacy splash shown on first use; Data &amp; Use Policy accessible (AES-256-GCM); automatic 30-day deletion; admin can delete accounts on request</td>
+      <td>Free-text notes removed (v1.8.1); structured flag options only; privacy splash shown on first use; Data &amp; Use Policy accessible; automatic 30-day deletion; admin can delete accounts on request</td>
       <td><span class="badge badge-med">Medium</span></td>
     </tr>
     <tr>
