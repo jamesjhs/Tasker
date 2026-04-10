@@ -268,4 +268,13 @@ router.delete('/account', requireAuth, validateCsrf, async (req: Request, res: R
   res.json({ success: true });
 });
 
+// ── Notices (public, authenticated users) ─────────────────────────────────────
+
+router.get('/notices', requireAuth, requirePasswordChange, requireActivation, (_req: Request, res: Response) => {
+  const notices = getDb().prepare(
+    'SELECT id, message, created_at FROM notices WHERE active=1 ORDER BY created_at DESC'
+  ).all();
+  res.json({ notices });
+});
+
 export default router;

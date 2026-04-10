@@ -21,6 +21,7 @@ const state = {
   interruptStart: null, // ISO string set when interrupt modal opens
   currentView: null,
   dropdowns: { category: [], subcategory: [], outcome: [] },
+  flagOptions: [],       // [{ id, value }]
   taskForm: {},
   lastUsedCombos: {},
   editTask: null,
@@ -34,6 +35,8 @@ const state = {
   analyticsTasksExpanded: false, // whether task list is expanded in analytics
   analyticsFiltersExpanded: false, // whether advanced filters are expanded in analytics
   analyticsData: null,           // { data, mode, pendingLog } for re-rendering on toggle
+  userMessages: [],              // [{ id, message, read, created_at }]
+  notices: [],                   // [{ id, message, created_at }]
 };
 
 // ── History management ────────────────────────────────────────────────────────
@@ -510,14 +513,27 @@ async function init() {
 
 async function loadDropdowns() {
   try {
-    const [cats, subs, outs] = await Promise.all([
+    const [cats, subs, outs, flagOpts] = await Promise.all([
       api('GET','/api/dropdowns/category'),
       api('GET','/api/dropdowns/subcategory'),
       api('GET','/api/dropdowns/outcome'),
+      api('GET','/api/flags'),
     ]);
     if (cats) state.dropdowns.category = cats.options;
     if (subs) state.dropdowns.subcategory = subs.options;
     if (outs) state.dropdowns.outcome = outs.options;
+    if (flagOpts) state.flagOptions = flagOpts.options || [];
+  } catch(e) {}
+}
+
+async function loadNoticesAndMessages() {
+  try {
+    const [noticesRes, msgsRes] = await Promise.all([
+      fetch('/api/auth/notices', { credentials: 'same-origin' }).catch(() => null),
+      fetch('/api/messages', { credentials: 'same-origin' }).catch(() => null),
+    ]);
+    if (noticesRes?.ok) { const d = await noticesRes.json(); state.notices = d.notices || []; }
+    if (msgsRes?.ok) { const d = await msgsRes.json(); state.userMessages = d.messages || []; }
   } catch(e) {}
 }
 
@@ -1098,6 +1114,29 @@ function renderHomeHTML() {
   const t = state.activeTask;
   const midnightWarn = checkMidnightWarn();
   const statsHTML = renderStatsCards(state.appStats, '16px');
+
+  // Notices section
+  const noticesHtml = state.notices.length ? `
+    <div class="card" style="margin-top:12px;border-left:4px solid #1a56db">
+      <div class="card-title" style="color:#1a56db">📢 Notices</div>
+      ${state.notices.map(n => `<p style="font-size:.9rem;color:#374151;margin-bottom:6px;border-bottom:1px solid #f3f4f6;padding-bottom:6px">${esc(n.message)}</p>`).join('')}
+    </div>` : '';
+
+  // User messages section
+  const unread = state.userMessages.filter(m => !m.read);
+  const messagesHtml = unread.length ? `
+    <div class="card" style="margin-top:12px;border-left:4px solid #10b981">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <div class="card-title" style="color:#10b981">📬 Messages (${unread.length})</div>
+        <button class="btn btn-outline btn-sm" onclick="markAllMessagesRead()">Mark all read</button>
+      </div>
+      ${unread.map(m => `
+      <div style="font-size:.9rem;color:#374151;margin-bottom:8px;border-bottom:1px solid #f3f4f6;padding-bottom:8px;display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
+        <span>${esc(m.message)}</span>
+        <button class="btn btn-outline btn-sm" style="flex-shrink:0" onclick="markMessageRead(${m.id})">✓</button>
+      </div>`).join('')}
+    </div>` : '';
+
   return `
   <div class="view">
     <div class="view-header">
@@ -1107,8 +1146,10 @@ function renderHomeHTML() {
     <div class="retention-notice">⏳ Your data is automatically deleted after 30 days.</div>
     ${midnightWarn ? '<div class="midnight-warn">⚠️ Approaching midnight — your session will end at midnight. Complete any active task.</div>' : ''}
     <div id="home-alerts"></div>
+    ${noticesHtml}
+    ${messagesHtml}
     ${t ? `
-    <div class="card" style="border: 2px solid #f59e0b">
+    <div class="card" style="border: 2px solid #f59e0b;margin-top:12px">
       <div class="card-title">⏸️ Task In Progress</div>
       <div style="display:flex;gap:8px;align-items:center;margin-bottom:6px;flex-wrap:wrap">
         <span class="badge ${t.is_duty ? 'badge-duty' : 'badge-personal'}">${t.is_duty ? 'My Group' : 'Personal'}</span>
@@ -1117,13 +1158,12 @@ function renderHomeHTML() {
       </div>
       <p style="font-size:.85rem;color:#6b7280;margin-bottom:4px">Started: ${formatTimeShort(t.start_time)}</p>
       ${t.interruptions?.length ? `<p style="font-size:.85rem;color:#d97706;margin-bottom:4px">⚠️ ${t.interruptions.length} interruption(s) recorded</p>` : ''}
-      ${t.notes ? `<p style="font-size:.85rem;color:#374151;margin-bottom:4px;font-style:italic">${esc(t.notes)}</p>` : ''}
       <div style="display:flex;gap:8px;margin-top:12px">
         <button class="btn btn-primary" style="flex:1" onclick="renderTaskActive()">▶ Resume</button>
         <button class="btn btn-secondary" style="flex:1" onclick="discardActiveTask()">✕ Abandon</button>
       </div>
     </div>` : `
-    <button class="btn btn-primary btn-full" style="font-size:1.1rem;padding:18px" onclick="renderTaskStart()">
+    <button class="btn btn-primary btn-full" style="font-size:1.1rem;padding:18px;margin-top:12px" onclick="renderTaskStart()">
       ▶ Log Task
     </button>`}
     ${statsHTML}
@@ -1161,6 +1201,7 @@ async function renderHome() {
   if (statsRes?.ok) state.appStats = await statsRes.json();
   if (pendingRes?.ok) state.pendingTaskLog = await pendingRes.json();
   if (recentRes?.ok) { const r = await recentRes.json(); state.recentHandledCount = r?.count ?? null; }
+  await loadNoticesAndMessages();
   if (state.activeTask) {
     await checkInactivityInterruption();
     updateLastActive();
@@ -1191,7 +1232,25 @@ async function discardActiveTask() {
   } catch(e) { showAlert(e.message, 'error', 'home-alerts'); }
 }
 
-async function doLogPendingCount() {
+async function markMessageRead(msgId) {
+  try {
+    await api('POST', `/api/messages/${msgId}/read`, {});
+    state.userMessages = state.userMessages.map(m => m.id === msgId ? { ...m, read: 1 } : m);
+    app().innerHTML = renderHomeHTML();
+    if (state.pendingGraphDays) await renderPendingChart(state.pendingGraphDays);
+  } catch(e) {}
+}
+
+async function markAllMessagesRead() {
+  try {
+    await api('POST', '/api/messages/read-all', {});
+    state.userMessages = state.userMessages.map(m => ({ ...m, read: 1 }));
+    app().innerHTML = renderHomeHTML();
+    if (state.pendingGraphDays) await renderPendingChart(state.pendingGraphDays);
+  } catch(e) {}
+}
+
+
   const input = document.getElementById('pending-count-input');
   const val = input?.value.trim();
   const count = parseInt(val, 10);
@@ -1687,19 +1746,23 @@ function renderTaskReview(t, isEdit) {
     ? buildReviewOutcomeGroup(state.dropdowns.outcome, t.outcome)
     : buildReviewDropdown('outcome', 'Outcome', state.dropdowns.outcome, t.outcome);
 
-  const notesHtml = !isEdit ? `
-      <details class="form-group">
-        <summary style="cursor:pointer;font-weight:600;color:#374151;padding:4px 0;user-select:none">Notes (optional)</summary>
-        <div style="margin-top:10px">
-          <div class="warning-label">⚠️ DO NOT enter any patient names, initials, or identifiable information.</div>
-          <textarea id="te-notes" class="textarea" style="margin-top:6px" placeholder="Optional notes (no patient data)">${esc(t.notes || '')}</textarea>
-        </div>
-      </details>` : `
+  const currentFlagIds = t.flag_ids || [];
+  const flagsHtml = state.flagOptions.length ? `
       <div class="form-group">
-        <div class="warning-label">⚠️ DO NOT enter any patient names, initials, or identifiable information.</div>
-        <label for="te-notes">Notes</label>
-        <textarea id="te-notes" class="textarea">${esc(t.notes || '')}</textarea>
-      </div>`;
+        <label style="font-weight:600;color:#374151">Task Flags <span style="font-size:.8rem;color:#6b7280;font-weight:400">(optional — select any that apply)</span></label>
+        <div id="te-flags" style="display:flex;flex-direction:column;gap:6px;margin-top:6px">
+          ${state.flagOptions.map(f => `
+          <label style="display:flex;align-items:center;gap:8px;font-size:.9rem;cursor:pointer">
+            <input type="checkbox" class="flag-check" data-id="${f.id}" ${currentFlagIds.includes(f.id) ? 'checked' : ''}
+                   style="width:16px;height:16px;accent-color:#1a56db">
+            ${esc(f.value)}
+          </label>`).join('')}
+        </div>
+        <div id="te-flag-new" style="margin-top:8px;display:flex;gap:6px">
+          <input id="te-flag-new-input" class="input" type="text" placeholder="Suggest a new flag…" style="flex:1">
+          <button class="btn btn-outline btn-sm" onclick="suggestNewFlag()">Send</button>
+        </div>
+      </div>` : '';
 
   app().innerHTML = `
   <div class="view">
@@ -1723,7 +1786,7 @@ function renderTaskReview(t, isEdit) {
         <label for="te-assigned">Date assigned</label>
         <input id="te-assigned" class="input" type="date" value="${t.assigned_date || new Date().toISOString().split('T')[0]}">
       </div>
-      ${notesHtml}
+      ${flagsHtml}
     </div>
     <div class="card">
       <div class="card-title">Interruptions</div>
@@ -1777,9 +1840,18 @@ function buildReviewOutcomeGroup(options, current) {
   </div>`;
 }
 
-function onOutcomeEndChange() {
-  // no-op: handled by combobox now
+async function suggestNewFlag() {
+  const input = document.getElementById('te-flag-new-input');
+  const val = (input?.value || '').trim();
+  if (!val) return;
+  try {
+    const d = await api('POST', '/api/flags/propose', { value: val });
+    if (!d) return;
+    if (input) input.value = '';
+    showAlert(d.message || 'Suggestion sent.', 'success', 'te-alerts');
+  } catch(e) { showAlert(e.message, 'error', 'te-alerts'); }
 }
+
 
 async function submitNewOutcomeEnd() {
   const input = document.getElementById('te-outcome-new-input');
@@ -1821,13 +1893,16 @@ async function submitTaskReview(taskId, isEdit, dest) {
   const subcategoryVal = document.getElementById('te-subcategory-sel')?.value || t.subcategory || null;
   if (isEdit && !categoryVal) { showAlert('Please select a Task From.', 'error', 'te-alerts'); return; }
   if (isEdit && !subcategoryVal) { showAlert('Please select a Task Type.', 'error', 'te-alerts'); return; }
+  // Collect selected flag IDs
+  const flagChecks = document.querySelectorAll('#te-flags .flag-check:checked');
+  const flag_ids = Array.from(flagChecks).map(el => Number(el.dataset.id));
   const body = {
     status: 'completed',
     is_duty: dutyEl ? (dutyEl.classList.contains('active') ? 1 : 0) : (t.is_duty ? 1 : 0),
     category: categoryVal,
     subcategory: subcategoryVal,
     outcome,
-    notes: document.getElementById('te-notes')?.value || null,
+    flag_ids,
     start_time: start ? new Date(start).toISOString() : t.start_time,
     end_time: new Date(end).toISOString(),
     interruptions: t.interruptions || [],
@@ -1839,8 +1914,6 @@ async function submitTaskReview(taskId, isEdit, dest) {
     stopActivityTracking();
     await checkActiveTask();
     if (dest === 'start') {
-      // Track category and subcategory so the task-start dropdowns can highlight
-      // the most recently used option with a light-green indicator.
       state.lastUsedCombos = { category: categoryVal, subcategory: subcategoryVal };
       renderTaskStart();
     } else {
@@ -2063,6 +2136,7 @@ function renderAnalyticsContent(data, mode, pendingLog) {
           <div class="task-card-title">${esc(t.category || 'Uncategorised')}${t.subcategory ? ' › ' + esc(t.subcategory) : ''}</div>
           ${t.outcome ? `<div class="task-card-meta">Outcome: ${esc(t.outcome)}</div>` : ''}
           ${t.interruptions?.length ? `<div class="task-card-meta">⚠️ ${t.interruptions.length} interruption(s)</div>` : ''}
+          ${t.flag_labels?.length ? `<div class="task-card-meta" style="color:#dc2626">🚩 ${t.flag_labels.map(f => esc(f)).join(', ')}</div>` : ''}
           <div class="task-card-actions">
             <button class="btn btn-outline btn-sm" onclick="loadAndEditTask(${t.id})">✏️ Edit</button>
             <button class="btn btn-danger btn-sm" onclick="deleteTask(${t.id})">🗑️ Delete</button>
@@ -2092,6 +2166,7 @@ function renderAnalyticsContent(data, mode, pendingLog) {
   const hasHour = Object.keys(s.byHour || {}).length > 0;
   const hasDow = Object.keys(s.byDayOfWeek || {}).length > 0;
   const hasOutcome = Object.keys(s.byOutcome || {}).length > 0;
+  const hasFlags = Object.keys(s.byFlag || {}).length > 0;
 
   app().innerHTML = `
   <div class="view">
@@ -2109,6 +2184,7 @@ function renderAnalyticsContent(data, mode, pendingLog) {
       <div class="stat-card"><div class="stat-number">${s.personalCount}</div><div class="stat-label">Personal</div></div>
       <div class="stat-card"><div class="stat-number">${s.totalInterruptions || 0}</div><div class="stat-label">Interruptions</div></div>
       <div class="stat-card"><div class="stat-number">${s.avgInterruptionsPerTask ?? 0}</div><div class="stat-label">Avg intr/task</div></div>
+      <div class="stat-card"><div class="stat-number">${s.tasksWithFlags ?? 0}</div><div class="stat-label">Flagged tasks</div></div>
       <div class="stat-card"><div class="stat-number">${pendingLabel}</div><div class="stat-label">Pending tasks</div></div>
     </div>
     ${regressionNote}
@@ -2135,6 +2211,11 @@ function renderAnalyticsContent(data, mode, pendingLog) {
     <div class="card">
       <div class="card-title">Tasks by Type</div>
       <div class="chart-container" style="height:${Math.max(180, subLabels.length * 44)}px"><canvas id="chart-sub"></canvas></div>
+    </div>` : ''}
+    ${hasFlags ? `
+    <div class="card">
+      <div class="card-title">Task Flag Distribution</div>
+      <div class="chart-container" style="height:${Math.max(180, Object.keys(s.byFlag).length * 44)}px"><canvas id="chart-flags"></canvas></div>
     </div>` : ''}
     ${hasHour ? `
     <div class="card">
@@ -2221,6 +2302,14 @@ function renderAnalyticsContent(data, mode, pendingLog) {
       const dowCounts = dowNames.map((_, i) => (s.byDayOfWeek[i] || { count: 0 }).count);
       renderChart('chart-dow', 'bar', dowNames, [{ label: 'Tasks', data: dowCounts, backgroundColor: COLORS }],
         { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } } });
+    }
+
+    // Flag distribution bar chart
+    if (hasFlags) {
+      const flagLabels = Object.keys(s.byFlag);
+      const flagCounts = flagLabels.map(k => s.byFlag[k]);
+      renderChart('chart-flags', 'bar', flagLabels, [{ label: 'Count', data: flagCounts, backgroundColor: '#dc2626' }],
+        { indexAxis: 'y', plugins: { legend: { display: false } }, scales: { x: { beginAtZero: true, ticks: { stepSize: 1 } } } });
     }
 
     // Trend + interruptions over time (history only)
@@ -2369,7 +2458,7 @@ async function renderAdmin() {
   pushHistory('admin');
   app().innerHTML = `<div class="view"><p class="loading">Loading admin panel…</p></div>`;
   try {
-    const [stats, users, dropOpts, settings, pendingUsers, awaitingUsers, userGroups, pendingGroups] = await Promise.all([
+    const [stats, users, dropOpts, settings, pendingUsers, awaitingUsers, userGroups, pendingGroups, smtpSettings, notices, flagOpts, proposals] = await Promise.all([
       api('GET', '/api/admin/stats'),
       api('GET', '/api/admin/users'),
       api('GET', '/api/dropdowns/admin/all'),
@@ -2378,16 +2467,20 @@ async function renderAdmin() {
       api('GET', '/api/admin/awaiting-activation'),
       api('GET', '/api/admin/user-groups'),
       api('GET', '/api/admin/pending-groups'),
+      api('GET', '/api/admin/smtp'),
+      api('GET', '/api/admin/notices'),
+      api('GET', '/api/flags/admin/all'),
+      api('GET', '/api/admin/dropdown-proposals'),
     ]);
     if (!stats || !users || !dropOpts || !settings || !pendingUsers || !awaitingUsers || !userGroups || !pendingGroups) return;
-    renderAdminContent(stats, users?.users || [], dropOpts?.options || [], settings, pendingUsers?.users || [], awaitingUsers?.users || [], userGroups?.groups || [], pendingGroups?.groups || []);
+    renderAdminContent(stats, users?.users || [], dropOpts?.options || [], settings, pendingUsers?.users || [], awaitingUsers?.users || [], userGroups?.groups || [], pendingGroups?.groups || [], smtpSettings || {}, notices?.notices || [], flagOpts?.options || [], proposals?.proposals || []);
   } catch(e) {
     app().innerHTML = `<div class="view"><div id="admin-alerts"></div></div>`;
     showAlert(e.message, 'error', 'admin-alerts');
   }
 }
 
-function renderAdminContent(stats, users, dropOpts, settings, pendingUsers, awaitingUsers, userGroups, pendingGroups) {
+function renderAdminContent(stats, users, dropOpts, settings, pendingUsers, awaitingUsers, userGroups, pendingGroups, smtpSettings, notices, flagOpts, proposals) {
   const pending = dropOpts.filter(o => !o.approved);
   const approved = dropOpts.filter(o => o.approved);
   const userCards = users.map(u => `
@@ -2432,19 +2525,44 @@ function renderAdminContent(stats, users, dropOpts, settings, pendingUsers, awai
     </div>`;
   }).join('');
 
-  const pendingCards = pending.length ? pending.map(o => `
+  // Dropdown proposals are now metadata-only (email-based); show pending proposal count
+  const proposalCards = proposals.length ? proposals.map(p => `
   <div class="card" style="padding:12px">
     <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
       <div>
-        <span style="font-size:.8rem;color:#6b7280">${esc(o.field_name)}</span>
-        <span style="font-weight:700;margin-left:8px">${esc(o.value)}</span>
+        <span style="font-size:.8rem;color:#6b7280">${esc(p.field_name)}</span>
+        <span style="font-weight:600;margin-left:8px">${esc(p.username || '?')}</span>
+        <span style="font-size:.75rem;color:#6b7280;display:block;margin-top:2px">Submitted ${new Date(p.created_at+'Z').toLocaleString()} — check your email for the suggested value</span>
       </div>
-      <div style="display:flex;gap:6px">
-        <button class="btn btn-primary btn-sm" onclick="approveDropdown(${o.id})">✓ Approve</button>
-        <button class="btn btn-danger btn-sm" onclick="deleteDropdown(${o.id})">✗ Reject</button>
+      <button class="btn btn-outline btn-sm" onclick="dismissProposal(${p.id})">✓ Done</button>
+    </div>
+  </div>`).join('') : '<p style="font-size:.85rem;color:#6b7280">No pending email proposals.</p>';
+
+  // Flag options section
+  const flagOptionItems = flagOpts.map(f => `
+  <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid #f3f4f6">
+    <span style="font-size:.9rem">${esc(f.value)}</span>
+    <div style="display:flex;gap:4px">
+      <button class="btn btn-outline btn-sm" onclick="renameFlagOption(${f.id}, '${esc(f.value)}')">✏️</button>
+      <button class="btn btn-danger btn-sm" onclick="deleteFlagOption(${f.id})">✕</button>
+    </div>
+  </div>`).join('');
+
+  // Notices section
+  const noticeItems = notices.map(n => `
+  <div class="card" style="padding:12px">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;flex-wrap:wrap">
+      <div style="flex:1">
+        <p style="font-size:.9rem;color:#374151;margin-bottom:4px">${esc(n.message)}</p>
+        <span style="font-size:.75rem;color:#6b7280">${n.active ? '✅ Active' : '⏸️ Inactive'} · ${new Date(n.created_at+'Z').toLocaleDateString()}</span>
+      </div>
+      <div style="display:flex;gap:4px;flex-shrink:0">
+        <button class="btn btn-outline btn-sm" onclick="editNotice(${n.id}, '${esc(n.message)}', ${n.active})">✏️</button>
+        <button class="btn ${n.active ? 'btn-secondary' : 'btn-primary'} btn-sm" onclick="toggleNotice(${n.id}, ${n.active})">${n.active ? 'Deactivate' : 'Activate'}</button>
+        <button class="btn btn-danger btn-sm" onclick="deleteNotice(${n.id})">✕</button>
       </div>
     </div>
-  </div>`).join('') : '<p style="font-size:.85rem;color:#6b7280">No pending proposals.</p>';
+  </div>`).join('');
 
   const modeLabel = { disabled: 'Disabled', admin_approved: 'Administrator approval', auto: 'Automatic approval' };
   const modeOpts = (field, current) => ['disabled','admin_approved','auto'].map(m =>
@@ -2550,8 +2668,9 @@ function renderAdminContent(stats, users, dropOpts, settings, pendingUsers, awai
       ${dropSections}
     </div>
 
-    <div class="section-heading">Pending User Proposals</div>
-    ${pendingCards}
+    <div class="section-heading">Pending Email Proposals ${proposals.length ? `<span class="badge badge-warn" style="margin-left:6px">${proposals.length}</span>` : ''}</div>
+    <p style="font-size:.85rem;color:#6b7280;margin-bottom:10px">These users suggested a dropdown option which was emailed to you. Add the option above, then mark each as done.</p>
+    ${proposalCards}
 
     <div class="section-heading">Pending Group Proposals ${pendingGroups.length ? `<span class="badge badge-warn" style="margin-left:6px">${pendingGroups.length}</span>` : ''}</div>
     ${pendingGroups.length ? pendingGroups.map(g => `
@@ -2567,6 +2686,67 @@ function renderAdminContent(stats, users, dropOpts, settings, pendingUsers, awai
         </div>
       </div>
     </div>`).join('') : '<p style="font-size:.85rem;color:#6b7280">No pending group suggestions.</p>'}
+
+    <div class="section-heading">Task Flag Options</div>
+    <p style="font-size:.85rem;color:#6b7280;margin-bottom:10px">Flags allow users to annotate tasks with one or more issues. Users can suggest new flags via email.</p>
+    <div class="card">
+      ${flagOptionItems || '<p style="font-size:.85rem;color:#6b7280">No flag options.</p>'}
+      <div class="add-new-row" style="margin-top:10px">
+        <input id="add-flag" class="input" type="text" placeholder="New flag option…">
+        <button class="btn btn-outline btn-sm" onclick="addFlagOption()">Add</button>
+      </div>
+    </div>
+
+    <div class="section-heading">Notices</div>
+    <p style="font-size:.85rem;color:#6b7280;margin-bottom:10px">Active notices are shown on users' home screen.</p>
+    ${noticeItems || '<p style="font-size:.85rem;color:#6b7280;margin-bottom:10px">No notices yet.</p>'}
+    <div class="card">
+      <textarea id="new-notice-text" class="textarea" placeholder="Type a notice to display to all users…" style="margin-bottom:8px"></textarea>
+      <button class="btn btn-primary btn-full" onclick="createNotice()">📢 Post Notice</button>
+    </div>
+
+    <div class="section-heading">SMTP Email Settings</div>
+    <p style="font-size:.85rem;color:#6b7280;margin-bottom:10px">Required for sending dropdown suggestions by email instead of storing them on the server.</p>
+    <div class="card">
+      <div class="form-group">
+        <label style="font-size:.9rem">SMTP Host</label>
+        <input id="smtp-host" class="input" type="text" value="${esc(smtpSettings.host || '')}" placeholder="e.g. smtp.nhs.net" style="margin-top:4px">
+      </div>
+      <div style="display:flex;gap:10px;margin-top:10px">
+        <div class="form-group" style="flex:1">
+          <label style="font-size:.9rem">Port</label>
+          <input id="smtp-port" class="input" type="number" value="${smtpSettings.port || 587}" placeholder="587" style="margin-top:4px">
+        </div>
+        <div class="form-group" style="flex:1">
+          <label style="font-size:.9rem">Use TLS/SSL</label>
+          <select id="smtp-secure" class="input" style="margin-top:4px">
+            <option value="false" ${smtpSettings.secure !== 'true' ? 'selected' : ''}>STARTTLS (port 587)</option>
+            <option value="true"  ${smtpSettings.secure === 'true'  ? 'selected' : ''}>SSL/TLS (port 465)</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group" style="margin-top:10px">
+        <label style="font-size:.9rem">SMTP Username</label>
+        <input id="smtp-user" class="input" type="text" value="${esc(smtpSettings.user || '')}" autocomplete="off" style="margin-top:4px">
+      </div>
+      <div class="form-group" style="margin-top:10px">
+        <label style="font-size:.9rem">SMTP Password ${smtpSettings.hasPass ? '<span style="color:#059669">(saved)</span>' : ''}</label>
+        <input id="smtp-pass" class="input" type="password" placeholder="${smtpSettings.hasPass ? 'Leave blank to keep existing' : 'Enter password'}" autocomplete="new-password" style="margin-top:4px">
+      </div>
+      <div class="form-group" style="margin-top:10px">
+        <label style="font-size:.9rem">From address</label>
+        <input id="smtp-from" class="input" type="email" value="${esc(smtpSettings.from || '')}" placeholder="tasker@example.com" style="margin-top:4px">
+      </div>
+      <div class="form-group" style="margin-top:10px">
+        <label style="font-size:.9rem">Send suggestions to (your NHS email)</label>
+        <input id="smtp-to" class="input" type="email" value="${esc(smtpSettings.to || '')}" placeholder="you@nhs.net" style="margin-top:4px">
+      </div>
+      <div style="display:flex;gap:8px;margin-top:12px">
+        <button class="btn btn-primary" style="flex:1" onclick="saveSmtpSettings()">💾 Save SMTP Settings</button>
+        <button class="btn btn-outline" onclick="testSmtp()">🔧 Test</button>
+      </div>
+      <div id="smtp-alerts" style="margin-top:8px"></div>
+    </div>
 
     <div class="admin-desktop-grid" style="margin-top:0">
       <div>
@@ -2784,6 +2964,103 @@ async function renameDropdown(id, currentValue) {
   try {
     await api('PUT', `/api/dropdowns/admin/${id}`, { value: newValue.trim() });
     showAlert(`Renamed to: ${newValue.trim()}`, 'success', 'admin-alerts');
+    renderAdmin();
+  } catch(e) { showAlert(e.message, 'error', 'admin-alerts'); }
+}
+
+// ── Admin SMTP, notices, flags, proposals ─────────────────────────────────────
+
+async function saveSmtpSettings() {
+  const body = {
+    host:   document.getElementById('smtp-host')?.value || '',
+    port:   document.getElementById('smtp-port')?.value || '587',
+    secure: document.getElementById('smtp-secure')?.value || 'false',
+    user:   document.getElementById('smtp-user')?.value || '',
+    pass:   document.getElementById('smtp-pass')?.value || undefined,
+    from:   document.getElementById('smtp-from')?.value || '',
+    to:     document.getElementById('smtp-to')?.value || '',
+  };
+  if (!body.pass) delete body.pass;
+  try {
+    await api('POST', '/api/admin/smtp', body);
+    showAlert('SMTP settings saved.', 'success', 'smtp-alerts');
+  } catch(e) { showAlert(e.message, 'error', 'smtp-alerts'); }
+}
+
+async function testSmtp() {
+  try {
+    await api('POST', '/api/admin/smtp/test', {});
+    showAlert('Test email sent successfully!', 'success', 'smtp-alerts');
+  } catch(e) { showAlert(e.message, 'error', 'smtp-alerts'); }
+}
+
+async function createNotice() {
+  const msg = document.getElementById('new-notice-text')?.value.trim();
+  if (!msg) return;
+  try {
+    await api('POST', '/api/admin/notices', { message: msg });
+    showAlert('Notice posted.', 'success', 'admin-alerts');
+    renderAdmin();
+  } catch(e) { showAlert(e.message, 'error', 'admin-alerts'); }
+}
+
+async function editNotice(id, currentMsg, active) {
+  const newMsg = prompt('Edit notice:', currentMsg);
+  if (!newMsg || newMsg.trim() === currentMsg) return;
+  try {
+    await api('PUT', `/api/admin/notices/${id}`, { message: newMsg.trim() });
+    showAlert('Notice updated.', 'success', 'admin-alerts');
+    renderAdmin();
+  } catch(e) { showAlert(e.message, 'error', 'admin-alerts'); }
+}
+
+async function toggleNotice(id, currentlyActive) {
+  try {
+    await api('PUT', `/api/admin/notices/${id}`, { active: !currentlyActive });
+    renderAdmin();
+  } catch(e) { showAlert(e.message, 'error', 'admin-alerts'); }
+}
+
+async function deleteNotice(id) {
+  if (!confirm('Delete this notice?')) return;
+  try {
+    await api('DELETE', `/api/admin/notices/${id}`, {});
+    renderAdmin();
+  } catch(e) { showAlert(e.message, 'error', 'admin-alerts'); }
+}
+
+async function addFlagOption() {
+  const val = document.getElementById('add-flag')?.value.trim();
+  if (!val) return;
+  try {
+    await api('POST', '/api/flags/admin', { value: val });
+    showAlert('Flag option added.', 'success', 'admin-alerts');
+    renderAdmin();
+  } catch(e) { showAlert(e.message, 'error', 'admin-alerts'); }
+}
+
+async function renameFlagOption(id, currentValue) {
+  const newValue = prompt(`Rename "${currentValue}" to:`, currentValue);
+  if (!newValue || newValue.trim() === currentValue) return;
+  try {
+    await api('PUT', `/api/flags/admin/${id}`, { value: newValue.trim() });
+    showAlert(`Flag renamed to: ${newValue.trim()}`, 'success', 'admin-alerts');
+    renderAdmin();
+  } catch(e) { showAlert(e.message, 'error', 'admin-alerts'); }
+}
+
+async function deleteFlagOption(id) {
+  if (!confirm('Delete this flag option? It will be removed from all tasks.')) return;
+  try {
+    await api('DELETE', `/api/flags/admin/${id}`, {});
+    showAlert('Flag option deleted.', 'success', 'admin-alerts');
+    renderAdmin();
+  } catch(e) { showAlert(e.message, 'error', 'admin-alerts'); }
+}
+
+async function dismissProposal(id) {
+  try {
+    await api('DELETE', `/api/admin/dropdown-proposals/${id}`, {});
     renderAdmin();
   } catch(e) { showAlert(e.message, 'error', 'admin-alerts'); }
 }

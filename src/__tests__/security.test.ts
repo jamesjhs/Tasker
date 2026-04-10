@@ -276,7 +276,7 @@ describe('Input validation', () => {
     expect(res.body.error).toMatch(/today/i);
   });
 
-  test('Task start: notes over 2000 chars rejected', async () => {
+  test('Task start: notes field is ignored (no longer used)', async () => {
     const a = agent();
     const { csrf } = await createUserSession(a);
     const res = await a.post('/api/tasks/start')
@@ -287,8 +287,8 @@ describe('Input validation', () => {
         assigned_date: new Date().toISOString().split('T')[0],
         notes: 'A'.repeat(2001),
       });
-    expect(res.status).toBe(400);
-    expect(res.body.error).toMatch(/2000/);
+    // Notes field is no longer stored; request should succeed (200/201)
+    expect(res.status).toBe(200);
   });
 
   test('Pending-count: non-numeric count → 400', async () => {

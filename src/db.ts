@@ -125,6 +125,43 @@ function initSchema(db: Database.Database): void {
       count INTEGER NOT NULL,
       logged_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
+
+    CREATE TABLE IF NOT EXISTS notices (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      message TEXT NOT NULL,
+      active INTEGER NOT NULL DEFAULT 1,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS user_messages (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      message TEXT NOT NULL,
+      read INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS task_flag_options (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      value TEXT NOT NULL UNIQUE,
+      approved INTEGER NOT NULL DEFAULT 1,
+      proposed_by_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS task_flags (
+      task_id INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+      flag_option_id INTEGER NOT NULL REFERENCES task_flag_options(id) ON DELETE CASCADE,
+      PRIMARY KEY (task_id, flag_option_id)
+    );
+
+    CREATE TABLE IF NOT EXISTS dropdown_proposals (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      field_name TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
   `);
 
   // Migrate existing databases: add lockout columns if missing
@@ -186,5 +223,19 @@ function initSchema(db: Database.Database): void {
     db.prepare(
       'INSERT OR IGNORE INTO group_dropdown_options (group_id, dropdown_option_id) SELECT ?,id FROM dropdown_options WHERE approved=1'
     ).run(generalGroupId);
+  }
+
+
+  const flagCount = (db.prepare('SELECT COUNT(*) as c FROM task_flag_options WHERE approved=1').get() as { c: number }).c;
+  if (flagCount === 0) {
+    const insFlag = db.prepare('INSERT OR IGNORE INTO task_flag_options (value, approved) VALUES (?,1)');
+    const seedFlags = db.transaction((vals: string[]) => { for (const v of vals) insFlag.run(v); });
+    seedFlags([
+      'Sent to wrong user',
+      'Priority too high',
+      'Priority too low',
+      'Should be sent to group',
+      'Should be sent to specific user',
+    ]);
   }
 }

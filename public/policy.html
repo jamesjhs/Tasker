@@ -34,7 +34,8 @@
   <ul>
     <li><strong>Anonymous username</strong> — a computer-generated, two-word identifier (e.g. CalmRiver). Not linked to your real name.</li>
     <li><strong>Password</strong> — stored as a one-way cryptographic hash. Never readable by anyone, including the administrator.</li>
-    <li><strong>Task metadata</strong> — type (duty/personal), start and end times, category, subcategory, outcome, interruption times, and optional free-text notes.</li>
+    <li><strong>Task metadata</strong> — type (duty/personal), start and end times, category, subcategory, outcome, and interruption times.</li>
+    <li><strong>Task flags</strong> — structured, administrator-defined annotations selected from a predefined list (e.g. "Sent to wrong user"). No free-text is stored.</li>
     <li><strong>Anonymous event counts</strong> — total login events, task counts etc. No user identity or data is attached to these counts.</li>
   </ul>
 
@@ -46,10 +47,11 @@
     <li>Staff identification numbers, initials, or role-specific identifiers</li>
     <li>Patient names, initials, ward names, or any information that could identify a patient</li>
     <li>Location data or IP addresses</li>
+    <li>Free-text notes or free-text suggestions — these are transmitted by email to the administrator and are never stored on the server</li>
   </ul>
 
   <div class="info-box">
-    ℹ️ The free-text notes field is provided for task metadata only. You are personally responsible for ensuring no identifiable information — including patient or staff names — is entered into it.
+    ℹ️ Free-text notes have been removed from v1.8.1. Task annotations use structured flag options only. Dropdown and flag suggestions are emailed directly to the administrator and are never stored on this server.
   </div>
 
   <h2>4. Data Retention</h2>
@@ -58,7 +60,7 @@
   <h2>5. Who Can See What</h2>
   <ul>
     <li><strong>You</strong> — can see and export only your own task data. You cannot see any other user's data.</li>
-    <li><strong>Administrator</strong> — can see only the total number of registered users and total event counts. The administrator cannot access your task data, notes, timestamps, or analytics. The administrator can see your username for the purpose of account management.</li>
+    <li><strong>Administrator</strong> — can see only the total number of registered users and total event counts. The administrator cannot access your task data, timestamps, or analytics. The administrator can see your username for the purpose of account management.</li>
     <li><strong>No one else</strong> — data is stored only on the server hosting this application and is not shared with any third party, cloud service, or NHS system.</li>
   </ul>
 

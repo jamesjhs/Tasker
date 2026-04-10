@@ -1,6 +1,6 @@
 # Tasker
 
-**v1.7.1** — An anonymous task-logging PWA for healthcare staff. Built with TypeScript, Express 5, SQLite, and vanilla JS.
+**v1.8.1** — An anonymous task-logging PWA for healthcare staff. Built with TypeScript, Express 5, SQLite, and vanilla JS.
 
 ---
 
@@ -9,17 +9,20 @@
 - **Anonymous by design** — usernames are auto-generated memorable word pairs. No real names, emails, or patient data stored.
 - **PWA** — installable on mobile, works offline for cached assets.
 - **Task tracking** — duty vs personal tasks, categories, subcategories, outcomes, interruption handling.
-- **Analytics** — session and 30-day history with Chart.js charts, filtering, and linear regression trendlines.
-- **Excel export** — users can download their own data as `.xlsx`.
-- **User groups** — administrators create groups that define which dropdown options users see. Users select their group on first login and can suggest new groups for administrator review.
-- **Personal option customisation** — after selecting a group, users can tick/untick individual options to build their own personalised dropdown lists. Accessible at any time from Settings.
-- **Integrated combobox dropdowns** — all task dropdowns are searchable comboboxes: type to filter, click or press Enter to select, suggest new options inline.
-- **Admin panel** — user management (counts only, no data access), DB backup/restore, dropdown configuration, registration settings, group management, pending group/option proposal review. Desktop-optimised layout (max 900 px, multi-column).
-- **Configurable registration** — administrator controls three levels for self-registration and user invitations: disabled, administrator-approved (default), or automatic approval.
-- **User invitations** — logged-in users can invite others using the same temp-password flow as admins (subject to the configured policy).
+- **Task flags** — admin-managed list of structured task annotations (e.g. "Sent to wrong user", "Priority too high"). Users select any that apply; free-text notes removed for data protection. Users can suggest new flags via email.
+- **Analytics** — session and 30-day history with Chart.js charts, filtering, flag distribution chart, and linear regression trendlines.
+- **Excel export** — users can download their own data as `.xlsx` (includes Flags column).
+- **User groups** — administrators create groups that define which dropdown options users see.
+- **Personal option customisation** — users can tick/untick individual options to build their own personalised dropdown lists.
+- **SMTP email suggestions** — dropdown and flag suggestions are emailed to the administrator instead of being stored on the server, improving data security. Configure via admin panel or environment variables.
+- **Notices** — administrators can post notices that appear on every user's home screen.
+- **User messages** — administrators can send messages to individual users or broadcast to all users; messages appear on the user's home screen and are dismissable.
+- **Integrated combobox dropdowns** — all task dropdowns are searchable comboboxes.
+- **Admin panel** — user management, DB backup/restore, dropdown configuration, SMTP settings, notices management, task flag options, registration settings, group management, pending proposals. Desktop-optimised layout.
+- **Configurable registration** — administrator controls three levels for self-registration and user invitations.
 - **30-day data retention** — task data is automatically deleted after 30 days.
-- **Health-check endpoint** — `GET /readyz` returns a JSON status response for uptime/heartbeat monitoring (no authentication required).
-- **Asset version endpoint** — `GET /api/version` returns `{"version":"1.7.1"}` for client-side cache-busting.
+- **Health-check endpoint** — `GET /readyz` returns a JSON status response for uptime/heartbeat monitoring.
+- **Asset version endpoint** — `GET /api/version` returns `{"version":"1.8.1"}` for client-side cache-busting.
 
 ---
 
@@ -147,6 +150,18 @@ See [`/policy`](/policy) for the full Data and Use Policy.
 ---
 
 ## Changelog
+
+### v1.8.1 (April 2026)
+
+- **SMTP email configuration** — Added SMTP settings section in the admin panel. Dropdown and flag suggestions from users are now emailed to the administrator instead of being stored on the server. This removes free-text personal data from the database in line with data protection principles. Supports STARTTLS (port 587) and SSL/TLS (port 465). SMTP password is encrypted at rest using AES-256-GCM.
+- **Task flags replace free-text notes** — The free-text "Notes" field has been removed from task review. Instead, users select from an admin-managed list of structured flag options (e.g. "Sent to wrong user", "Priority too high"). Multiple flags can be applied per task. Flags are stored per-task in a dedicated `task_flags` table.
+- **User-suggestable flags** — Users can suggest new flag options from the task review screen. Suggestions are sent by email to the administrator and never stored on the server.
+- **Notices** — Administrators can create, edit, activate/deactivate, and delete notices that appear prominently on every user's home screen.
+- **User messages** — Administrators can send messages to individual users or broadcast to all active users. Messages appear on the user's home screen with individual dismiss controls.
+- **Auto-notification on dropdown approval** — When an admin adds a new dropdown option for a field, users who had pending email proposals for that field automatically receive a user message confirming the update.
+- **Analytics updates** — New "Flagged tasks" stat card; new "Task Flag Distribution" bar chart; flag labels shown on individual task cards; export includes `Flags` column instead of `Notes`.
+- **Default flag options** — Five default task flag options are seeded on first run: "Sent to wrong user", "Priority too high", "Priority too low", "Should be sent to group", "Should be sent to specific user".
+- **Dependency** — Added `nodemailer@8.0.5`.
 
 ### v1.7.1 (April 2026)
 

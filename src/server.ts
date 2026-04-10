@@ -15,6 +15,8 @@ import tasksRouter from './routes/tasks';
 import analyticsRouter from './routes/analytics';
 import dropdownsRouter from './routes/dropdowns';
 import adminRouter from './routes/admin';
+import flagsRouter from './routes/flags';
+import messagesRouter from './routes/messages';
 
 import { version as APP_VERSION } from '../package.json';
 
@@ -112,6 +114,8 @@ app.use('/api/tasks', apiLimiter, tasksRouter);
 app.use('/api/analytics', apiLimiter, analyticsRouter);
 app.use('/api/dropdowns', apiLimiter, dropdownsRouter);
 app.use('/api/admin', apiLimiter, adminRouter);
+app.use('/api/flags', apiLimiter, flagsRouter);
+app.use('/api/messages', apiLimiter, messagesRouter);
 
 app.get('/policy', apiLimiter, (_req, res) => res.sendFile(path.join(__dirname, '..', 'public', 'policy.html')));
 app.get('/dpia',   apiLimiter, (_req, res) => res.sendFile(path.join(__dirname, '..', 'public', 'dpia.html')));

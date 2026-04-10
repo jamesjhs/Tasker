@@ -1,7 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { getDb } from '../db';
 import { requireAuth, requirePasswordChange, requireActivation } from '../middleware/index';
-import { decryptField } from '../encrypt';
 import ExcelJS from 'exceljs';
 
 const router = Router();
@@ -77,6 +76,15 @@ function buildSummary(tasks: any[]) {
     interruptionsByCategory[cat] = (interruptionsByCategory[cat] || 0) + (t.interruptions?.length || 0);
   }
 
+  // Flag breakdown
+  const byFlag: Record<string, number> = {};
+  for (const t of tasks) {
+    for (const f of (t.flag_labels || [])) {
+      byFlag[f] = (byFlag[f] || 0) + 1;
+    }
+  }
+  const tasksWithFlags = tasks.filter(t => (t.flag_labels?.length || 0) > 0).length;
+
   // Linear regression on daily counts
   const dates = Object.keys(byDate).sort();
   let regression: { slope: number; intercept: number; r2: number } | null = null;
@@ -118,16 +126,23 @@ function buildSummary(tasks: any[]) {
     personalCount: personal.length,
     personalMins: personal.reduce((s, t) => s + mins(t.start_time, t.end_time, t.interruptions), 0),
     byCategory, byOutcome, byDate, byHour, byDayOfWeek, bySubcategory, interruptionsByCategory,
+    byFlag, tasksWithFlags,
     dates, regression,
   };
 }
 
 router.get('/session', (req: Request, res: Response) => {
   const s = req.session as any;
+  const db = getDb();
   const dateStr = s.sessionDate || new Date().toISOString().split('T')[0];
-  const tasks = (getDb().prepare(
+  const tasks = (db.prepare(
     `SELECT * FROM tasks WHERE user_id=? AND status='completed' AND date(start_time)=? ORDER BY start_time`
-  ).all(s.userId, dateStr) as any[]).map(t => ({ ...t, interruptions: JSON.parse(t.interruptions || '[]'), notes: decryptField(t.notes) }));
+  ).all(s.userId, dateStr) as any[]).map(t => {
+    const flagLabels = (db.prepare(
+      `SELECT tfo.value FROM task_flags tf JOIN task_flag_options tfo ON tfo.id=tf.flag_option_id WHERE tf.task_id=?`
+    ).all(t.id) as any[]).map(r => r.value);
+    return { ...t, interruptions: JSON.parse(t.interruptions || '[]'), flag_labels: flagLabels };
+  });
   res.json({ tasks, summary: buildSummary(tasks) });
 });
 
@@ -143,16 +158,26 @@ router.get('/history', (req: Request, res: Response) => {
   if (subcategory)           { q += ' AND subcategory=?'; p.push(subcategory); }
   if (outcome)               { q += ' AND outcome=?'; p.push(outcome); }
   q += ' ORDER BY start_time';
-  const tasks = (getDb().prepare(q).all(...p) as any[]).map(t => ({ ...t, interruptions: JSON.parse(t.interruptions || '[]'), notes: decryptField(t.notes) }));
+  const db = getDb();
+  const tasks = (db.prepare(q).all(...p) as any[]).map(t => {
+    const flagLabels = (db.prepare(
+      `SELECT tfo.value FROM task_flags tf JOIN task_flag_options tfo ON tfo.id=tf.flag_option_id WHERE tf.task_id=?`
+    ).all(t.id) as any[]).map(r => r.value);
+    return { ...t, interruptions: JSON.parse(t.interruptions || '[]'), flag_labels: flagLabels };
+  });
   res.json({ tasks, summary: buildSummary(tasks) });
 });
 
 router.get('/export', async (req: Request, res: Response) => {
   const s = req.session as any;
-  const tasks = (getDb().prepare(
+  const db = getDb();
+  const tasks = (db.prepare(
     `SELECT * FROM tasks WHERE user_id=? AND status='completed' AND start_time>=datetime('now','-30 days') ORDER BY start_time`
   ).all(s.userId) as any[]).map(t => {
     const interruptions = JSON.parse(t.interruptions || '[]');
+    const flagLabels = (db.prepare(
+      `SELECT tfo.value FROM task_flags tf JOIN task_flag_options tfo ON tfo.id=tf.flag_option_id WHERE tf.task_id=?`
+    ).all(t.id) as any[]).map(r => r.value);
     return {
       'Type': t.is_duty ? 'Duty' : 'Personal',
       'Task From': t.category || '',
@@ -163,11 +188,11 @@ router.get('/export', async (req: Request, res: Response) => {
       'End Time': t.end_time ? new Date(t.end_time) : '',
       'Duration (secs)': secs(t.start_time, t.end_time, interruptions),
       'Interruptions': interruptions.length,
-      'Notes': decryptField(t.notes) || '',
+      'Flags': flagLabels.join('; '),
     };
   });
 
-  const pendingLog = getDb().prepare(
+  const pendingLog = db.prepare(
     `SELECT count, logged_at FROM pending_task_logs WHERE user_id=? ORDER BY logged_at DESC LIMIT 1`
   ).get(s.userId) as any;
 
@@ -183,7 +208,7 @@ router.get('/export', async (req: Request, res: Response) => {
     { header: 'End Time',        key: 'End Time',        width: 20, style: { numFmt: 'yyyy-mm-dd hh:mm' } },
     { header: 'Duration (secs)', key: 'Duration (secs)', width: 16 },
     { header: 'Interruptions',   key: 'Interruptions',   width: 14 },
-    { header: 'Notes',           key: 'Notes',           width: 32 },
+    { header: 'Flags',           key: 'Flags',           width: 40 },
   ];
   ws.addRows(tasks);
 
