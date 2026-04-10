@@ -481,7 +481,12 @@ async function init() {
   }
 
   setLoadingStatus('Checking for updates…');
-  if (await checkAssetVersion()) return; // New version detected — update banner shown
+  if (await checkAssetVersion()) {
+    // A new version has been deployed — show banner above.
+    // Replace loading status with clear instruction so the user knows what to do.
+    setLoadingStatus('Update available — tap "🔄 App Update Needed" above to apply it.');
+    return;
+  }
 
   try {
     setLoadingStatus('Fetching security token…');

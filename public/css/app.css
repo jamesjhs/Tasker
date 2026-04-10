@@ -3,6 +3,8 @@
    Accent: #1a56db  Danger: #dc2626  Success: #16a34a
    ===================================================================== */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+/* Ensure [hidden] attribute always hides elements regardless of display rules */
+[hidden] { display: none !important; }
 
 html, body {
   width: 100%;
