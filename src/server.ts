@@ -77,12 +77,25 @@ app.get('/readyz', (_req, res) => {
 });
 
 // ─── Static files ─────────────────────────────────────────────────────────────
+// Serve sw.js dynamically so its CACHE_NAME always reflects the current app
+// version.  The SW's activate handler deletes every cache whose name doesn't
+// match CACHE_NAME, so changing the name on each deploy automatically cleans
+// up the previous version's cached assets — even if checkAssetVersion() never
+// runs (e.g. on a first load after an update, or while offline).
+const swContent = fs
+  .readFileSync(path.join(__dirname, '..', 'public', 'sw.js'), 'utf8')
+  .replace(/'tasker-__APP_VERSION__'/g, `'tasker-${APP_VERSION}'`);
+
+app.get('/sw.js', (_req, res) => {
+  res.setHeader('Content-Type', 'application/javascript; charset=UTF-8');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Service-Worker-Allowed', '/');
+  res.send(swContent);
+});
+
 app.use(express.static(path.join(__dirname, '..', 'public'), {
   setHeaders: (res, filePath) => {
-    if (filePath.endsWith('sw.js')) {
-      res.setHeader('Cache-Control', 'no-cache');
-      res.setHeader('Service-Worker-Allowed', '/');
-    } else if (filePath.endsWith('index.html')) {
+    if (filePath.endsWith('index.html')) {
       // Always revalidate the HTML shell so clients pick up new asset fingerprints
       // immediately, even when the Service Worker has been bypassed or not yet active.
       res.setHeader('Cache-Control', 'no-cache');

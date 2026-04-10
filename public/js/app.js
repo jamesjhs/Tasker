@@ -53,6 +53,43 @@ function replaceHistory(view) {
 // ── Asset version check ───────────────────────────────────────────────────────
 let _lastVersionCheckAt = 0; // epoch ms — used to debounce foreground/poll checks
 
+/** Clear all SW caches, SW registrations, and app localStorage, then reload. */
+async function performAppUpdate() {
+  const btn = document.querySelector('#update-banner button');
+  if (btn) { btn.disabled = true; btn.textContent = 'Updating…'; }
+  // Capture the server's current version before wiping localStorage so we can
+  // write it back immediately — preventing the banner from looping on reload.
+  let latestVersion = null;
+  try {
+    const r = await fetch('/api/version', { cache: 'no-store', credentials: 'same-origin' });
+    if (r.ok) ({ version: latestVersion } = await r.json());
+  } catch (e) { /* best-effort */ }
+  try {
+    if ('caches' in window) {
+      const keys = await caches.keys();
+      await Promise.all(keys.map(k => caches.delete(k)));
+    }
+    if ('serviceWorker' in navigator) {
+      const regs = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(regs.map(reg => reg.unregister()));
+    }
+    localStorage.clear();
+    if (latestVersion) localStorage.setItem('tasker_app_version', latestVersion);
+  } catch (e) { /* best-effort */ }
+  window.location.reload();
+}
+
+/** Show a persistent top banner prompting the user to apply the update. */
+function showUpdateBanner() {
+  if (document.getElementById('update-banner')) return; // already visible
+  const banner = document.createElement('div');
+  banner.id = 'update-banner';
+  banner.innerHTML =
+    '<span>A new version of Tasker is available.</span>' +
+    '<button onclick="performAppUpdate()">🔄 App Update Needed</button>';
+  document.body.prepend(banner);
+}
+
 async function checkAssetVersion() {
   _lastVersionCheckAt = Date.now();
   try {
@@ -60,32 +97,12 @@ async function checkAssetVersion() {
     if (!r.ok) return false;
     const { version } = await r.json();
     const stored = localStorage.getItem('tasker_app_version');
-    // Clear cache whenever the stored version is missing or outdated.
+    // Show an update banner whenever the stored version is missing or outdated.
     // The stored !== null guard is intentionally absent so that users whose
-    // install pre-dates version tracking also get a cache flush.
+    // install pre-dates version tracking also see the banner.
     if (stored !== version) {
-      localStorage.setItem('tasker_app_version', version);
-      let needsReload = false;
-      if ('caches' in window) {
-        const keys = await caches.keys();
-        if (keys.length > 0) {
-          await Promise.all(keys.map(k => caches.delete(k)));
-          needsReload = true;
-        }
-      }
-      if ('serviceWorker' in navigator) {
-        const regs = await navigator.serviceWorker.getRegistrations();
-        if (regs.length > 0) {
-          await Promise.all(regs.map(reg => reg.unregister()));
-          needsReload = true;
-        }
-      }
-      // Only reload when there was something to clear; on a completely fresh
-      // install (no cached assets, no SW) a reload would be a no-op.
-      if (needsReload) {
-        window.location.reload();
-        return true;
-      }
+      showUpdateBanner();
+      return true;
     }
     return false;
   } catch (e) {
@@ -334,6 +351,9 @@ async function forceSessionExpiry() {
   state.activeTask = null;
   state.csrfToken = null;
   state.registrationConfig = null;
+  if ('caches' in window) {
+    try { await Promise.all((await caches.keys()).map(k => caches.delete(k))); } catch(e) {}
+  }
   renderInactivityLogout();
 }
 
@@ -454,7 +474,7 @@ async function init() {
   }
 
   setLoadingStatus('Checking for updates…');
-  if (await checkAssetVersion()) return; // Version mismatch — page will reload with fresh assets
+  if (await checkAssetVersion()) return; // New version detected — update banner shown
 
   try {
     setLoadingStatus('Fetching security token…');
@@ -516,8 +536,7 @@ function renderBottomNav(active) {
     <button class="nav-btn ${active==='settings'?'active':''}" onclick="renderSettings()">
       <span class="nav-icon">⚙️</span><span>Settings</span>
     </button>
-  </nav>
-  ${renderFooter()}`;
+  </nav>`;
 }
 
 // ── STATS CARDS ──────────────────────────────────────────────────────────────
@@ -536,7 +555,7 @@ async function renderLogin() {
   replaceHistory('login');
   // Force a refresh of the local SW cache so stale assets can't cause CSRF token mismatches
   if ('caches' in window) {
-    caches.keys().then(keys => Promise.all(keys.map(k => caches.delete(k)))).catch(() => {});
+    try { await Promise.all((await caches.keys()).map(k => caches.delete(k))); } catch(e) {}
   }
   // Fetch registration config and public stats in parallel
   try {
@@ -600,10 +619,8 @@ async function doLogin() {
     if (!d) return;
     // Clear all SW caches on login so every authenticated session starts with
     // the most recent assets, regardless of what the service worker had cached.
-    // Fire-and-forget: intentionally not awaited so it doesn't delay the login
-    // flow — the same pattern used in renderLogin().
     if ('caches' in window) {
-      caches.keys().then(keys => Promise.all(keys.map(k => caches.delete(k)))).catch(() => {});
+      try { await Promise.all((await caches.keys()).map(k => caches.delete(k))); } catch(e) {}
     }
     state.user = { username, isAdmin: d.isAdmin, mustChangePassword: d.mustChangePassword, pendingActivation: d.pendingActivation, userGroupId: d.userGroupId ?? null, userGroupName: d.userGroupName ?? null };
     await refreshCsrf();
@@ -909,6 +926,7 @@ function renderRegister() {
       </div>
       <button class="btn btn-primary btn-full" id="r-btn" onclick="doRegister()">Register</button>
     </div>
+    ${renderFooter()}
   </div>`;
 }
 
@@ -994,6 +1012,7 @@ function renderAwaitActivation() {
       Please check back later. Once activated, log in again to access Tasker.
     </div>
     <button class="btn btn-secondary btn-full" style="margin-top:16px" onclick="doLogout()">🚪 Log Out</button>
+    ${renderFooter()}
   </div>`;
 }
 
@@ -1032,6 +1051,7 @@ function renderChangePassword() {
       </div>
       <button class="btn btn-primary btn-full" id="cp-btn" onclick="doChangePassword(${isForced})">Save new password</button>
     </div>
+    ${renderFooter()}
   </div>`;
   const cpEnter = e => { if (e.key === 'Enter') doChangePassword(isForced); };
   document.getElementById('cp-new').addEventListener('keydown', cpEnter);
@@ -1117,6 +1137,7 @@ function renderHomeHTML() {
       </div>
       ${state.pendingGraphDays ? `<div class="chart-container" style="height:180px;margin-top:12px"><canvas id="chart-pending"></canvas></div>` : ''}
     </div>
+  ${renderFooter()}
   </div>
   ${renderBottomNav('home')}`;
 }
@@ -1245,6 +1266,7 @@ function renderSettings() {
       <div class="divider"></div>
       <button class="btn btn-danger btn-full" onclick="renderDeleteAccount()">🗑️ Delete My Account</button>
     </div>
+  ${renderFooter()}
   </div>
   ${renderBottomNav('settings')}`;
 }
@@ -2129,7 +2151,7 @@ function renderAnalyticsContent(data, mode, pendingLog) {
     </div>` : ''}
     ` : '<div class="card"><p style="color:#6b7280;text-align:center;padding:20px">No completed tasks yet.</p></div>'}
     <div style="display:flex;gap:10px;margin-bottom:12px;flex-wrap:wrap">
-      <button class="btn btn-secondary" style="flex:1" onclick="downloadExport()">⬇️ Download Excel</button>
+      <button class="btn btn-secondary" style="flex:1" onclick="downloadExport()">⬇️ Download Log (.xlsx)</button>
     </div>
     <div style="display:flex;align-items:center;justify-content:space-between;margin:20px 0 10px">
       <div class="section-heading" style="margin:0">Tasks</div>
@@ -2139,6 +2161,7 @@ function renderAnalyticsContent(data, mode, pendingLog) {
       ${tasks.length > 0 ? `<div style="display:flex;justify-content:flex-end;margin-bottom:8px"><button class="btn btn-danger btn-sm" onclick="clearAllTasks()">🗑️ Clear All</button></div>` : ''}
       ${groupedTaskCards}
     ` : ''}
+  ${renderFooter()}
   </div>
   ${renderBottomNav('analytics')}`;
 
@@ -2911,7 +2934,7 @@ document.addEventListener('visibilitychange', async () => {
     // switches apps.  checkAssetVersion() itself records the timestamp, so the
     // periodic poll (Option 2) and this path share the same cooldown.
     if (Date.now() - _lastVersionCheckAt > VERSION_CHECK_DEBOUNCE_MS) {
-      if (await checkAssetVersion()) return; // new version detected — page is reloading
+      if (await checkAssetVersion()) return; // new version detected — update banner shown
     }
     if (state.user && !state.user.isAdmin && state.activeTask) {
       try {
