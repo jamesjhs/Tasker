@@ -293,7 +293,7 @@ function getAppVersion() {
 
 function renderFooter() {
   const v = getAppVersion();
-  return `<p style="text-align:center;font-size:.75rem;color:#9ca3af;padding:8px 0 16px">v${v} &nbsp;·&nbsp; <a href="/policy" target="_blank" style="color:#9ca3af">Privacy Policy</a> &nbsp;·&nbsp; <a href="/help" target="_blank" style="color:#9ca3af">Help</a><br>© J Rowson ${new Date().getFullYear()} | <a href="https://jahosi.co.uk" target="_blank" style="color:#9ca3af">jahosi.co.uk</a></p>`;
+  return `<p style="text-align:center;font-size:.75rem;color:#9ca3af;padding:8px 0 16px">v${v} &nbsp;·&nbsp; <a href="/policy" target="_blank" style="color:#9ca3af">Privacy Policy</a> &nbsp;·&nbsp; <a href="/dpia" target="_blank" style="color:#9ca3af">DPIA</a> &nbsp;·&nbsp; <a href="/help" target="_blank" style="color:#9ca3af">Help</a><br>© J Rowson ${new Date().getFullYear()} | <a href="https://jahosi.co.uk" target="_blank" style="color:#9ca3af">jahosi.co.uk</a></p>`;
 }
 
 function showAlert(msg, type = 'error', parentId = null) {
