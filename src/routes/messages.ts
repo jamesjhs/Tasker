@@ -6,6 +6,7 @@ const router = Router();
 
 // ── User routes ───────────────────────────────────────────────────────────────
 
+// GET is read-only; CSRF protection not required for safe HTTP methods
 router.get('/', requireAuth, requirePasswordChange, requireActivation, (req: Request, res: Response) => {
   const s = req.session as any;
   const messages = getDb().prepare(

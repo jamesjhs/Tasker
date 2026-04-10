@@ -67,7 +67,8 @@ router.post('/propose', requireAuth, requirePasswordChange, requireActivation, v
   try {
     const proposalResult = getDb().prepare('INSERT INTO dropdown_proposals (user_id, field_name) VALUES (?,?)').run(s.userId, field_name);
     proposalId = proposalResult.lastInsertRowid;
-  } catch {
+  } catch (err) {
+    console.error('[dropdowns] Failed to insert proposal record:', err);
     res.status(500).json({ error: 'Could not record proposal. Please try again.' });
     return;
   }

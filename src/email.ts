@@ -16,9 +16,10 @@ export function getSmtpConfig(): SmtpConfig | null {
   const host = getSetting('smtp_host');
   const to   = getSetting('smtp_to');
   if (!host || !to) return null;
+  const portNum = Number(getSetting('smtp_port') || 587);
   return {
     host,
-    port:   Number(getSetting('smtp_port') || 587),
+    port:   isNaN(portNum) ? 587 : portNum,
     secure: getSetting('smtp_secure') === 'true',
     user:   getSetting('smtp_user')  || '',
     pass:   decryptField(getSetting('smtp_pass') || '') || '',
