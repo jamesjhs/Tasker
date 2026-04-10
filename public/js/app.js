@@ -53,6 +53,43 @@ function replaceHistory(view) {
 // ── Asset version check ───────────────────────────────────────────────────────
 let _lastVersionCheckAt = 0; // epoch ms — used to debounce foreground/poll checks
 
+/** Clear all SW caches, SW registrations, and app localStorage, then reload. */
+async function performAppUpdate() {
+  const btn = document.querySelector('#update-banner button');
+  if (btn) { btn.disabled = true; btn.textContent = 'Updating…'; }
+  // Capture the server's current version before wiping localStorage so we can
+  // write it back immediately — preventing the banner from looping on reload.
+  let latestVersion = null;
+  try {
+    const r = await fetch('/api/version', { cache: 'no-store', credentials: 'same-origin' });
+    if (r.ok) ({ version: latestVersion } = await r.json());
+  } catch (e) { /* best-effort */ }
+  try {
+    if ('caches' in window) {
+      const keys = await caches.keys();
+      await Promise.all(keys.map(k => caches.delete(k)));
+    }
+    if ('serviceWorker' in navigator) {
+      const regs = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(regs.map(reg => reg.unregister()));
+    }
+    localStorage.clear();
+    if (latestVersion) localStorage.setItem('tasker_app_version', latestVersion);
+  } catch (e) { /* best-effort */ }
+  window.location.reload();
+}
+
+/** Show a persistent top banner prompting the user to apply the update. */
+function showUpdateBanner() {
+  if (document.getElementById('update-banner')) return; // already visible
+  const banner = document.createElement('div');
+  banner.id = 'update-banner';
+  banner.innerHTML =
+    '<span>A new version of Tasker is available.</span>' +
+    '<button onclick="performAppUpdate()">🔄 App Update Needed</button>';
+  document.body.prepend(banner);
+}
+
 async function checkAssetVersion() {
   _lastVersionCheckAt = Date.now();
   try {
@@ -60,32 +97,12 @@ async function checkAssetVersion() {
     if (!r.ok) return false;
     const { version } = await r.json();
     const stored = localStorage.getItem('tasker_app_version');
-    // Clear cache whenever the stored version is missing or outdated.
+    // Show an update banner whenever the stored version is missing or outdated.
     // The stored !== null guard is intentionally absent so that users whose
-    // install pre-dates version tracking also get a cache flush.
+    // install pre-dates version tracking also see the banner.
     if (stored !== version) {
-      localStorage.setItem('tasker_app_version', version);
-      let needsReload = false;
-      if ('caches' in window) {
-        const keys = await caches.keys();
-        if (keys.length > 0) {
-          await Promise.all(keys.map(k => caches.delete(k)));
-          needsReload = true;
-        }
-      }
-      if ('serviceWorker' in navigator) {
-        const regs = await navigator.serviceWorker.getRegistrations();
-        if (regs.length > 0) {
-          await Promise.all(regs.map(reg => reg.unregister()));
-          needsReload = true;
-        }
-      }
-      // Only reload when there was something to clear; on a completely fresh
-      // install (no cached assets, no SW) a reload would be a no-op.
-      if (needsReload) {
-        window.location.reload();
-        return true;
-      }
+      showUpdateBanner();
+      return true;
     }
     return false;
   } catch (e) {
@@ -457,7 +474,7 @@ async function init() {
   }
 
   setLoadingStatus('Checking for updates…');
-  if (await checkAssetVersion()) return; // Version mismatch — page will reload with fresh assets
+  if (await checkAssetVersion()) return; // New version detected — update banner shown
 
   try {
     setLoadingStatus('Fetching security token…');
@@ -2917,7 +2934,7 @@ document.addEventListener('visibilitychange', async () => {
     // switches apps.  checkAssetVersion() itself records the timestamp, so the
     // periodic poll (Option 2) and this path share the same cooldown.
     if (Date.now() - _lastVersionCheckAt > VERSION_CHECK_DEBOUNCE_MS) {
-      if (await checkAssetVersion()) return; // new version detected — page is reloading
+      if (await checkAssetVersion()) return; // new version detected — update banner shown
     }
     if (state.user && !state.user.isAdmin && state.activeTask) {
       try {

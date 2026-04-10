@@ -544,3 +544,34 @@ a:hover { text-decoration: underline; }
   color: #78350f;
   font-weight: 600;
 }
+
+/* ── App update banner ────────────────────────────────────────────── */
+#update-banner {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 300;
+  background: #1a56db;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 10px 16px;
+  font-size: .9rem;
+  font-weight: 600;
+  box-shadow: 0 2px 8px rgba(0,0,0,.25);
+}
+#update-banner button {
+  background: #fff;
+  color: #1a56db;
+  border: none;
+  border-radius: 6px;
+  padding: 6px 14px;
+  font-size: .85rem;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+}
+#update-banner button:hover { background: #e0e7ff; }
