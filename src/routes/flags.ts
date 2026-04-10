@@ -35,8 +35,10 @@ router.post('/propose', requireAuth, requirePasswordChange, requireActivation, v
     return;
   }
 
-  const appBase = `${req.protocol}://${req.get('host')}`;
-  const reviewLink = `${appBase}/suggest/review?token=${reviewToken}`;
+  const appBase = (process.env['APP_URL'] || '').replace(/\/$/, '');
+  const reviewLink = appBase
+    ? `${appBase}/suggest/review?token=${reviewToken}`
+    : `/suggest/review?token=${reviewToken} (prepend your Tasker server URL)`;
 
   try {
     await sendEmail(

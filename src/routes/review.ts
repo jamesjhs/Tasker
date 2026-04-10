@@ -5,18 +5,23 @@ const router = Router();
 
 const FIELD_LABELS: Record<string, string> = { category: 'Task From', subcategory: 'Task Type', outcome: 'Outcome' };
 
+function escHtml(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#x27;');
+}
+
 function reviewPageHtml(opts: { message?: string; error?: string; fieldLabel?: string; type?: string; token?: string; done?: boolean }): string {
   const { message, error, fieldLabel, type, token, done } = opts;
-  const msgHtml = message ? `<div class="msg msg-success">${message}</div>` : '';
-  const errHtml = error   ? `<div class="msg msg-error">${error}</div>`     : '';
-  const label   = type === 'flag' ? 'task flag option' : `option for the <em>${fieldLabel}</em> dropdown`;
-  const formHtml = (!done && token) ? `
+  const msgHtml = message ? `<div class="msg msg-success">${escHtml(message)}</div>` : '';
+  const errHtml = error   ? `<div class="msg msg-error">${escHtml(error)}</div>`     : '';
+  const label   = type === 'flag' ? 'task flag option' : `option for the <em>${escHtml(fieldLabel || '')}</em> dropdown`;
+  const safeToken = token ? escHtml(token) : '';
+  const formHtml = (!done && safeToken) ? `
     <p style="font-size:.9rem;color:#374151;margin-bottom:16px">
       A user has suggested a new ${label}. Enter the approved wording below to add it to the system.
       The value you enter may differ from the suggestion if needed.
     </p>
     <form method="POST" action="/suggest/review">
-      <input type="hidden" name="token" value="${token}">
+      <input type="hidden" name="token" value="${safeToken}">
       <label for="value">Approved wording</label>
       <input id="value" type="text" name="value" maxlength="100" required autofocus placeholder="Enter the approved value…">
       <button type="submit">✓ Add to System</button>

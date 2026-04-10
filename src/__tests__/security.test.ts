@@ -1491,32 +1491,36 @@ describe('Suggestion review page', () => {
   test('POST /suggest/review — valid dropdown token → adds option and returns success page', async () => {
     const db = getDb();
     const adminId = (db.prepare('SELECT id FROM users WHERE is_admin=1 LIMIT 1').get() as any).id;
-    const tok = 'cccc' + 'd'.repeat(60);
+    const suffix = Date.now().toString(36) + Math.random().toString(36).slice(2);
+    const tok = 'rev_dropdown_' + suffix;
+    const val = `ReviewedOutcome_${suffix}`;
     db.prepare('INSERT INTO dropdown_proposals (user_id, field_name, review_token) VALUES (?,?,?)').run(adminId, 'outcome', tok);
     const res = await request(app).post('/suggest/review')
-      .send(`token=${tok}&value=ReviewedOutcome`)
+      .send(`token=${tok}&value=${val}`)
       .set('Content-Type', 'application/x-www-form-urlencoded');
     expect(res.status).toBe(200);
-    expect(res.text).toMatch(/ReviewedOutcome/);
+    expect(res.text).toMatch(new RegExp(val.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
     expect(res.text).toMatch(/added/i);
     const remaining = db.prepare('SELECT id FROM dropdown_proposals WHERE review_token=?').get(tok);
     expect(remaining).toBeUndefined();
-    const opt = db.prepare("SELECT id FROM dropdown_options WHERE field_name='outcome' AND value='ReviewedOutcome'").get();
+    const opt = db.prepare('SELECT id FROM dropdown_options WHERE field_name=? AND value=?').get('outcome', val);
     expect(opt).toBeTruthy();
   });
 
   test('POST /suggest/review — valid flag proposal token → adds flag option', async () => {
     const db = getDb();
-    const tok = 'eeee' + 'f'.repeat(60);
+    const suffix = Date.now().toString(36) + Math.random().toString(36).slice(2);
+    const tok = 'rev_flag_' + suffix;
+    const val = `ReviewedFlagOption_${suffix}`;
     db.prepare('INSERT INTO flag_proposals (review_token) VALUES (?)').run(tok);
     const res = await request(app).post('/suggest/review')
-      .send(`token=${tok}&value=ReviewedFlagOption`)
+      .send(`token=${tok}&value=${val}`)
       .set('Content-Type', 'application/x-www-form-urlencoded');
     expect(res.status).toBe(200);
-    expect(res.text).toMatch(/ReviewedFlagOption/);
+    expect(res.text).toMatch(new RegExp(val.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
     const remaining = db.prepare('SELECT id FROM flag_proposals WHERE review_token=?').get(tok);
     expect(remaining).toBeUndefined();
-    const flag = db.prepare("SELECT id FROM task_flag_options WHERE value='ReviewedFlagOption'").get();
+    const flag = db.prepare('SELECT id FROM task_flag_options WHERE value=?').get(val);
     expect(flag).toBeTruthy();
   });
 
@@ -1524,7 +1528,7 @@ describe('Suggestion review page', () => {
     const db = getDb();
     const adminId = (db.prepare('SELECT id FROM users WHERE is_admin=1 LIMIT 1').get() as any).id;
     db.prepare('INSERT OR IGNORE INTO dropdown_options (field_name,value,approved) VALUES (?,?,1)').run('category', 'ExistingOpt');
-    const tok = 'gggg' + 'h'.repeat(60);
+    const tok = 'gggg_dup_' + Date.now().toString(36) + Math.random().toString(36).slice(2);
     db.prepare('INSERT INTO dropdown_proposals (user_id, field_name, review_token) VALUES (?,?,?)').run(adminId, 'category', tok);
     const res = await request(app).post('/suggest/review')
       .send(`token=${tok}&value=ExistingOpt`)
@@ -1592,7 +1596,7 @@ describe('Anonymous proposals', () => {
   test('Admin GET /api/admin/dropdown-proposals — review_token included per proposal', async () => {
     const db = getDb();
     const adminId = (db.prepare('SELECT id FROM users WHERE is_admin=1 LIMIT 1').get() as any).id;
-    const tok = 'iiii' + 'j'.repeat(60);
+    const tok = 'iiii_tok_' + Date.now().toString(36) + Math.random().toString(36).slice(2);
     db.prepare('INSERT INTO dropdown_proposals (user_id, field_name, review_token) VALUES (?,?,?)').run(adminId, 'category', tok);
     const a = agent();
     const { csrf } = await createAdminSession(a);
