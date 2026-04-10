@@ -63,8 +63,14 @@ router.post('/propose', requireAuth, requirePasswordChange, requireActivation, v
   const username = (getDb().prepare('SELECT username FROM users WHERE id=?').get(s.userId) as any)?.username || 'Unknown';
 
   // Store a metadata-only proposal record (no free-text value stored in DB)
-  const proposalResult = getDb().prepare('INSERT INTO dropdown_proposals (user_id, field_name) VALUES (?,?)').run(s.userId, field_name);
-  const proposalId = proposalResult.lastInsertRowid;
+  let proposalId: number | bigint;
+  try {
+    const proposalResult = getDb().prepare('INSERT INTO dropdown_proposals (user_id, field_name) VALUES (?,?)').run(s.userId, field_name);
+    proposalId = proposalResult.lastInsertRowid;
+  } catch {
+    res.status(500).json({ error: 'Could not record proposal. Please try again.' });
+    return;
+  }
 
   try {
     await sendEmail(

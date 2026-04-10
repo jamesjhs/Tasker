@@ -43,6 +43,7 @@ export function buildTestApp() {
 export async function createAdminSession(agent: any) {
   const db = getDb();
   const pw = 'AdminP@ss1!';
+  // Cost factor 4 is intentionally low for test speed; production uses 12
   const hash = await bcrypt.hash(pw, 4);
   const username = 'admin_' + crypto.randomBytes(4).toString('hex');
   db.prepare(
@@ -65,6 +66,7 @@ export async function createAdminSession(agent: any) {
 export async function createUserSession(agent: any) {
   const db = getDb();
   const pw = 'UserP@ss1!';
+  // Cost factor 4 is intentionally low for test speed; production uses 12
   const hash = await bcrypt.hash(pw, 4);
   const username = 'user_' + crypto.randomBytes(4).toString('hex');
   db.prepare(

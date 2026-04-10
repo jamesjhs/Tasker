@@ -278,7 +278,7 @@ router.post('/smtp', validateCsrf, (req: Request, res: Response) => {
   };
   if (!host || !to) { res.status(400).json({ error: 'SMTP host and recipient address are required.' }); return; }
   const portNum = Number(port || 587);
-  if (!Number.isInteger(portNum) || portNum < 1 || portNum > 65535) {
+  if (isNaN(portNum) || !Number.isInteger(portNum) || portNum < 1 || portNum > 65535) {
     res.status(400).json({ error: 'SMTP port must be an integer between 1 and 65535.' }); return;
   }
   setSetting('smtp_host',   (host || '').trim());

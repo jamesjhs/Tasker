@@ -165,6 +165,8 @@ function initSchema(db: Database.Database): void {
     );
 
     CREATE INDEX IF NOT EXISTS idx_dropdown_proposals_field ON dropdown_proposals(field_name);
+
+    CREATE INDEX IF NOT EXISTS idx_users_broadcast ON users(is_admin, is_approved, pending_activation);
   `);
 
   // Migrate existing databases: add lockout columns if missing

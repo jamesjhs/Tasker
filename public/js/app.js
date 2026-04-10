@@ -2543,7 +2543,7 @@ function renderAdminContent(stats, users, dropOpts, settings, pendingUsers, awai
   <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid #f3f4f6">
     <span style="font-size:.9rem">${esc(f.value)}</span>
     <div style="display:flex;gap:4px">
-      <button class="btn btn-outline btn-sm" onclick="renameFlagOption(${f.id}, '${esc(f.value)}')">✏️</button>
+      <button class="btn btn-outline btn-sm" onclick="renameFlagOption(${f.id})">✏️</button>
       <button class="btn btn-danger btn-sm" onclick="deleteFlagOption(${f.id})">✕</button>
     </div>
   </div>`).join('');
@@ -2557,7 +2557,7 @@ function renderAdminContent(stats, users, dropOpts, settings, pendingUsers, awai
         <span style="font-size:.75rem;color:#6b7280">${n.active ? '✅ Active' : '⏸️ Inactive'} · ${new Date(n.created_at+'Z').toLocaleDateString()}</span>
       </div>
       <div style="display:flex;gap:4px;flex-shrink:0">
-        <button class="btn btn-outline btn-sm" onclick="editNotice(${n.id}, '${esc(n.message)}', ${n.active})">✏️</button>
+        <button class="btn btn-outline btn-sm" onclick="editNotice(${n.id})">✏️</button>
         <button class="btn ${n.active ? 'btn-secondary' : 'btn-primary'} btn-sm" onclick="toggleNotice(${n.id}, ${n.active})">${n.active ? 'Deactivate' : 'Activate'}</button>
         <button class="btn btn-danger btn-sm" onclick="deleteNotice(${n.id})">✕</button>
       </div>
@@ -3004,9 +3004,11 @@ async function createNotice() {
   } catch(e) { showAlert(e.message, 'error', 'admin-alerts'); }
 }
 
-async function editNotice(id, currentMsg, active) {
-  const newMsg = prompt('Edit notice:', currentMsg);
-  if (!newMsg || newMsg.trim() === currentMsg) return;
+async function editNotice(id) {
+  const notice = state.notices.find(n => n.id === id);
+  if (!notice) return;
+  const newMsg = prompt('Edit notice:', notice.message);
+  if (!newMsg || newMsg.trim() === notice.message) return;
   try {
     await api('PUT', `/api/admin/notices/${id}`, { message: newMsg.trim() });
     showAlert('Notice updated.', 'success', 'admin-alerts');
@@ -3039,7 +3041,10 @@ async function addFlagOption() {
   } catch(e) { showAlert(e.message, 'error', 'admin-alerts'); }
 }
 
-async function renameFlagOption(id, currentValue) {
+async function renameFlagOption(id) {
+  const opt = state.flagOptions.find(f => f.id === id);
+  if (!opt) return;
+  const currentValue = opt.value;
   const newValue = prompt(`Rename "${currentValue}" to:`, currentValue);
   if (!newValue || newValue.trim() === currentValue) return;
   try {

@@ -116,13 +116,19 @@ router.patch('/:id', validateCsrf, (req: Request, res: Response) => {
   db.transaction(() => {
     db.prepare(`UPDATE tasks SET ${cols.join(',')} WHERE id=? AND user_id=?`).run(...vals);
     if (flag_ids !== undefined && Array.isArray(flag_ids)) {
+      const candidateIds = flag_ids.map(Number).filter(n => Number.isInteger(n) && n > 0);
       db.prepare('DELETE FROM task_flags WHERE task_id=?').run(taskId);
-      const insFlag = db.prepare('INSERT OR IGNORE INTO task_flags (task_id, flag_option_id) VALUES (?,?)');
-      for (const fid of flag_ids) {
-        const n = Number(fid);
-        if (!Number.isInteger(n) || n <= 0) continue;
-        // Only insert if the flag option exists (SQLite does not suppress FK violations via INSERT OR IGNORE)
-        if (db.prepare('SELECT 1 FROM task_flag_options WHERE id=?').get(n)) insFlag.run(taskId, n);
+      if (candidateIds.length > 0) {
+        // Batch-validate flag option IDs (avoids N+1 and FK constraint errors)
+        const placeholders = candidateIds.map(() => '?').join(',');
+        const validIds = new Set(
+          (db.prepare(`SELECT id FROM task_flag_options WHERE id IN (${placeholders})`).all(...candidateIds) as any[])
+            .map(r => r.id)
+        );
+        const insFlag = db.prepare('INSERT OR IGNORE INTO task_flags (task_id, flag_option_id) VALUES (?,?)');
+        for (const n of candidateIds) {
+          if (validIds.has(n)) insFlag.run(taskId, n);
+        }
       }
     }
   })();
