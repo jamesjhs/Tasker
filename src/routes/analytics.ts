@@ -148,10 +148,6 @@ router.get('/history', (req: Request, res: Response) => {
 });
 
 router.get('/export', async (req: Request, res: Response) => {
-  const ua = req.headers['user-agent'] || '';
-  if (!/Mobile|Android|iPhone|iPad|iPod/i.test(ua)) {
-    res.status(403).json({ error: 'Export is only available on mobile.' }); return;
-  }
   const s = req.session as any;
   const tasks = (getDb().prepare(
     `SELECT * FROM tasks WHERE user_id=? AND status='completed' AND start_time>=datetime('now','-30 days') ORDER BY start_time`

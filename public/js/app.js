@@ -29,6 +29,7 @@ const state = {
   analyticsQuickFrom: '',        // date string set by quick filter
   analyticsQuickTo: '',          // date string set by quick filter
   analyticsTasksExpanded: false, // whether task list is expanded in analytics
+  analyticsFiltersExpanded: false, // whether advanced filters are expanded in analytics
   analyticsData: null,           // { data, mode, pendingLog } for re-rendering on toggle
 };
 
@@ -1844,6 +1845,7 @@ async function clearAllTasks() {
 async function renderAnalyticsSession() {
   stopTimer(); clearCharts(); state.currentView = 'analytics-session';
   state.analyticsQuickPeriod = 'today';
+  state.analyticsFiltersExpanded = false;
   pushHistory('analytics-session');
   app().innerHTML = `<div class="view"><p class="loading">Loading analytics…</p></div>`;
   try {
@@ -1911,11 +1913,13 @@ function applyHistoryFilters() {
 }
 
 function setAnalyticsQuickFilter(period) {
+  state.analyticsFiltersExpanded = false;
   state.analyticsQuickPeriod = period;
   if (period === 'today') {
-    state.analyticsQuickFrom = '';
-    state.analyticsQuickTo = '';
-    renderAnalyticsSession();
+    const today = new Date().toISOString().split('T')[0];
+    state.analyticsQuickFrom = today;
+    state.analyticsQuickTo = today;
+    renderAnalyticsHistory();
   } else {
     const days = period === '30d' ? 30 : 7;
     const to = new Date();
@@ -1944,9 +1948,15 @@ function renderAnalyticsContent(data, mode, pendingLog) {
     <button class="btn btn-sm ${qp === '30d' ? 'btn-primary' : 'btn-secondary'}" onclick="setAnalyticsQuickFilter('30d')">Last 30 days</button>
   </div>`;
 
-  const filterBar = isHistory ? `
+  const filtersExpanded = state.analyticsFiltersExpanded;
+  const filterBar = `
   <div class="card filter-card" style="margin-bottom:14px">
-    <div class="card-title">🔍 Advanced Filters</div>
+    <div class="card-title" style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;margin-bottom:0" onclick="toggleAnalyticsFilters()">
+      <span>🔍 Advanced Filters</span>
+      <button type="button" class="btn btn-outline btn-sm" style="pointer-events:none">${filtersExpanded ? '▲ Collapse' : '▼ Expand'}</button>
+    </div>
+    ${filtersExpanded ? `
+    <div style="margin-top:12px">
     <div class="date-preset-group">
       <button class="btn btn-sm btn-secondary" onclick="setDatePreset(7)">7 days</button>
       <button class="btn btn-sm btn-secondary" onclick="setDatePreset(14)">14 days</button>
@@ -1992,7 +2002,8 @@ function renderAnalyticsContent(data, mode, pendingLog) {
       </div>
       <button class="btn btn-primary btn-full" onclick="applyHistoryFilters()">Apply Filters</button>
     </div>
-  </div>` : '';
+    </div>` : ''}
+  </div>`;
 
   // Build task cards grouped by Task From (category)
   const groupedTaskCards = (() => {
@@ -2296,6 +2307,14 @@ async function loadAndEditTask(taskId) {
 
 function toggleAnalyticsTasks() {
   state.analyticsTasksExpanded = !state.analyticsTasksExpanded;
+  if (state.analyticsData) {
+    clearCharts();
+    renderAnalyticsContent(state.analyticsData.data, state.analyticsData.mode, state.analyticsData.pendingLog);
+  }
+}
+
+function toggleAnalyticsFilters() {
+  state.analyticsFiltersExpanded = !state.analyticsFiltersExpanded;
   if (state.analyticsData) {
     clearCharts();
     renderAnalyticsContent(state.analyticsData.data, state.analyticsData.mode, state.analyticsData.pendingLog);

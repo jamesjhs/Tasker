@@ -427,13 +427,13 @@ html, body {
   background: #fff;
   border: 2px solid #1a56db;
   border-radius: 10px;
-  overflow: hidden;
+  overflow: auto;
   z-index: 200;
   box-shadow: 0 6px 20px rgba(0,0,0,.13);
   flex-direction: column;
   resize: vertical;
   min-height: 150px;
-  max-height: 280px;
+  max-height: 400px;
 }
 .combo-panel.open { display: flex; }
 .combo-search {
