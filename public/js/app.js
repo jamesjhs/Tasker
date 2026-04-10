@@ -1256,6 +1256,7 @@ async function markAllMessagesRead() {
 }
 
 
+async function doLogPendingCount() {
   const input = document.getElementById('pending-count-input');
   const val = input?.value.trim();
   const count = parseInt(val, 10);
