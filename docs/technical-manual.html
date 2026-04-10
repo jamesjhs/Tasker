@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Tasker — Technical Reference Manual v1.5.0</title>
+  <title>Tasker — Technical Reference Manual v1.6.0</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; }
     body {
@@ -107,7 +107,7 @@
 <div class="page">
 
 <h1>Tasker — Technical Reference Manual</h1>
-<p class="subtitle">Version 1.5.0 &nbsp;·&nbsp; April 2026 &nbsp;·&nbsp; <em>Prepared in the role of Professor of Digital Engineering Product Design</em></p>
+<p class="subtitle">Version 1.6.0 &nbsp;·&nbsp; April 2026 &nbsp;·&nbsp; <em>Prepared in the role of Professor of Digital Engineering Product Design</em></p>
 
 <div class="toc">
   <h2>Table of Contents</h2>
@@ -310,7 +310,7 @@
   <li><strong>Session middleware</strong> is configured with a SQLite-backed store, <code>httpOnly: true</code>, <code>sameSite: 'strict'</code>, <code>secure</code> conditional on <code>NODE_ENV=production</code>, <code>maxAge: 30 minutes</code>.</li>
   <li><strong>Rate limiters</strong> are created: auth (20/15 min) and API (200/min).</li>
   <li>The <strong><code>/readyz</code></strong> health-check endpoint is registered before authentication middleware.</li>
-  <li><strong><code>express.static</code></strong> serves <code>public/</code>. The <code>sw.js</code> file gets <code>Cache-Control: no-cache</code> and <code>Service-Worker-Allowed: /</code> headers.</li>
+  <li><strong><code>express.static</code></strong> serves <code>public/</code>. The <code>sw.js</code> file gets <code>Cache-Control: no-cache</code> and <code>Service-Worker-Allowed: /</code> headers. The <code>index.html</code> shell also gets <code>Cache-Control: no-cache</code> so that HTTP-cache clients always revalidate it and pick up new asset references even when the Service Worker is not in control.</li>
   <li>All <strong>API route groups</strong> are mounted with their respective rate limiters.</li>
   <li>Static HTML pages (<code>/policy</code>, <code>/help</code>, <code>/guide</code>) are served by explicit routes.</li>
   <li>The catch-all <code>GET /{*path}</code> returns <code>index.html</code> — enabling SPA browser history navigation.</li>
@@ -512,13 +512,13 @@
 <p>A thin <code>fetch</code> wrapper that: adds <code>X-CSRF-Token</code> and <code>Content-Type</code> headers; handles <code>401</code> (redirects to login), <code>429</code> (rate-limit message with wait time), and non-OK responses (extracts <code>error</code> from JSON body).</p>
 
 <h3>12.4 Initialisation (<code>init</code>)</h3>
-<p>Called on <code>DOMContentLoaded</code>: register SW → check asset version (cache purge + reload on version bump) → fetch CSRF token → call <code>/api/auth/me</code> → if authenticated, load dropdowns + active task + start activity tracking + render view; if not, render login.</p>
+<p>Called on <code>DOMContentLoaded</code>: register SW → check asset version (cache purge + reload on version bump) → fetch CSRF token → call <code>/api/auth/me</code> → if authenticated, load dropdowns + active task + start activity tracking (which also starts the background version poll) + render view; if not, render login.</p>
 
 <h3>12.5 View Navigation &amp; Browser History</h3>
 <p>Every view function calls <code>pushHistory(viewName)</code> or <code>replaceHistory(viewName)</code>, storing the view name in <code>window.history.state</code>. A <code>popstate</code> listener maps state names to render functions via <code>HISTORY_RENDER_MAP</code>, with auth guards preventing access to protected views when logged out.</p>
 
 <h3>12.6 Session Inactivity Tracking</h3>
-<p>Activity events (<code>click</code>, <code>touchstart</code>, <code>keydown</code>, <code>scroll</code>) update a <code>localStorage.tasker_last_active</code> timestamp. An interval checks this every 60 seconds. After 30 minutes of inactivity: server logout is called, client state is cleared, and an inactivity screen is shown. The <code>visibilitychange</code> event triggers an immediate check when the tab becomes visible. If a task was active during inactivity, the gap is automatically recorded as an interruption.</p>
+<p>Activity events (<code>click</code>, <code>touchstart</code>, <code>keydown</code>, <code>scroll</code>) update a <code>localStorage.tasker_last_active</code> timestamp. An interval checks this every 60 seconds. After 30 minutes of inactivity: server logout is called, client state is cleared, and an inactivity screen is shown. The <code>visibilitychange</code> event triggers an immediate inactivity check when the tab becomes visible, and also calls <code>checkAssetVersion()</code> (throttled to once per 60 s) so that users returning to a backgrounded PWA always receive the latest code. If a task was active during inactivity, the gap is automatically recorded as an interruption.</p>
 
 <h3>12.7 Combobox Component</h3>
 <p>A custom searchable dropdown with: trigger button, search input, options list, and "Add new" row. Keyboard-navigable (arrow keys, Enter, Escape). Only one open at a time. The <code>filterCombo</code> function re-renders the options list on each keystroke.</p>
@@ -545,6 +545,14 @@
   <li><strong>Fetch strategy — Cache-first for everything else:</strong> Serves from cache; falls back to network (and caches the response). On failure, returns cached <code>/</code> for navigation requests.</li>
 </ul>
 <p>The <code>sw.js</code> file is served with <code>Cache-Control: no-cache</code>, ensuring the browser always revalidates it.</p>
+
+<h3>13.3 Three-Layer Cache-Update Strategy</h3>
+<p>Mobile PWA wrappers (standalone home-screen installs, TWA/WKWebView shells) cannot perform a hard cache refresh. Three complementary mechanisms ensure users always receive updated code after a server deployment:</p>
+<ol>
+  <li><strong>Foreground-resume check (Option 1).</strong> The <code>visibilitychange</code> event handler calls <code>checkAssetVersion()</code> every time the app returns to the foreground, throttled to once per 60 seconds. If the server reports a different version than the one stored in <code>localStorage</code>, all Service Worker caches are deleted, the SW is unregistered, and <code>window.location.reload()</code> is called. The next load fetches fresh assets from the network.</li>
+  <li><strong>Background version poll (Option 2).</strong> While a user is logged in, <code>startActivityTracking()</code> starts a <code>setInterval</code> that calls <code>checkAssetVersion()</code> every 5 minutes (<code>state.versionPollInterval</code>). This catches the case where a user leaves the app open without backgrounding it (e.g. a shared device left on-screen all day). The poll shares the same 60-second debounce timestamp as the foreground-resume check, so both paths are always in sync. The interval is cleared by <code>stopActivityTracking()</code> on logout or session expiry.</li>
+  <li><strong>HTTP <code>no-cache</code> on <code>index.html</code> (Option 3).</strong> The <code>express.static</code> <code>setHeaders</code> callback sets <code>Cache-Control: no-cache</code> on the HTML shell. This instructs the browser's HTTP cache to always revalidate <code>index.html</code> with a conditional request (ETag / <code>If-None-Match</code>) before using a cached copy — even in environments where the Service Worker is not in control (first visit, after SW unregistration, browsers that do not support SW). A 304 Not Modified response is extremely cheap, and the browser can still serve the cached copy when nothing has changed.</li>
+</ol>
 
 <hr>
 
@@ -807,7 +815,7 @@ R²        = 1 - SS_res / SS_tot</code></pre>
 
 <hr>
 <p style="text-align:center;font-size:.85rem;color:#9ca3af;margin-top:40px">
-  Tasker Technical Reference Manual &nbsp;·&nbsp; v1.5.0 &nbsp;·&nbsp; April 2026<br>
+  Tasker Technical Reference Manual &nbsp;·&nbsp; v1.6.0 &nbsp;·&nbsp; April 2026<br>
   This document is stored in <code>docs/</code> and is not served by the application.
 </p>
 

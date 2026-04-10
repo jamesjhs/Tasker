@@ -82,6 +82,10 @@ app.use(express.static(path.join(__dirname, '..', 'public'), {
     if (filePath.endsWith('sw.js')) {
       res.setHeader('Cache-Control', 'no-cache');
       res.setHeader('Service-Worker-Allowed', '/');
+    } else if (filePath.endsWith('index.html')) {
+      // Always revalidate the HTML shell so clients pick up new asset fingerprints
+      // immediately, even when the Service Worker has been bypassed or not yet active.
+      res.setHeader('Cache-Control', 'no-cache');
     }
   },
 }));
