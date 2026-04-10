@@ -120,7 +120,8 @@ function openCombo(id, field, hasNew) {
     // mobile soft keyboard when the user merely opens a dropdown.
     if ((navigator.maxTouchPoints ?? 0) === 0) setTimeout(() => search.focus(), 30);
   }
-  // Scroll the last-used (highlighted) option into view if present
+  // Scroll the last-used (highlighted) option into view if present.
+  // Small delay ensures the opts container has been rendered before scrolling.
   setTimeout(() => {
     const recent = document.querySelector(`#${id}-opts .combo-recent`);
     if (recent) recent.scrollIntoView({ block: 'nearest' });
@@ -1749,6 +1750,8 @@ async function submitTaskReview(taskId, isEdit, dest) {
     stopActivityTracking();
     await checkActiveTask();
     if (dest === 'start') {
+      // Track category and subcategory so the task-start dropdowns can highlight
+      // the most recently used option with a light-green indicator.
       state.lastUsedCombos = { category: categoryVal, subcategory: subcategoryVal };
       renderTaskStart();
     } else {
