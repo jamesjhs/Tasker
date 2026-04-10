@@ -1905,6 +1905,11 @@ function setDatePreset(days) {
   renderAnalyticsHistory();
 }
 
+function applyHistoryFilters() {
+  state.analyticsQuickPeriod = null;
+  renderAnalyticsHistory();
+}
+
 function setAnalyticsQuickFilter(period) {
   state.analyticsQuickPeriod = period;
   if (period === 'today') {
@@ -1941,7 +1946,7 @@ function renderAnalyticsContent(data, mode, pendingLog) {
 
   const filterBar = isHistory ? `
   <div class="card filter-card" style="margin-bottom:14px">
-    <div class="card-title">🔍 Custom Filter & Date Range</div>
+    <div class="card-title">🔍 Advanced Filters</div>
     <div class="date-preset-group">
       <button class="btn btn-sm btn-secondary" onclick="setDatePreset(7)">7 days</button>
       <button class="btn btn-sm btn-secondary" onclick="setDatePreset(14)">14 days</button>
@@ -1985,7 +1990,7 @@ function renderAnalyticsContent(data, mode, pendingLog) {
           ${state.dropdowns.outcome.map(o => `<option value="${esc(o)}">${esc(o)}</option>`).join('')}
         </select>
       </div>
-      <button class="btn btn-primary btn-full" onclick="state.analyticsQuickPeriod=null;renderAnalyticsHistory()">Apply Filters</button>
+      <button class="btn btn-primary btn-full" onclick="applyHistoryFilters()">Apply Filters</button>
     </div>
   </div>` : '';
 

@@ -28,9 +28,10 @@ router.get('/pending-count/history', (req: Request, res: Response) => {
   const s = req.session as any;
   const daysParam = Number(req.query['days']);
   const days = daysParam === 30 ? 30 : 7;
+  const modifier = `-${days} days`;
   const logs = getDb().prepare(
-    `SELECT count, logged_at FROM pending_task_logs WHERE user_id=? AND logged_at >= datetime('now','-${days} days') ORDER BY logged_at ASC`
-  ).all(s.userId) as any[];
+    `SELECT count, logged_at FROM pending_task_logs WHERE user_id=? AND logged_at >= datetime('now',?) ORDER BY logged_at ASC`
+  ).all(s.userId, modifier) as any[];
   res.json(logs);
 });
 
