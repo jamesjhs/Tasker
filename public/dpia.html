@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tasker — Data Protection Impact Assessment (DPIA)</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: system-ui,-apple-system,sans-serif; max-width: 780px; margin: 0 auto; padding: 24px 16px 60px; color: #1a1a2e; line-height: 1.75; background: #f0f4ff; }
+    h1 { color: #1a56db; font-size: 1.7rem; margin: 1.5rem 0 0.5rem; }
+    h2 { font-size: 1.15rem; margin: 2rem 0 0.5rem; color: #1a1a2e; border-bottom: 2px solid #e5e7eb; padding-bottom: 0.3rem; }
+    h3 { font-size: 1rem; margin: 1.25rem 0 0.4rem; color: #1a1a2e; }
+    p  { margin-bottom: 0.75rem; }
+    ul, ol { padding-left: 1.5rem; margin-bottom: 0.75rem; }
+    li { margin-bottom: 0.35rem; }
+    table { width: 100%; border-collapse: collapse; margin-bottom: 1rem; font-size: .9rem; }
+    th { background: #1a56db; color: #fff; text-align: left; padding: 8px 10px; }
+    td { border: 1px solid #d1d5db; padding: 8px 10px; vertical-align: top; }
+    tr:nth-child(even) td { background: #f9fafb; }
+    .warning-box  { background: #fee2e2; border: 2px solid #dc2626; border-radius: 10px; padding: 1rem; margin: 1.25rem 0; color: #991b1b; font-weight: 600; }
+    .info-box     { background: #dbeafe; border: 2px solid #1a56db; border-radius: 10px; padding: 1rem; margin: 1.25rem 0; color: #1e40af; }
+    .green-box    { background: #f0fdf4; border: 2px solid #16a34a; border-radius: 10px; padding: 1rem; margin: 1.25rem 0; color: #166534; }
+    .amber-box    { background: #fffbeb; border: 2px solid #d97706; border-radius: 10px; padding: 1rem; margin: 1.25rem 0; color: #92400e; }
+    .back-link    { display: inline-block; color: #1a56db; margin-bottom: 16px; text-decoration: none; font-weight: 600; }
+    .badge        { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: .8rem; font-weight: 700; }
+    .badge-low    { background: #dcfce7; color: #166534; }
+    .badge-med    { background: #fef9c3; color: #854d0e; }
+    .badge-high   { background: #fee2e2; color: #991b1b; }
+    .badge-mitig  { background: #dbeafe; color: #1e40af; }
+    small { color: #6b7280; }
+    .sig-block { border-top: 1px solid #e5e7eb; padding-top: 1rem; margin-top: 2rem; font-size: .85rem; color: #6b7280; }
+    .toc { background: #f8fafc; border: 1px solid #e5e7eb; border-radius: 8px; padding: 14px 18px; margin-bottom: 2rem; }
+    .toc ul { list-style: none; padding-left: 0; }
+    .toc li { margin-bottom: 0.2rem; }
+    .toc a { color: #1a56db; text-decoration: none; font-size: .92rem; }
+    .toc a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+  <a class="back-link" href="/" onclick="history.back();return false;">← Back</a>
+  <h1>🛡️ Tasker — Data Protection Impact Assessment (DPIA)</h1>
+  <p><small>Version 1.0 — Completed April 2026 &nbsp;|&nbsp; Application Version 1.7.0 &nbsp;|&nbsp; Prepared in accordance with UK GDPR Article 35 and ICO guidance</small></p>
+
+  <div class="info-box">
+    ℹ️ This DPIA was conducted to assess the privacy risks of the Tasker application used by NHS clinical and non-clinical staff to log anonymous task-workload data. It covers all application functions documented in the Data and Use Policy.
+  </div>
+
+  <!-- Table of Contents -->
+  <div class="toc">
+    <strong>Contents</strong>
+    <ul>
+      <li><a href="#s1">1. Project Description</a></li>
+      <li><a href="#s2">2. Data Controller &amp; Processor Details</a></li>
+      <li><a href="#s3">3. Necessity &amp; Proportionality</a></li>
+      <li><a href="#s4">4. Data Flows</a></li>
+      <li><a href="#s5">5. Lawful Basis &amp; Special Category Data</a></li>
+      <li><a href="#s6">6. Data Subjects &amp; Categories of Personal Data</a></li>
+      <li><a href="#s7">7. Risk Register</a></li>
+      <li><a href="#s8">8. Existing Controls</a></li>
+      <li><a href="#s9">9. Residual Risks &amp; Recommendations</a></li>
+      <li><a href="#s10">10. Consultation</a></li>
+      <li><a href="#s11">11. Sign-off &amp; Review Schedule</a></li>
+    </ul>
+  </div>
+
+  <!-- ─── Section 1 ──────────────────────────────────────────────────────── -->
+  <h2 id="s1">1. Project Description</h2>
+
+  <h3>1.1 Purpose of the Application</h3>
+  <p>Tasker is a lightweight, mobile-first, single-page web application that enables NHS healthcare staff to record anonymous task-workload metadata in real time. Its primary use case is personal productivity and workload analysis, not patient care management.</p>
+
+  <h3>1.2 Scope of This DPIA</h3>
+  <p>This assessment covers the following functions of Tasker:</p>
+  <ul>
+    <li>User registration and account management (username generation, password management, admin activation)</li>
+    <li>Authentication: login, session management, password change, logout</li>
+    <li>Task logging: creating, timing, pausing (interrupt), and completing tasks with metadata (category, subcategory, outcome, free-text notes)</li>
+    <li>Task history: viewing, editing, and exporting tasks (CSV / Excel)</li>
+    <li>Analytics: personal workload charts and summary statistics</li>
+    <li>Admin functions: user list management, account activation/deletion, aggregate statistics</li>
+    <li>Service Worker (offline caching) and automatic data retention (30-day deletion)</li>
+  </ul>
+
+  <h3>1.3 What This Application Is Not</h3>
+  <div class="warning-box">
+    ⚠️ Tasker is <strong>not</strong> a clinical system. It must never be used to record patient information, clinical outcomes, or any personally identifiable data relating to patients, staff, or third parties. It is not connected to any NHS system, EPR, or shared network infrastructure.
+  </div>
+
+  <!-- ─── Section 2 ──────────────────────────────────────────────────────── -->
+  <h2 id="s2">2. Data Controller &amp; Processor Details</h2>
+  <table>
+    <tr><th>Role</th><th>Details</th></tr>
+    <tr><td><strong>Data Controller</strong></td><td>The individual NHS staff member who administers the self-hosted instance (hereafter "the Administrator"). The Administrator is responsible for ensuring the application is operated in compliance with UK GDPR and NHS data governance policy.</td></tr>
+    <tr><td><strong>Data Processor</strong></td><td>None — no data is transmitted to third-party processors. The application runs entirely on the Administrator's privately hosted server. Chart.js is loaded from jsDelivr CDN for rendering purposes only; no user data is sent to the CDN.</td></tr>
+    <tr><td><strong>DPO / IG Lead Notification</strong></td><td>The Administrator must notify their organisation's Data Protection Officer (DPO) or Information Governance (IG) lead that this tool is in use, and provide a copy of this DPIA, before staff are invited to use the service.</td></tr>
+    <tr><td><strong>ICO Registration</strong></td><td>The Administrator must confirm whether their organisation's ICO registration covers this processing activity.</td></tr>
+  </table>
+
+  <!-- ─── Section 3 ──────────────────────────────────────────────────────── -->
+  <h2 id="s3">3. Necessity &amp; Proportionality</h2>
+
+  <h3>3.1 Is the Processing Necessary?</h3>
+  <p>The processing of anonymised task metadata is the minimal data required to deliver workload logging functionality. No patient or staff identifiers are required or collected; anonymous usernames are computer-generated and not linked to any real identity.</p>
+
+  <h3>3.2 Is the Processing Proportionate?</h3>
+  <p>Data collected is limited to task type, timestamps, category, subcategory, outcome, and optional free-text notes. All records are automatically and permanently deleted after 30 days. The scope is proportionate to the legitimate interest in supporting staff workload analysis.</p>
+
+  <h3>3.3 Privacy by Design Measures</h3>
+  <ul>
+    <li>Anonymous usernames — computer-generated two-word identifiers with no link to real identity</li>
+    <li>Passwords hashed with bcrypt (cost factor 12) — irreversible; not readable by anyone</li>
+    <li>Task notes encrypted at rest using AES-256-GCM</li>
+    <li>Automatic 30-day data deletion runs daily</li>
+    <li>No email addresses, phone numbers, or real names are stored</li>
+    <li>Sessions expire after 30 minutes of inactivity and cannot span midnight</li>
+    <li>No third-party analytics, no telemetry, no external data sharing</li>
+  </ul>
+
+  <!-- ─── Section 4 ──────────────────────────────────────────────────────── -->
+  <h2 id="s4">4. Data Flows</h2>
+
+  <h3>4.1 Data Flow Overview</h3>
+  <table>
+    <tr><th>Flow</th><th>From</th><th>To</th><th>Data Involved</th><th>Encrypted in Transit?</th></tr>
+    <tr><td>User registration</td><td>Browser (user device)</td><td>Server (Administrator's host)</td><td>Chosen username, hashed password</td><td>Yes — HTTPS required in production</td></tr>
+    <tr><td>Login</td><td>Browser</td><td>Server</td><td>Username, password (hashed server-side)</td><td>Yes</td></tr>
+    <tr><td>Task creation / update</td><td>Browser</td><td>Server → SQLite database</td><td>Task metadata only (no PII); notes encrypted at rest</td><td>Yes</td></tr>
+    <tr><td>Data export</td><td>Server</td><td>Browser (user's device)</td><td>User's own task records (CSV/Excel)</td><td>Yes</td></tr>
+    <tr><td>Admin view</td><td>Server</td><td>Admin browser</td><td>Aggregate counts only; usernames visible to admin for management purposes</td><td>Yes</td></tr>
+    <tr><td>CDN (Chart.js)</td><td>Browser</td><td>jsDelivr CDN</td><td>Static JavaScript library — <strong>no user data sent</strong></td><td>Yes</td></tr>
+    <tr><td>Service Worker cache</td><td>Server</td><td>Browser cache (local)</td><td>Static app assets only (HTML, CSS, JS) — no personal data cached</td><td>N/A (local)</td></tr>
+  </table>
+
+  <h3>4.2 Data Storage</h3>
+  <ul>
+    <li><strong>Application database</strong>: SQLite file on Administrator's server. Contains anonymised task records, anonymous usernames, and bcrypt password hashes.</li>
+    <li><strong>Session database</strong>: Separate SQLite file holding active session tokens only. Auto-expires.</li>
+    <li><strong>No cloud storage</strong>: No data is stored in cloud services, shared drives, or NHS systems.</li>
+    <li><strong>No logs containing personal data</strong>: Server-side logs record operational events (e.g. server start, retention runs) and do not log user content or identifiers beyond session IDs managed by the session library.</li>
+  </ul>
+
+  <!-- ─── Section 5 ──────────────────────────────────────────────────────── -->
+  <h2 id="s5">5. Lawful Basis &amp; Special Category Data</h2>
+
+  <h3>5.1 Lawful Basis (UK GDPR Article 6)</h3>
+  <p><strong>Legitimate Interests (Article 6(1)(f))</strong> — The Administrator has a legitimate interest in understanding and recording the workload activity of the team. The processing uses anonymised data which is proportionate and does not override the rights and freedoms of data subjects, given the absence of any identifying information.</p>
+  <p>Alternatively, where individual staff members voluntarily self-register and use the tool for their own workload analysis, <strong>Consent (Article 6(1)(a))</strong> may be the appropriate lawful basis. The Administrator should confirm which basis applies in their context and document this accordingly.</p>
+
+  <h3>5.2 Special Category Data (UK GDPR Article 9)</h3>
+  <div class="green-box">
+    ✅ <strong>No special category data is processed.</strong> The application is expressly designed to exclude any health, biometric, racial, religious, or other special category data. The policy strictly prohibits users from entering such data.
+  </div>
+  <p>However, there is a residual risk that a user could inadvertently enter identifiable data in the free-text notes field. This risk is mitigated by the privacy splash screen, the Data and Use Policy, and the 30-day automatic deletion (see Section 7).</p>
+
+  <!-- ─── Section 6 ──────────────────────────────────────────────────────── -->
+  <h2 id="s6">6. Data Subjects &amp; Categories of Personal Data</h2>
+  <table>
+    <tr><th>Data Subject</th><th>Data Category</th><th>Description</th><th>Identifiable?</th></tr>
+    <tr><td>Staff users</td><td>Anonymous username</td><td>Two-word computer-generated identifier (e.g. "CalmRiver")</td><td>No — not linked to any real identity</td></tr>
+    <tr><td>Staff users</td><td>Password hash</td><td>bcrypt hash of user's chosen password</td><td>No — irreversible hash, not the password itself</td></tr>
+    <tr><td>Staff users</td><td>Task metadata</td><td>Task type, start/end times, category, subcategory, outcome, interrupt events</td><td>No — no names or identifiers in structured fields</td></tr>
+    <tr><td>Staff users</td><td>Free-text notes</td><td>Optional, unstructured text about a task; encrypted at rest</td><td>Potentially — if user enters identifiable data in violation of policy</td></tr>
+    <tr><td>Staff users</td><td>Session tokens</td><td>Server-side session identifiers; auto-expire after 30 minutes inactivity</td><td>No — opaque tokens</td></tr>
+    <tr><td>All data subjects</td><td>IP addresses</td><td>Used by the web server for rate limiting and NHS network controls only; not logged to database</td><td>Potentially — handled by server infrastructure only</td></tr>
+  </table>
+
+  <!-- ─── Section 7 ──────────────────────────────────────────────────────── -->
+  <h2 id="s7">7. Risk Register</h2>
+  <table>
+    <tr><th>Ref</th><th>Risk</th><th>Likelihood</th><th>Impact</th><th>Inherent Risk</th><th>Mitigation</th><th>Residual Risk</th></tr>
+    <tr>
+      <td>R1</td>
+      <td>User enters patient-identifiable data in free-text notes field</td>
+      <td>Medium</td><td>High</td>
+      <td><span class="badge badge-high">High</span></td>
+      <td>Privacy splash shown on first use; Data &amp; Use Policy accessible; notes encrypted at rest (AES-256-GCM); automatic 30-day deletion; admin can delete accounts on request</td>
+      <td><span class="badge badge-med">Medium</span></td>
+    </tr>
+    <tr>
+      <td>R2</td>
+      <td>Unauthorised access to the server / database</td>
+      <td>Low</td><td>High</td>
+      <td><span class="badge badge-med">Medium</span></td>
+      <td>HTTPS enforced in production; CSRF tokens; bcrypt password storage; rate limiting; helmet security headers; session expiry; Administrator responsible for server hardening</td>
+      <td><span class="badge badge-low">Low</span></td>
+    </tr>
+    <tr>
+      <td>R3</td>
+      <td>Session hijacking or CSRF attack</td>
+      <td>Low</td><td>Medium</td>
+      <td><span class="badge badge-med">Medium</span></td>
+      <td>CSRF tokens on all mutating requests; SameSite=strict session cookies; HTTP-only cookies; sessions cannot span midnight</td>
+      <td><span class="badge badge-low">Low</span></td>
+    </tr>
+    <tr>
+      <td>R4</td>
+      <td>Data export containing workload data accessed by unauthorised party</td>
+      <td>Low</td><td>Medium</td>
+      <td><span class="badge badge-med">Medium</span></td>
+      <td>Export only returns the authenticated user's own data; exported files are anonymous (no names); user responsible for securing exported files</td>
+      <td><span class="badge badge-low">Low</span></td>
+    </tr>
+    <tr>
+      <td>R5</td>
+      <td>Admin user accessing individual staff task data</td>
+      <td>Low</td><td>Medium</td>
+      <td><span class="badge badge-med">Medium</span></td>
+      <td>Admin interface shows only aggregate counts (total users, total tasks); admin cannot access individual task records, notes, or analytics</td>
+      <td><span class="badge badge-low">Low</span></td>
+    </tr>
+    <tr>
+      <td>R6</td>
+      <td>Application used on NHS network / device contrary to policy</td>
+      <td>Medium</td><td>High</td>
+      <td><span class="badge badge-high">High</span></td>
+      <td>Policy explicitly prohibits use on NHS systems or NHS Wi-Fi; privacy splash and Data &amp; Use Policy reinforce this; Administrator responsible for communicating acceptable use</td>
+      <td><span class="badge badge-med">Medium</span></td>
+    </tr>
+    <tr>
+      <td>R7</td>
+      <td>Data retained beyond 30-day retention period</td>
+      <td>Very Low</td><td>Low</td>
+      <td><span class="badge badge-low">Low</span></td>
+      <td>Automated daily retention job deletes tasks older than 30 days; runs on every server start and at 24-hour intervals</td>
+      <td><span class="badge badge-low">Low</span></td>
+    </tr>
+    <tr>
+      <td>R8</td>
+      <td>Loss of server / data by Administrator</td>
+      <td>Medium</td><td>Low</td>
+      <td><span class="badge badge-low">Low</span></td>
+      <td>Data is anonymous/pseudonymous; loss would not constitute a reportable breach under UK GDPR in most cases; Administrator should maintain backups per their organisation's policy</td>
+      <td><span class="badge badge-low">Low</span></td>
+    </tr>
+    <tr>
+      <td>R9</td>
+      <td>Brute-force or credential-stuffing attacks against login</td>
+      <td>Low</td><td>Medium</td>
+      <td><span class="badge badge-med">Medium</span></td>
+      <td>Auth rate limiter (20 attempts per 15 minutes); bcrypt hashing with cost factor 12; admin activation flow restricts unverified registrations</td>
+      <td><span class="badge badge-low">Low</span></td>
+    </tr>
+    <tr>
+      <td>R10</td>
+      <td>Supply chain risk via CDN (Chart.js from jsDelivr)</td>
+      <td>Very Low</td><td>Medium</td>
+      <td><span class="badge badge-low">Low</span></td>
+      <td>CSP restricts scripts to self and cdn.jsdelivr.net only; no user data transmitted to CDN; Administrator may opt to self-host Chart.js in higher-security environments</td>
+      <td><span class="badge badge-low">Low</span></td>
+    </tr>
+  </table>
+
+  <!-- ─── Section 8 ──────────────────────────────────────────────────────── -->
+  <h2 id="s8">8. Existing Controls</h2>
+  <table>
+    <tr><th>Control</th><th>Description</th></tr>
+    <tr><td>HTTPS / TLS</td><td>Server automatically uses TLS when certificates are present. HTTP redirect should be configured at the server level in production.</td></tr>
+    <tr><td>Authentication &amp; authorisation</td><td>All task and analytics endpoints require an authenticated session. Admin endpoints require admin privilege. Role-based access enforced server-side.</td></tr>
+    <tr><td>CSRF protection</td><td>CSRF token issued at <code>/api/auth/csrf-token</code>; all mutating API requests require <code>X-CSRF-Token</code> header matching the session token.</td></tr>
+    <tr><td>Rate limiting</td><td>Auth endpoints: 20 requests per 15 minutes. API endpoints: 200 requests per minute. Prevents brute-force and DoS attacks.</td></tr>
+    <tr><td>Helmet security headers</td><td>Content Security Policy, X-Frame-Options, X-Content-Type-Options, Strict-Transport-Security, and other security headers applied to all responses.</td></tr>
+    <tr><td>Password hashing</td><td>bcrypt with cost factor 12. Passwords are never stored in plaintext and cannot be read by anyone, including the Administrator.</td></tr>
+    <tr><td>Encryption at rest</td><td>Task notes encrypted using AES-256-GCM with a deployment-specific key (<code>ENCRYPTION_KEY</code> environment variable). Other structured fields are not considered to contain personal data.</td></tr>
+    <tr><td>Session management</td><td>Sessions expire after 30 minutes of inactivity. Sessions cannot span midnight. HTTP-only, SameSite=strict, Secure cookies in production.</td></tr>
+    <tr><td>Data minimisation &amp; anonymisation</td><td>No real names, email addresses, NHS numbers, or patient identifiers are collected or required.</td></tr>
+    <tr><td>Automatic data retention</td><td>All task records older than 30 days are permanently and automatically deleted daily.</td></tr>
+    <tr><td>Privacy splash screen</td><td>Displayed to every user on first login. Requires explicit acknowledgement before the application is used.</td></tr>
+    <tr><td>Data and Use Policy</td><td>Accessible at <code>/policy</code> from the application. Linked in the privacy splash screen and welcome page.</td></tr>
+    <tr><td>Right to deletion</td><td>Users may request full account deletion from the Administrator at any time. Admin can permanently delete any account and all associated data.</td></tr>
+    <tr><td>Account activation</td><td>Self-registration can be set to require Administrator approval before an account is active, preventing unauthorised access.</td></tr>
+  </table>
+
+  <!-- ─── Section 9 ──────────────────────────────────────────────────────── -->
+  <h2 id="s9">9. Residual Risks &amp; Recommendations</h2>
+
+  <div class="amber-box">
+    ⚠️ <strong>Action Required (R1 / R6):</strong> The two medium residual risks (accidental PII entry; use on NHS network) cannot be fully mitigated by technical controls alone and require organisational safeguards.
+  </div>
+
+  <ol>
+    <li><strong>Communicate acceptable use before staff on-boarding</strong> — Provide all users with a written summary of what data may and may not be entered, emphasising the free-text notes field. Include a reference to this DPIA.</li>
+    <li><strong>Obtain a copy of organisational IG sign-off</strong> — The Administrator must share this DPIA with their NHS organisation's DPO or IG lead and obtain documented approval before clinical staff use the service.</li>
+    <li><strong>Consider self-hosting Chart.js</strong> — In high-security environments, self-host the Chart.js library to eliminate the CDN dependency and reduce supply-chain risk (R10).</li>
+    <li><strong>Ensure ENCRYPTION_KEY is set</strong> — The <code>ENCRYPTION_KEY</code> environment variable must be set to a 64-character hexadecimal string; without it, notes are stored as plaintext. The Administrator must verify this before deployment.</li>
+    <li><strong>Log and monitor access anomalies</strong> — The Administrator should review server logs periodically for unusual login patterns and investigate any account that appears to be sharing credentials.</li>
+    <li><strong>Review this DPIA annually</strong> — Or immediately following any material change to the application's functionality, data flows, or deployment environment.</li>
+    <li><strong>Incident response procedure</strong> — Define a procedure for responding to a potential data breach (e.g. accidental entry of patient data). This should include: identify, contain (delete account/data), assess, notify DPO if required by UK GDPR Article 33.</li>
+  </ol>
+
+  <!-- ─── Section 10 ──────────────────────────────────────────────────────── -->
+  <h2 id="s10">10. Consultation</h2>
+  <table>
+    <tr><th>Stakeholder</th><th>Date Consulted</th><th>Input / Outcome</th></tr>
+    <tr><td>Data Protection Officer / IG Lead</td><td><em>To be completed by Administrator</em></td><td><em>Record outcome here</em></td></tr>
+    <tr><td>Clinical staff representatives</td><td><em>To be completed by Administrator</em></td><td><em>Record outcome here</em></td></tr>
+    <tr><td>Application Developer</td><td>April 2026</td><td>Technical review of data flows, encryption, and access controls confirmed. DPIA authored.</td></tr>
+  </table>
+
+  <p>Under UK GDPR Article 35(9), data subjects (staff users) should be consulted where appropriate. Given the anonymous and voluntary nature of data collection, formal individual consultation is not required; however, staff representatives should be informed of this processing and given the opportunity to raise concerns prior to deployment.</p>
+
+  <!-- ─── Section 11 ──────────────────────────────────────────────────────── -->
+  <h2 id="s11">11. Sign-off &amp; Review Schedule</h2>
+
+  <div class="green-box">
+    ✅ <strong>DPIA Outcome:</strong> Based on the controls identified, the residual risks from processing anonymised workload metadata in Tasker are assessed as <strong>Low to Medium</strong>. The processing is considered proportionate and compliant with UK GDPR, provided the organisational recommendations in Section 9 are implemented.
+  </div>
+
+  <table>
+    <tr><th>Role</th><th>Name</th><th>Date</th><th>Signature</th></tr>
+    <tr><td>DPIA Author</td><td><em>To be completed</em></td><td>April 2026</td><td></td></tr>
+    <tr><td>Data Controller (Administrator)</td><td><em>To be completed</em></td><td><em>To be completed</em></td><td></td></tr>
+    <tr><td>DPO / IG Lead (if applicable)</td><td><em>To be completed</em></td><td><em>To be completed</em></td><td></td></tr>
+  </table>
+
+  <h3>Review Schedule</h3>
+  <ul>
+    <li>Annual review: April 2027 (and annually thereafter)</li>
+    <li>Triggered review: following any material change to the application, data flows, or deployment environment</li>
+    <li>Triggered review: following any actual or suspected personal data breach</li>
+  </ul>
+
+  <div class="sig-block">
+    <p>This DPIA was prepared in accordance with the ICO's <em>Guide to Data Protection Impact Assessments</em>, UK GDPR Article 35, and NHS Digital IG Toolkit guidance. It should be retained by the Administrator as part of the organisation's Article 30 processing records.</p>
+    <p style="margin-top:8px">
+      <a href="/policy" target="_blank" style="color:#1a56db">View Data and Use Policy</a>
+    </p>
+  </div>
+
+</body>
+</html>

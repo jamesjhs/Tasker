@@ -97,9 +97,13 @@ async function checkAssetVersion() {
     if (!r.ok) return false;
     const { version } = await r.json();
     const stored = localStorage.getItem('tasker_app_version');
-    // Show an update banner whenever the stored version is missing or outdated.
-    // The stored !== null guard is intentionally absent so that users whose
-    // install pre-dates version tracking also see the banner.
+    // First visit — no version stored yet. Silently record the current version
+    // so the app loads normally, then return false (no update required).
+    if (stored === null) {
+      localStorage.setItem('tasker_app_version', version);
+      return false;
+    }
+    // Returning visitor whose stored version is outdated — show the update banner.
     if (stored !== version) {
       showUpdateBanner();
       return true;
@@ -682,7 +686,9 @@ function renderPrivacySplash(onContinue) {
       ✓ I Understand — Continue
     </button>
     <p style="text-align:center;font-size:.75rem;color:#9ca3af;margin-top:16px">
-      <a href="/policy" target="_blank" style="color:#9ca3af">View full Data &amp; Use Policy</a>
+      <a href="/policy" target="_blank" style="color:#9ca3af">Data &amp; Use Policy</a>
+      &nbsp;·&nbsp;
+      <a href="/dpia" target="_blank" style="color:#9ca3af">Data Protection Impact Assessment</a>
     </p>
   </div>`;
   document.body.appendChild(overlay);

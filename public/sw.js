@@ -57,7 +57,7 @@ self.addEventListener('fetch', event => {
   // /analytics, /settings, or any other SPA path) always loads the latest
   // app shell that the SW precached on install, instead of accidentally serving
   // a stale per-URL entry from the browser's HTTP cache.
-  const STANDALONE_PAGES = ['/policy', '/help', '/guide'];
+  const STANDALONE_PAGES = ['/policy', '/dpia', '/help', '/guide'];
   if (event.request.mode === 'navigate' && !STANDALONE_PAGES.includes(url.pathname)) {
     event.respondWith(
       caches.match('/').then(cached => cached || fetch('/'))
