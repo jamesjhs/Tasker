@@ -19,6 +19,7 @@ const state = {
   currentView: null,
   dropdowns: { category: [], subcategory: [], outcome: [] },
   taskForm: {},
+  lastUsedCombos: {},
   editTask: null,
   charts: {},
   pendingTaskLog: null,  // { count, logged_at } — most recent pending task snapshot
@@ -119,6 +120,12 @@ function openCombo(id, field, hasNew) {
     // mobile soft keyboard when the user merely opens a dropdown.
     if ((navigator.maxTouchPoints ?? 0) === 0) setTimeout(() => search.focus(), 30);
   }
+  // Scroll the last-used (highlighted) option into view if present.
+  // Small delay ensures the opts container has been rendered before scrolling.
+  setTimeout(() => {
+    const recent = document.querySelector(`#${id}-opts .combo-recent`);
+    if (recent) recent.scrollIntoView({ block: 'nearest' });
+  }, 20);
 }
 
 function closeCombo(id) {
@@ -136,13 +143,15 @@ function renderComboOpts(id, field, hasNew, query) {
   const filtered = query ? all.filter(o => o.toLowerCase().includes(query.toLowerCase())) : all;
   const sid = safeId(id);
   const sfield = safeId(field);
+  const lastUsed = state.lastUsedCombos[field] || null;
   let html = '';
   if (filtered.length === 0 && !hasNew) {
     html = `<div class="combo-opt combo-empty">No matching options</div>`;
   } else {
-    html = filtered.map((o,i) =>
-      `<div class="combo-opt" data-idx="${i}" onmousedown="selectComboOpt('${sid}','${sfield}','${esc(o)}')">${esc(o)}</div>`
-    ).join('');
+    html = filtered.map((o,i) => {
+      const isRecent = lastUsed && o === lastUsed;
+      return `<div class="combo-opt${isRecent ? ' combo-recent' : ''}" data-idx="${i}" onmousedown="selectComboOpt('${sid}','${sfield}','${esc(o)}')">${esc(o)}</div>`;
+    }).join('');
   }
   if (hasNew) html += `<div class="combo-opt combo-new" onmousedown="comboAddNew('${sid}','${sfield}')">+ Add new option…</div>`;
   container.innerHTML = html;
@@ -1741,6 +1750,9 @@ async function submitTaskReview(taskId, isEdit, dest) {
     stopActivityTracking();
     await checkActiveTask();
     if (dest === 'start') {
+      // Track category and subcategory so the task-start dropdowns can highlight
+      // the most recently used option with a light-green indicator.
+      state.lastUsedCombos = { category: categoryVal, subcategory: subcategoryVal };
       renderTaskStart();
     } else {
       showAlert('Task saved!', 'success', 'te-alerts');

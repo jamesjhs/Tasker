@@ -430,8 +430,12 @@ html, body {
   overflow: hidden;
   z-index: 200;
   box-shadow: 0 6px 20px rgba(0,0,0,.13);
+  flex-direction: column;
+  resize: vertical;
+  min-height: 150px;
+  max-height: 280px;
 }
-.combo-panel.open { display: block; }
+.combo-panel.open { display: flex; }
 .combo-search {
   display: block;
   width: 100%;
@@ -444,7 +448,8 @@ html, body {
   min-height: 0;
 }
 .combo-search:focus { outline: none; background: #eff6ff; }
-.combo-opts { overflow: auto; max-height: 180px; resize: vertical; min-height: 40px; }
+.combo-opts { overflow: auto; flex: 1; min-height: 0; }
+.combo-opt.combo-recent { background: #d1fae5; }
 .combo-opt {
   padding: 10px 14px;
   cursor: pointer;
