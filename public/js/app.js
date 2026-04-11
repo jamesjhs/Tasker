@@ -28,7 +28,7 @@ const state = {
   charts: {},
   pendingTaskLog: null,  // { count, logged_at } — most recent pending task snapshot
   recentHandledCount: null,  // number — tasks completed in the last 7 days
-  pendingGraphDays: null,       // null, 7, or 30 — currently shown pending graph
+  pendingGraphDays: 7,          // null, 7, or 30 — currently shown pending graph
   analyticsQuickPeriod: 'today', // 'today', '7d', '30d', or null
   analyticsQuickFrom: '',        // date string set by quick filter
   analyticsQuickTo: '',          // date string set by quick filter
@@ -1162,7 +1162,6 @@ function renderHomeHTML() {
       <h1>👋 Tasker</h1>
       <a href="/guide" target="_blank" style="font-size:.8rem;color:#1a56db;font-weight:600;text-decoration:none;white-space:nowrap">📖 Guide</a>
     </div>
-    <div class="retention-notice">⏳ Your data is automatically deleted after 30 days.</div>
     ${midnightWarn ? '<div class="midnight-warn">⚠️ Approaching midnight — your session will end at midnight. Complete any active task.</div>' : ''}
     <div id="home-alerts"></div>
     ${noticesPanelHtml}
