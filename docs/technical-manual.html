@@ -107,7 +107,7 @@
 <div class="page">
 
 <h1>Tasker — Technical Reference Manual</h1>
-<p class="subtitle">Version 1.6.0 &nbsp;·&nbsp; April 2026 &nbsp;·&nbsp; <em>Prepared in the role of Professor of Digital Engineering Product Design</em></p>
+<p class="subtitle">Version 1.8.5 &nbsp;·&nbsp; April 2026 &nbsp;·&nbsp; <em>Prepared in the role of Professor of Digital Engineering Product Design</em></p>
 
 <div class="toc">
   <h2>Table of Contents</h2>
@@ -366,7 +366,8 @@
 <h2 id="s8">8. Field-Level Encryption — <code>src/encrypt.ts</code></h2>
 
 <h3>8.1 Purpose and Scope</h3>
-<p>The <code>notes</code> field on a task is the only free-text field users can write into. To prevent exposure if the database file is accessed outside the application, notes are encrypted at rest when <code>ENCRYPTION_KEY</code> is configured.</p>
+<p>The <code>notes</code> field on a task is the only free-text field users can write into that is stored in the database. To prevent exposure if the database file is accessed outside the application, notes are encrypted at rest when <code>ENCRYPTION_KEY</code> is configured.</p>
+<p>The <strong>Send suggestion to developers</strong> field in the Notices and Feedback panel is a separate freetext input whose content is transmitted by email to an NHS.net address and is never persisted on the application server. From v1.8.5, this field displays a prominent notice instructing users not to submit any patient, location, or staff-identifiable information.</p>
 
 <h3>8.2 Algorithm: AES-256-GCM</h3>
 <ul>
@@ -791,7 +792,8 @@ R²        = 1 - SS_res / SS_tot</code></pre>
   <li>Usernames are computer-generated and cannot be linked to real identities.</li>
   <li>The <code>events</code> table stores only event type + timestamp — never user IDs.</li>
   <li>A <strong>Privacy Splash</strong> is shown on every login, reinforcing the prohibition on entering patient-identifiable data.</li>
-  <li>Task notes (the only free-text field) are encrypted at rest when configured.</li>
+  <li>Task notes (the only free-text field stored in the database) are encrypted at rest when configured.</li>
+  <li>The <strong>Send suggestion to developers</strong> field is the only other freetext input; submitted text is emailed to an NHS.net address and never persisted on the server. An on-screen notice (from v1.8.5) explicitly warns users not to include patient, location, or staff-identifiable information.</li>
   <li>Aggregate statistics are shown publicly on the login page; individual data is always scoped to the authenticated user.</li>
 </ul>
 
