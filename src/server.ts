@@ -15,6 +15,9 @@ import tasksRouter from './routes/tasks';
 import analyticsRouter from './routes/analytics';
 import dropdownsRouter from './routes/dropdowns';
 import adminRouter from './routes/admin';
+import flagsRouter from './routes/flags';
+import messagesRouter from './routes/messages';
+import reviewRouter from './routes/review';
 
 import { version as APP_VERSION } from '../package.json';
 
@@ -112,11 +115,17 @@ app.use('/api/tasks', apiLimiter, tasksRouter);
 app.use('/api/analytics', apiLimiter, analyticsRouter);
 app.use('/api/dropdowns', apiLimiter, dropdownsRouter);
 app.use('/api/admin', apiLimiter, adminRouter);
+app.use('/api/flags', apiLimiter, flagsRouter);
+app.use('/api/messages', apiLimiter, messagesRouter);
 
 app.get('/policy', apiLimiter, (_req, res) => res.sendFile(path.join(__dirname, '..', 'public', 'policy.html')));
 app.get('/dpia',   apiLimiter, (_req, res) => res.sendFile(path.join(__dirname, '..', 'public', 'dpia.html')));
 app.get('/help',   apiLimiter, (_req, res) => res.sendFile(path.join(__dirname, '..', 'public', 'help.html')));
 app.get('/guide',  apiLimiter, (_req, res) => res.sendFile(path.join(__dirname, '..', 'public', 'guide.html')));
+
+// ─── Suggestion review page (token-gated, no login required) ────────────────
+app.use('/suggest/review', apiLimiter, reviewRouter);
+
 app.get('/{*path}', apiLimiter, (_req, res) => {
   res.setHeader('Cache-Control', 'no-cache');
   res.sendFile(path.join(__dirname, '..', 'public', 'index.html'));

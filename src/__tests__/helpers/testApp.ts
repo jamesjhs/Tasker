@@ -12,6 +12,10 @@ import authRouter from '../../routes/auth';
 import tasksRouter from '../../routes/tasks';
 import dropdownsRouter from '../../routes/dropdowns';
 import adminRouter from '../../routes/admin';
+import flagsRouter from '../../routes/flags';
+import messagesRouter from '../../routes/messages';
+import analyticsRouter from '../../routes/analytics';
+import reviewRouter from '../../routes/review';
 
 export function buildTestApp() {
   const app = express();
@@ -30,6 +34,10 @@ export function buildTestApp() {
   app.use('/api/tasks', tasksRouter);
   app.use('/api/dropdowns', dropdownsRouter);
   app.use('/api/admin', adminRouter);
+  app.use('/api/flags', flagsRouter);
+  app.use('/api/messages', messagesRouter);
+  app.use('/api/analytics', analyticsRouter);
+  app.use('/suggest/review', reviewRouter);
   return app;
 }
 
@@ -37,6 +45,7 @@ export function buildTestApp() {
 export async function createAdminSession(agent: any) {
   const db = getDb();
   const pw = 'AdminP@ss1!';
+  // Cost factor 4 is intentionally low for test speed; production uses 12
   const hash = await bcrypt.hash(pw, 4);
   const username = 'admin_' + crypto.randomBytes(4).toString('hex');
   db.prepare(
@@ -59,6 +68,7 @@ export async function createAdminSession(agent: any) {
 export async function createUserSession(agent: any) {
   const db = getDb();
   const pw = 'UserP@ss1!';
+  // Cost factor 4 is intentionally low for test speed; production uses 12
   const hash = await bcrypt.hash(pw, 4);
   const username = 'user_' + crypto.randomBytes(4).toString('hex');
   db.prepare(

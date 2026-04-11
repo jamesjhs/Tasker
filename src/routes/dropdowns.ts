@@ -1,6 +1,8 @@
 import { Router, Request, Response } from 'express';
 import { getDb } from '../db';
 import { requireAuth, requireAdmin, validateCsrf, requirePasswordChange, requireActivation } from '../middleware/index';
+import { sendEmail } from '../email';
+import crypto from 'crypto';
 
 const router = Router();
 const ALLOWED = ['category', 'subcategory', 'outcome'];
@@ -47,20 +49,47 @@ router.get('/:field', requireAuth, requirePasswordChange, requireActivation, (re
   res.json({ options: opts });
 });
 
-router.post('/propose', requireAuth, requirePasswordChange, requireActivation, validateCsrf, (req: Request, res: Response) => {
+router.post('/propose', requireAuth, requirePasswordChange, requireActivation, validateCsrf, async (req: Request, res: Response) => {
   const s = req.session as any;
   const { field_name, value } = req.body as { field_name: string; value: string };
   if (!ALLOWED.includes(field_name)) { res.status(400).json({ error: 'Invalid field.' }); return; }
   const clean = (value || '').trim();
   if (!clean || clean.length > 100) { res.status(400).json({ error: 'Invalid value.' }); return; }
-  const db = getDb();
-  const existing = db.prepare('SELECT id,approved FROM dropdown_options WHERE field_name=? AND value=?').get(field_name, clean) as any;
-  if (existing) {
-    res.json({ message: existing.approved ? 'Option already exists.' : 'Option already pending review.', value: clean });
+
+  // Check if already an approved option (no need to email)
+  const existing = getDb().prepare('SELECT id, approved FROM dropdown_options WHERE field_name=? AND value=?').get(field_name, clean) as any;
+  if (existing?.approved) { res.json({ message: 'Option already exists.', value: clean }); return; }
+
+  const fieldLabels: Record<string, string> = { category: 'Task From', subcategory: 'Task Type', outcome: 'Outcome' };
+
+  // Store a metadata-only proposal record with a unique review token
+  const reviewToken = crypto.randomBytes(32).toString('hex');
+  let proposalId: number | bigint;
+  try {
+    const proposalResult = getDb().prepare('INSERT INTO dropdown_proposals (user_id, field_name, review_token) VALUES (?,?,?)').run(s.userId, field_name, reviewToken);
+    proposalId = proposalResult.lastInsertRowid;
+  } catch (err) {
+    console.error('[dropdowns] Failed to insert proposal record:', err);
+    res.status(500).json({ error: 'Could not record proposal. Please try again.' });
     return;
   }
-  db.prepare('INSERT OR IGNORE INTO dropdown_options (field_name,value,approved,proposed_by_user_id) VALUES (?,?,0,?)').run(field_name, clean, s.userId);
-  res.json({ message: 'Option submitted for admin review.', value: clean });
+
+  const appBase = (process.env['APP_URL'] || '').replace(/\/$/, '');
+  const reviewLink = appBase
+    ? `${appBase}/suggest/review?token=${reviewToken}`
+    : `/suggest/review?token=${reviewToken} (prepend your Tasker server URL)`;
+
+  try {
+    await sendEmail(
+      `Tasker: New dropdown suggestion — ${fieldLabels[field_name] || field_name}`,
+      `A new option has been suggested for the "${fieldLabels[field_name] || field_name}" dropdown:\n\n"${clean}"\n\nTo review and add this option, click the link below. You will be asked to enter the approved wording before it is added to the system:\n\n${reviewLink}\n\nIf this suggestion is not appropriate, you can dismiss it from the admin panel.`,
+    );
+    res.json({ message: 'Your suggestion has been sent to the administrator by email.', value: clean });
+  } catch (e: any) {
+    // Remove the proposal record if email failed
+    getDb().prepare('DELETE FROM dropdown_proposals WHERE id=?').run(proposalId);
+    res.status(503).json({ error: `Could not send suggestion: ${e?.message || 'SMTP error'}` });
+  }
 });
 
 // Admin routes
@@ -75,6 +104,7 @@ router.post('/admin', requireAdmin, validateCsrf, (req: Request, res: Response) 
   const { field_name, value } = req.body as { field_name: string; value: string };
   if (!ALLOWED.includes(field_name) || !(value || '').trim()) { res.status(400).json({ error: 'Invalid.' }); return; }
   const db = getDb();
+  const fieldLabels: Record<string, string> = { category: 'Task From', subcategory: 'Task Type', outcome: 'Outcome' };
   try {
     const result = db.prepare('INSERT OR IGNORE INTO dropdown_options (field_name,value,approved) VALUES (?,?,1)').run(field_name, value.trim());
     if (result.changes > 0) {
@@ -83,6 +113,18 @@ router.post('/admin', requireAdmin, validateCsrf, (req: Request, res: Response) 
       db.prepare(
         'INSERT OR IGNORE INTO group_dropdown_options (group_id, dropdown_option_id) SELECT id,? FROM user_groups'
       ).run(newId);
+    }
+    // Notify users who had pending proposals for this field
+    const proposals = db.prepare(
+      'SELECT DISTINCT user_id FROM dropdown_proposals WHERE field_name=?'
+    ).all(field_name) as { user_id: number }[];
+    if (proposals.length > 0) {
+      const insMsg = db.prepare('INSERT INTO user_messages (user_id, message) VALUES (?,?)');
+      const msg = `Your suggested option for "${fieldLabels[field_name] || field_name}" has been reviewed and a new option has been added to the list. Please check the dropdown to see if it matches your suggestion.`;
+      db.transaction(() => {
+        for (const p of proposals) insMsg.run(p.user_id, msg);
+        db.prepare('DELETE FROM dropdown_proposals WHERE field_name=?').run(field_name);
+      })();
     }
     res.json({ success: true });
   } catch {

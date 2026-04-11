@@ -51,6 +51,7 @@ function initSchema(db: Database.Database): void {
     CREATE TABLE IF NOT EXISTS user_groups (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT NOT NULL UNIQUE,
+      is_approved INTEGER NOT NULL DEFAULT 1,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
 
@@ -125,6 +126,54 @@ function initSchema(db: Database.Database): void {
       count INTEGER NOT NULL,
       logged_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
+
+    CREATE TABLE IF NOT EXISTS notices (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      message TEXT NOT NULL,
+      active INTEGER NOT NULL DEFAULT 1,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS user_messages (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      message TEXT NOT NULL,
+      read INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS task_flag_options (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      value TEXT NOT NULL UNIQUE,
+      approved INTEGER NOT NULL DEFAULT 1,
+      proposed_by_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS task_flags (
+      task_id INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+      flag_option_id INTEGER NOT NULL REFERENCES task_flag_options(id) ON DELETE CASCADE,
+      PRIMARY KEY (task_id, flag_option_id)
+    );
+
+    CREATE TABLE IF NOT EXISTS dropdown_proposals (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      field_name TEXT NOT NULL,
+      review_token TEXT UNIQUE,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS flag_proposals (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      review_token TEXT NOT NULL UNIQUE,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_dropdown_proposals_field ON dropdown_proposals(field_name);
+
+    CREATE INDEX IF NOT EXISTS idx_users_broadcast ON users(is_admin, is_approved, pending_activation);
   `);
 
   // Migrate existing databases: add lockout columns if missing
@@ -157,6 +206,12 @@ function initSchema(db: Database.Database): void {
     db.exec('ALTER TABLE tasks ADD COLUMN assigned_date TEXT');
   }
 
+  // Migrate existing databases: add review_token to dropdown_proposals if missing
+  const proposalCols = (db.prepare("PRAGMA table_info(dropdown_proposals)").all() as { name: string }[]).map(c => c.name);
+  if (!proposalCols.includes('review_token')) {
+    db.exec('ALTER TABLE dropdown_proposals ADD COLUMN review_token TEXT');
+  }
+
   // Seed default registration settings if not present
   const insOrIgnoreSetting = db.prepare('INSERT OR IGNORE INTO settings (key, value) VALUES (?,?)');
   insOrIgnoreSetting.run('self_registration', 'admin_approved');
@@ -186,5 +241,19 @@ function initSchema(db: Database.Database): void {
     db.prepare(
       'INSERT OR IGNORE INTO group_dropdown_options (group_id, dropdown_option_id) SELECT ?,id FROM dropdown_options WHERE approved=1'
     ).run(generalGroupId);
+  }
+
+
+  const flagCount = (db.prepare('SELECT COUNT(*) as c FROM task_flag_options WHERE approved=1').get() as { c: number }).c;
+  if (flagCount === 0) {
+    const insFlag = db.prepare('INSERT OR IGNORE INTO task_flag_options (value, approved) VALUES (?,1)');
+    const seedFlags = db.transaction((vals: string[]) => { for (const v of vals) insFlag.run(v); });
+    seedFlags([
+      'Sent to wrong user',
+      'Priority too high',
+      'Priority too low',
+      'Should be sent to group',
+      'Should be sent to specific user',
+    ]);
   }
 }

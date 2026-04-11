@@ -1,7 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { getDb } from '../db';
 import { requireAuth, requirePasswordChange, requireActivation } from '../middleware/index';
-import { decryptField } from '../encrypt';
 import ExcelJS from 'exceljs';
 
 const router = Router();
@@ -77,6 +76,15 @@ function buildSummary(tasks: any[]) {
     interruptionsByCategory[cat] = (interruptionsByCategory[cat] || 0) + (t.interruptions?.length || 0);
   }
 
+  // Flag breakdown
+  const byFlag: Record<string, number> = {};
+  for (const t of tasks) {
+    for (const f of (t.flag_labels || [])) {
+      byFlag[f] = (byFlag[f] || 0) + 1;
+    }
+  }
+  const tasksWithFlags = tasks.filter(t => (t.flag_labels?.length || 0) > 0).length;
+
   // Linear regression on daily counts
   const dates = Object.keys(byDate).sort();
   let regression: { slope: number; intercept: number; r2: number } | null = null;
@@ -118,16 +126,36 @@ function buildSummary(tasks: any[]) {
     personalCount: personal.length,
     personalMins: personal.reduce((s, t) => s + mins(t.start_time, t.end_time, t.interruptions), 0),
     byCategory, byOutcome, byDate, byHour, byDayOfWeek, bySubcategory, interruptionsByCategory,
+    byFlag, tasksWithFlags,
     dates, regression,
   };
 }
 
+/** Batch-fetch flag labels for an array of tasks. Returns the same tasks with flag_labels populated. */
+function attachFlagLabels(db: ReturnType<typeof getDb>, tasks: any[]): any[] {
+  if (tasks.length === 0) return tasks;
+  const placeholders = tasks.map(() => '?').join(',');
+  const flagRows = db.prepare(
+    `SELECT tf.task_id, tfo.value FROM task_flags tf
+     JOIN task_flag_options tfo ON tfo.id=tf.flag_option_id
+     WHERE tf.task_id IN (${placeholders})`
+  ).all(...tasks.map(t => t.id)) as { task_id: number; value: string }[];
+  const flagMap = new Map<number, string[]>();
+  for (const r of flagRows) {
+    if (!flagMap.has(r.task_id)) flagMap.set(r.task_id, []);
+    flagMap.get(r.task_id)!.push(r.value);
+  }
+  return tasks.map(t => ({ ...t, flag_labels: flagMap.get(t.id) || [] }));
+}
+
 router.get('/session', (req: Request, res: Response) => {
   const s = req.session as any;
+  const db = getDb();
   const dateStr = s.sessionDate || new Date().toISOString().split('T')[0];
-  const tasks = (getDb().prepare(
+  const raw = (db.prepare(
     `SELECT * FROM tasks WHERE user_id=? AND status='completed' AND date(start_time)=? ORDER BY start_time`
-  ).all(s.userId, dateStr) as any[]).map(t => ({ ...t, interruptions: JSON.parse(t.interruptions || '[]'), notes: decryptField(t.notes) }));
+  ).all(s.userId, dateStr) as any[]).map(t => ({ ...t, interruptions: JSON.parse(t.interruptions || '[]') }));
+  const tasks = attachFlagLabels(db, raw);
   res.json({ tasks, summary: buildSummary(tasks) });
 });
 
@@ -143,31 +171,33 @@ router.get('/history', (req: Request, res: Response) => {
   if (subcategory)           { q += ' AND subcategory=?'; p.push(subcategory); }
   if (outcome)               { q += ' AND outcome=?'; p.push(outcome); }
   q += ' ORDER BY start_time';
-  const tasks = (getDb().prepare(q).all(...p) as any[]).map(t => ({ ...t, interruptions: JSON.parse(t.interruptions || '[]'), notes: decryptField(t.notes) }));
+  const db = getDb();
+  const raw = (db.prepare(q).all(...p) as any[]).map(t => ({ ...t, interruptions: JSON.parse(t.interruptions || '[]') }));
+  const tasks = attachFlagLabels(db, raw);
   res.json({ tasks, summary: buildSummary(tasks) });
 });
 
 router.get('/export', async (req: Request, res: Response) => {
   const s = req.session as any;
-  const tasks = (getDb().prepare(
+  const db = getDb();
+  const raw = (db.prepare(
     `SELECT * FROM tasks WHERE user_id=? AND status='completed' AND start_time>=datetime('now','-30 days') ORDER BY start_time`
-  ).all(s.userId) as any[]).map(t => {
-    const interruptions = JSON.parse(t.interruptions || '[]');
-    return {
-      'Type': t.is_duty ? 'Duty' : 'Personal',
-      'Task From': t.category || '',
-      'Task Type': t.subcategory || '',
-      'Outcome': t.outcome || '',
-      'Date Assigned': t.assigned_date ? new Date(/^\d{4}-\d{2}-\d{2}$/.test(t.assigned_date) ? t.assigned_date + 'T00:00:00' : t.assigned_date) : '',
-      'Start Time': t.start_time ? new Date(t.start_time) : '',
-      'End Time': t.end_time ? new Date(t.end_time) : '',
-      'Duration (secs)': secs(t.start_time, t.end_time, interruptions),
-      'Interruptions': interruptions.length,
-      'Notes': decryptField(t.notes) || '',
-    };
-  });
+  ).all(s.userId) as any[]).map(t => ({ ...t, interruptions: JSON.parse(t.interruptions || '[]') }));
+  const tasksWithFlags = attachFlagLabels(db, raw);
+  const tasks = tasksWithFlags.map(t => ({
+    'Type': t.is_duty ? 'Duty' : 'Personal',
+    'Task From': t.category || '',
+    'Task Type': t.subcategory || '',
+    'Outcome': t.outcome || '',
+    'Date Assigned': t.assigned_date ? new Date(/^\d{4}-\d{2}-\d{2}$/.test(t.assigned_date) ? t.assigned_date + 'T00:00:00' : t.assigned_date) : '',
+    'Start Time': t.start_time ? new Date(t.start_time) : '',
+    'End Time': t.end_time ? new Date(t.end_time) : '',
+    'Duration (secs)': secs(t.start_time, t.end_time, t.interruptions),
+    'Interruptions': t.interruptions.length,
+    'Flags': (t.flag_labels as string[]).join('; '),
+  }));
 
-  const pendingLog = getDb().prepare(
+  const pendingLog = db.prepare(
     `SELECT count, logged_at FROM pending_task_logs WHERE user_id=? ORDER BY logged_at DESC LIMIT 1`
   ).get(s.userId) as any;
 
@@ -183,7 +213,7 @@ router.get('/export', async (req: Request, res: Response) => {
     { header: 'End Time',        key: 'End Time',        width: 20, style: { numFmt: 'yyyy-mm-dd hh:mm' } },
     { header: 'Duration (secs)', key: 'Duration (secs)', width: 16 },
     { header: 'Interruptions',   key: 'Interruptions',   width: 14 },
-    { header: 'Notes',           key: 'Notes',           width: 32 },
+    { header: 'Flags',           key: 'Flags',           width: 40 },
   ];
   ws.addRows(tasks);
 

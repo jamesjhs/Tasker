@@ -1,7 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { getDb } from '../db';
 import { requireAuth, validateCsrf, requirePasswordChange, requireActivation, logEvent } from '../middleware/index';
-import { encryptField, decryptField } from '../encrypt';
 
 const router = Router();
 router.use(requireAuth);
@@ -56,7 +55,7 @@ router.get('/active', (req: Request, res: Response) => {
   ).get(s.userId) as any;
   if (!task) { res.json({ task: null }); return; }
   task.interruptions = JSON.parse(task.interruptions || '[]');
-  task.notes = decryptField(task.notes);
+  task.flag_ids = (getDb().prepare('SELECT flag_option_id FROM task_flags WHERE task_id=?').all(task.id) as any[]).map(r => r.flag_option_id);
   res.json({ task });
 });
 
@@ -65,18 +64,15 @@ router.post('/start', validateCsrf, (req: Request, res: Response) => {
   const db = getDb();
   const active = db.prepare(`SELECT id FROM tasks WHERE user_id=? AND status='in_progress'`).get(s.userId);
   if (active) { res.status(409).json({ error: 'You already have an active task. Complete or discard it first.' }); return; }
-  const { is_duty, category, subcategory, outcome, notes, start_time, assigned_date } = req.body as any;
+  const { is_duty, category, subcategory, outcome, start_time, assigned_date } = req.body as any;
   const now = start_time || new Date().toISOString();
   if (new Date(now).toDateString() !== new Date().toDateString()) {
     res.status(400).json({ error: 'Task start time must be today.' }); return;
   }
-  if (notes != null && String(notes).length > 2000) {
-    res.status(400).json({ error: 'Notes must not exceed 2000 characters.' }); return;
-  }
   const r = db.prepare(
-    `INSERT INTO tasks (user_id,is_duty,assigned_date,start_time,category,subcategory,outcome,notes,status)
-     VALUES (?,?,?,?,?,?,?,?,'in_progress')`
-  ).run(s.userId, is_duty ? 1 : 0, assigned_date || null, now, category || null, subcategory || null, outcome || null, encryptField(notes || null));
+    `INSERT INTO tasks (user_id,is_duty,assigned_date,start_time,category,subcategory,outcome,status)
+     VALUES (?,?,?,?,?,?,?,'in_progress')`
+  ).run(s.userId, is_duty ? 1 : 0, assigned_date || null, now, category || null, subcategory || null, outcome || null);
   logEvent('task_started');
   res.json({ taskId: r.lastInsertRowid });
 });
@@ -87,7 +83,7 @@ router.patch('/:id', validateCsrf, (req: Request, res: Response) => {
   const taskId = Number(req.params['id']);
   const task = db.prepare('SELECT * FROM tasks WHERE id=? AND user_id=?').get(taskId, s.userId) as any;
   if (!task) { res.status(404).json({ error: 'Task not found.' }); return; }
-  const { status, end_time, start_time, category, subcategory, outcome, notes, interruptions, is_duty, assigned_date } = req.body as any;
+  const { status, end_time, start_time, category, subcategory, outcome, flag_ids, interruptions, is_duty, assigned_date } = req.body as any;
   // Only enforce today's date for end_time when the task is still in-progress (i.e. being completed now)
   if (end_time && task.status === 'in_progress' && new Date(end_time).toDateString() !== new Date().toDateString()) {
     res.status(400).json({ error: 'Task end time must be today.' }); return;
@@ -97,9 +93,6 @@ router.patch('/:id', validateCsrf, (req: Request, res: Response) => {
     if (new Date(start_time).toDateString() !== new Date().toDateString()) {
       res.status(400).json({ error: 'Task start time must be today.' }); return;
     }
-  }
-  if (notes != null && String(notes).length > 2000) {
-    res.status(400).json({ error: 'Notes must not exceed 2000 characters.' }); return;
   }
   // Validate temporal consistency when both times are present
   const effectiveStart = start_time !== undefined ? start_time : task.start_time;
@@ -115,13 +108,30 @@ router.patch('/:id', validateCsrf, (req: Request, res: Response) => {
   if (category !== undefined)     { cols.push('category=?');      vals.push(category); }
   if (subcategory !== undefined)  { cols.push('subcategory=?');   vals.push(subcategory); }
   if (outcome !== undefined)      { cols.push('outcome=?');       vals.push(outcome); }
-  if (notes !== undefined)        { cols.push('notes=?');         vals.push(encryptField(notes)); }
   if (is_duty !== undefined)      { cols.push('is_duty=?');       vals.push(is_duty ? 1 : 0); }
   if (assigned_date !== undefined){ cols.push('assigned_date=?'); vals.push(assigned_date || null); }
   if (interruptions !== undefined){ cols.push('interruptions=?'); vals.push(JSON.stringify(interruptions)); }
   cols.push(`updated_at=datetime('now')`);
   vals.push(taskId, s.userId);
-  db.prepare(`UPDATE tasks SET ${cols.join(',')} WHERE id=? AND user_id=?`).run(...vals);
+  db.transaction(() => {
+    db.prepare(`UPDATE tasks SET ${cols.join(',')} WHERE id=? AND user_id=?`).run(...vals);
+    if (flag_ids !== undefined && Array.isArray(flag_ids)) {
+      const candidateIds = flag_ids.map(Number).filter(n => Number.isInteger(n) && n > 0);
+      db.prepare('DELETE FROM task_flags WHERE task_id=?').run(taskId);
+      if (candidateIds.length > 0) {
+        // Batch-validate flag option IDs (avoids N+1 and FK constraint errors)
+        const placeholders = candidateIds.map(() => '?').join(',');
+        const validIds = new Set(
+          (db.prepare(`SELECT id FROM task_flag_options WHERE id IN (${placeholders})`).all(...candidateIds) as any[])
+            .map(r => r.id)
+        );
+        const insFlag = db.prepare('INSERT OR IGNORE INTO task_flags (task_id, flag_option_id) VALUES (?,?)');
+        for (const n of candidateIds) {
+          if (validIds.has(n)) insFlag.run(taskId, n);
+        }
+      }
+    }
+  })();
   if (status === 'completed') logEvent('task_completed');
   if (status === 'discarded') logEvent('task_discarded');
   res.json({ success: true });
@@ -139,18 +149,35 @@ router.get('/', (req: Request, res: Response) => {
   if (outcome)               { q += ' AND outcome=?'; p.push(outcome); }
   if (qs)                    { q += ' AND status=?'; p.push(qs); }
   q += ' ORDER BY start_time DESC';
-  const tasks = (getDb().prepare(q).all(...p) as any[]).map(t => ({
-    ...t, interruptions: JSON.parse(t.interruptions || '[]'), notes: decryptField(t.notes),
+  const db = getDb();
+  const raw = db.prepare(q).all(...p) as any[];
+
+  // Batch-fetch all flag_ids for the returned tasks (avoids N+1)
+  const flagIdsMap = new Map<number, number[]>();
+  if (raw.length > 0) {
+    const placeholders = raw.map(() => '?').join(',');
+    (db.prepare(`SELECT task_id, flag_option_id FROM task_flags WHERE task_id IN (${placeholders})`).all(...raw.map(t => t.id)) as any[])
+      .forEach(r => {
+        if (!flagIdsMap.has(r.task_id)) flagIdsMap.set(r.task_id, []);
+        flagIdsMap.get(r.task_id)!.push(r.flag_option_id);
+      });
+  }
+
+  const tasks = raw.map(t => ({
+    ...t,
+    interruptions: JSON.parse(t.interruptions || '[]'),
+    flag_ids: flagIdsMap.get(t.id) || [],
   }));
   res.json({ tasks });
 });
 
 router.get('/:id', (req: Request, res: Response) => {
   const s = req.session as any;
-  const task = getDb().prepare('SELECT * FROM tasks WHERE id=? AND user_id=?').get(Number(req.params['id']), s.userId) as any;
+  const db = getDb();
+  const task = db.prepare('SELECT * FROM tasks WHERE id=? AND user_id=?').get(Number(req.params['id']), s.userId) as any;
   if (!task) { res.status(404).json({ error: 'Task not found.' }); return; }
   task.interruptions = JSON.parse(task.interruptions || '[]');
-  task.notes = decryptField(task.notes);
+  task.flag_ids = (db.prepare('SELECT flag_option_id FROM task_flags WHERE task_id=?').all(task.id) as any[]).map(r => r.flag_option_id);
   res.json({ task });
 });
 

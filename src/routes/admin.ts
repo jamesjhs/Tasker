@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { getDb, DB_PATH, replaceDb, RESTORE_DIR, getSetting, setSetting } from '../db';
 import { requireAdmin, requireAuth, validateCsrf, logEvent } from '../middleware/index';
 import { generateUsername } from '../words';
+import { encryptField } from '../encrypt';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import multer from 'multer';
@@ -21,7 +22,8 @@ router.get('/stats', (_req: Request, res: Response) => {
   const awaitingActivationCount = (db.prepare('SELECT COUNT(*) as c FROM users WHERE is_admin=0 AND is_approved=1 AND pending_activation=1').get() as any).c;
   const taskCount = (db.prepare('SELECT COUNT(*) as c FROM tasks WHERE status=\'completed\'').get() as any).c;
   const pendingGroupCount = (db.prepare('SELECT COUNT(*) as c FROM user_groups WHERE is_approved=0').get() as any).c;
-  res.json({ userCount, pendingCount, awaitingActivationCount, taskCount, pendingGroupCount });
+  const pendingProposalCount = (db.prepare('SELECT COUNT(*) as c FROM dropdown_proposals').get() as any).c;
+  res.json({ userCount, pendingCount, awaitingActivationCount, taskCount, pendingGroupCount, pendingProposalCount });
 });
 
 router.get('/settings', (_req: Request, res: Response) => {
@@ -252,6 +254,111 @@ router.delete('/pending-groups/:id', validateCsrf, (req: Request, res: Response)
   if (!group) { res.status(404).json({ error: 'Pending group not found.' }); return; }
   getDb().prepare('DELETE FROM user_groups WHERE id=?').run(groupId);
   logEvent('admin_group_proposal_rejected');
+  res.json({ success: true });
+});
+
+// ── SMTP Settings ─────────────────────────────────────────────────────────────
+
+router.get('/smtp', (_req: Request, res: Response) => {
+  res.json({
+    host:   getSetting('smtp_host')   || '',
+    port:   getSetting('smtp_port')   || '587',
+    secure: getSetting('smtp_secure') || 'false',
+    user:   getSetting('smtp_user')   || '',
+    // Never return the password; just indicate whether one is set
+    hasPass: !!(getSetting('smtp_pass')),
+    from:   getSetting('smtp_from')   || '',
+    to:     getSetting('smtp_to')     || '',
+  });
+});
+
+router.post('/smtp', validateCsrf, (req: Request, res: Response) => {
+  const { host, port, secure, user, pass, from, to } = req.body as {
+    host: string; port: string; secure: string; user: string; pass?: string; from: string; to: string;
+  };
+  if (!host || !to) { res.status(400).json({ error: 'SMTP host and recipient address are required.' }); return; }
+  const portNum = Number(port || 587);
+  if (isNaN(portNum) || !Number.isInteger(portNum) || portNum < 1 || portNum > 65535) {
+    res.status(400).json({ error: 'SMTP port must be an integer between 1 and 65535.' }); return;
+  }
+  setSetting('smtp_host',   (host || '').trim());
+  setSetting('smtp_port',   (port || '587').trim());
+  setSetting('smtp_secure', secure === 'true' ? 'true' : 'false');
+  setSetting('smtp_user',   (user || '').trim());
+  if (pass !== undefined && pass !== '') {
+    setSetting('smtp_pass', encryptField(pass) || '');
+  }
+  setSetting('smtp_from', (from || '').trim());
+  setSetting('smtp_to',   (to || '').trim());
+  logEvent('admin_smtp_settings_changed');
+  res.json({ success: true });
+});
+
+router.post('/smtp/test', validateCsrf, async (_req: Request, res: Response) => {
+  try {
+    const { sendEmail } = await import('../email');
+    await sendEmail('Tasker SMTP test', 'This is a test email from Tasker confirming your SMTP settings are working correctly.');
+    res.json({ success: true });
+  } catch (e: any) {
+    res.status(503).json({ error: e?.message || 'SMTP test failed.' });
+  }
+});
+
+// ── Notices ───────────────────────────────────────────────────────────────────
+
+router.get('/notices', (_req: Request, res: Response) => {
+  const notices = getDb().prepare(
+    'SELECT id, message, active, created_at, updated_at FROM notices ORDER BY created_at DESC'
+  ).all();
+  res.json({ notices });
+});
+
+router.post('/notices', validateCsrf, (req: Request, res: Response) => {
+  const { message } = req.body as { message: string };
+  const clean = (message || '').trim();
+  if (!clean || clean.length > 1000) { res.status(400).json({ error: 'Invalid notice message.' }); return; }
+  const result = getDb().prepare('INSERT INTO notices (message, active) VALUES (?,1)').run(clean);
+  logEvent('admin_notice_created');
+  res.json({ success: true, id: result.lastInsertRowid });
+});
+
+router.put('/notices/:id', validateCsrf, (req: Request, res: Response) => {
+  const id = Number(req.params['id']);
+  const { message, active } = req.body as { message?: string; active?: boolean };
+  const db = getDb();
+  const notice = db.prepare('SELECT id FROM notices WHERE id=?').get(id);
+  if (!notice) { res.status(404).json({ error: 'Notice not found.' }); return; }
+  if (message !== undefined) {
+    const clean = (message || '').trim();
+    if (!clean || clean.length > 1000) { res.status(400).json({ error: 'Invalid notice message.' }); return; }
+    db.prepare(`UPDATE notices SET message=?, updated_at=datetime('now') WHERE id=?`).run(clean, id);
+  }
+  if (active !== undefined) {
+    db.prepare(`UPDATE notices SET active=?, updated_at=datetime('now') WHERE id=?`).run(active ? 1 : 0, id);
+  }
+  logEvent('admin_notice_updated');
+  res.json({ success: true });
+});
+
+router.delete('/notices/:id', validateCsrf, (req: Request, res: Response) => {
+  getDb().prepare('DELETE FROM notices WHERE id=?').run(Number(req.params['id']));
+  logEvent('admin_notice_deleted');
+  res.json({ success: true });
+});
+
+// ── Dropdown Proposals (metadata only — no free text) ─────────────────────────
+
+router.get('/dropdown-proposals', (_req: Request, res: Response) => {
+  const proposals = getDb().prepare(
+    `SELECT dp.id, dp.field_name, dp.review_token, dp.created_at
+     FROM dropdown_proposals dp
+     ORDER BY dp.created_at DESC`
+  ).all();
+  res.json({ proposals });
+});
+
+router.delete('/dropdown-proposals/:id', validateCsrf, (req: Request, res: Response) => {
+  getDb().prepare('DELETE FROM dropdown_proposals WHERE id=?').run(Number(req.params['id']));
   res.json({ success: true });
 });
 
