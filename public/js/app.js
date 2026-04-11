@@ -645,6 +645,7 @@ async function doLogin() {
     if (!d) return;
     if (d.requires2fa) {
       state._pending2faUsername = username;
+      await refreshCsrf();
       render2faVerify();
       return;
     }

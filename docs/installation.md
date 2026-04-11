@@ -99,6 +99,7 @@ nano .env          # or use your preferred editor
 | `PORT` | Port the application listens on | `3020` |
 | `SESSION_SECRET` | A long, random secret string used to sign session cookies. **Must be set in production.** | Random (changes on every restart) |
 | `NODE_ENV` | Set to `production` to enable secure (HTTPS-only) cookies | — |
+| `APP_URL` | Full public URL of the server (no trailing slash). Used to generate clickable review links in suggestion emails. | — |
 | `SSL_CERT_DIR` | Directory containing Let's Encrypt certificate files | `/etc/letsencrypt/live/yourdomain` |
 | `SSL_CERT` | Full path to the certificate chain file | `$SSL_CERT_DIR/fullchain.pem` |
 | `SSL_KEY` | Full path to the private key file | `$SSL_CERT_DIR/privkey.pem` |
@@ -117,6 +118,7 @@ Copy the output into your `.env` file as the `SESSION_SECRET` value.
 PORT=3020
 SESSION_SECRET=<output of the command above>
 NODE_ENV=production
+APP_URL=https://tasker.jahosi.co.uk
 SSL_CERT_DIR=/etc/letsencrypt/live/yourdomain.example.com
 ```
 
