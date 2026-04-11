@@ -304,6 +304,36 @@ router.post('/smtp/test', validateCsrf, async (_req: Request, res: Response) => 
   }
 });
 
+// ── Admin 2FA Settings ────────────────────────────────────────────────────────
+
+router.get('/2fa', (req: Request, res: Response) => {
+  const s = req.session as any;
+  const user = getDb().prepare('SELECT mfa_enabled, mfa_backup_email FROM users WHERE id=? AND is_admin=1').get(s.userId) as any;
+  if (!user) { res.status(404).json({ error: 'Admin user not found.' }); return; }
+  res.json({
+    enabled: user.mfa_enabled === 1,
+    backupEmail: user.mfa_backup_email || '',
+    primaryEmail: getSetting('smtp_to') || '',
+  });
+});
+
+router.post('/2fa', validateCsrf, (req: Request, res: Response) => {
+  const s = req.session as any;
+  const { enabled, backupEmail } = req.body as { enabled: boolean; backupEmail?: string };
+  const cleanBackup = (backupEmail || '').trim();
+  if (cleanBackup && (cleanBackup.length > 254 || !/^[^@\s]{1,64}@[^@\s]{1,255}$/.test(cleanBackup) || !cleanBackup.slice(cleanBackup.indexOf('@') + 1).includes('.'))) {
+    res.status(400).json({ error: 'Invalid backup email address.' });
+    return;
+  }
+  getDb().prepare('UPDATE users SET mfa_enabled=?, mfa_backup_email=? WHERE id=? AND is_admin=1').run(
+    enabled ? 1 : 0,
+    cleanBackup || null,
+    s.userId,
+  );
+  logEvent('admin_2fa_settings_changed');
+  res.json({ success: true });
+});
+
 // ── Notices ───────────────────────────────────────────────────────────────────
 
 router.get('/notices', (_req: Request, res: Response) => {

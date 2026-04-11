@@ -1,6 +1,6 @@
 # Tasker — Installation Manual
 
-**Version 1.6.0 — April 2026**
+**Version 1.8.4 — April 2026**
 
 ---
 
@@ -13,12 +13,13 @@
 5. [Environment configuration](#environment-configuration)
 6. [Building the application](#building-the-application)
 7. [First run and admin account creation](#first-run-and-admin-account-creation)
-8. [SSL / HTTPS configuration](#ssl--https-configuration)
-9. [Running as a persistent service (systemd)](#running-as-a-persistent-service-systemd)
-10. [Reverse proxy with Nginx](#reverse-proxy-with-nginx)
-11. [Reverse proxy with Caddy](#reverse-proxy-with-caddy)
-12. [Firewall](#firewall)
-13. [Post-install checklist](#post-install-checklist)
+8. [Admin two-factor authentication (2FA)](#admin-two-factor-authentication-2fa)
+9. [SSL / HTTPS configuration](#ssl--https-configuration)
+10. [Running as a persistent service (systemd)](#running-as-a-persistent-service-systemd)
+11. [Reverse proxy with Nginx](#reverse-proxy-with-nginx)
+12. [Reverse proxy with Caddy](#reverse-proxy-with-caddy)
+13. [Firewall](#firewall)
+14. [Post-install checklist](#post-install-checklist)
 
 ---
 
@@ -98,6 +99,7 @@ nano .env          # or use your preferred editor
 | `PORT` | Port the application listens on | `3020` |
 | `SESSION_SECRET` | A long, random secret string used to sign session cookies. **Must be set in production.** | Random (changes on every restart) |
 | `NODE_ENV` | Set to `production` to enable secure (HTTPS-only) cookies | — |
+| `APP_URL` | Full public URL of the server (no trailing slash). Used to generate clickable review links in suggestion emails. | — |
 | `SSL_CERT_DIR` | Directory containing Let's Encrypt certificate files | `/etc/letsencrypt/live/yourdomain` |
 | `SSL_CERT` | Full path to the certificate chain file | `$SSL_CERT_DIR/fullchain.pem` |
 | `SSL_KEY` | Full path to the private key file | `$SSL_CERT_DIR/privkey.pem` |
@@ -116,6 +118,7 @@ Copy the output into your `.env` file as the `SESSION_SECRET` value.
 PORT=3020
 SESSION_SECRET=<output of the command above>
 NODE_ENV=production
+APP_URL=https://tasker.jahosi.co.uk
 SSL_CERT_DIR=/etc/letsencrypt/live/yourdomain.example.com
 ```
 
@@ -175,6 +178,52 @@ Open the application in a browser. Log in with:
 - **Password:** `Admin123!`
 
 You will be immediately prompted to set a new password. Choose something long and unique.
+
+---
+
+## Admin two-factor authentication (2FA)
+
+After completing initial setup, the administrator can enable email-based 2FA from **Admin Panel → Admin Two-Factor Authentication (2FA)**. When enabled, a one-time six-digit code is sent to the configured admin email address on every admin login.
+
+### Enabling 2FA
+
+1. Configure SMTP settings in the Admin Panel so that emails can be sent.
+2. Navigate to **Admin Panel → Admin Two-Factor Authentication (2FA)**.
+3. Optionally enter a **backup email address** — codes will be sent there as well.
+4. Tick **Enable 2FA for admin login** and click **Save 2FA Settings**.
+
+> The primary email address used for codes is the address in the SMTP **"Send suggestions to"** field.
+
+### Overriding a locked or inaccessible admin account from the server CLI
+
+If you are locked out of the admin account (e.g. 2FA email is unreachable, or the account has been locked after failed attempts), you can reset it directly from the server command line while the application is **stopped**:
+
+```bash
+# Disable 2FA and unlock the admin account
+node -e "
+const Database = require('better-sqlite3');
+const db = new Database('data/tasker.db');
+db.prepare('UPDATE users SET mfa_enabled=0, mfa_backup_email=NULL, is_locked=0, failed_login_attempts=0 WHERE is_admin=1').run();
+console.log('Admin 2FA disabled and account unlocked.');
+db.close();
+"
+```
+
+To also reset the admin password at the same time:
+
+```bash
+node -e "
+const Database = require('better-sqlite3');
+const bcrypt = require('bcryptjs');
+const db = new Database('data/tasker.db');
+const hash = bcrypt.hashSync('Admin123!', 12);
+db.prepare('UPDATE users SET password_hash=?, must_change_password=1, mfa_enabled=0, mfa_backup_email=NULL, is_locked=0, failed_login_attempts=0 WHERE is_admin=1').run(hash);
+console.log('Admin password reset to Admin123! — change it immediately after logging in.');
+db.close();
+"
+```
+
+Restart the application afterwards and log in with the temporary password.
 
 ---
 
