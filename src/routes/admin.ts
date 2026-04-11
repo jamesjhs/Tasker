@@ -321,7 +321,7 @@ router.post('/2fa', validateCsrf, (req: Request, res: Response) => {
   const s = req.session as any;
   const { enabled, backupEmail } = req.body as { enabled: boolean; backupEmail?: string };
   const cleanBackup = (backupEmail || '').trim();
-  if (cleanBackup && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanBackup)) {
+  if (cleanBackup && (cleanBackup.length > 254 || !/^[^@\s]{1,64}@[^@\s]{1,255}$/.test(cleanBackup) || !cleanBackup.slice(cleanBackup.indexOf('@') + 1).includes('.'))) {
     res.status(400).json({ error: 'Invalid backup email address.' });
     return;
   }
