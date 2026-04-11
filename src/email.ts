@@ -31,15 +31,21 @@ export function getSmtpConfig(): SmtpConfig | null {
 export async function sendEmail(subject: string, text: string): Promise<void> {
   const cfg = getSmtpConfig();
   if (!cfg) throw new Error('SMTP not configured. Please configure SMTP in the admin panel.');
+  await sendEmailTo(cfg.to, subject, text, cfg);
+}
+
+export async function sendEmailTo(to: string, subject: string, text: string, cfg?: SmtpConfig): Promise<void> {
+  const config = cfg || getSmtpConfig();
+  if (!config) throw new Error('SMTP not configured. Please configure SMTP in the admin panel.');
   const transporter = nodemailer.createTransport({
-    host: cfg.host,
-    port: cfg.port,
-    secure: cfg.secure,
-    auth: cfg.user ? { user: cfg.user, pass: cfg.pass } : undefined,
+    host: config.host,
+    port: config.port,
+    secure: config.secure,
+    auth: config.user ? { user: config.user, pass: config.pass } : undefined,
   });
   await transporter.sendMail({
-    from: cfg.from || cfg.user,
-    to:   cfg.to,
+    from: config.from || config.user,
+    to,
     subject,
     text,
   });

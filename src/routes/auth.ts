@@ -110,6 +110,43 @@ router.post('/login', validateCsrf, async (req: Request, res: Response) => {
     }
     return;
   }
+
+  // Reset failed attempts on successful credential check
+  db.prepare('UPDATE users SET failed_login_attempts=0, is_locked=0 WHERE id=?').run(user.id);
+
+  // ── 2FA check for admin accounts ──────────────────────────────────────────
+  if (user.is_admin === 1 && user.mfa_enabled === 1) {
+    const code = String(crypto.randomInt(100000, 999999));
+    const expiry = Date.now() + 10 * 60 * 1000; // 10 minutes
+    const s = req.session as any;
+    s.mfaPendingUserId = user.id;
+    s.mfaCode = code;
+    s.mfaCodeExpiry = expiry;
+    s.mfaAttempts = 0;
+    s.csrfToken = crypto.randomBytes(32).toString('hex');
+
+    const adminEmail = getSetting('smtp_to') || '';
+    const backupEmail = user.mfa_backup_email || '';
+    const recipients = [adminEmail, backupEmail].filter(Boolean).join(', ');
+    if (!recipients) {
+      res.status(503).json({ error: '2FA is enabled but no admin email address is configured. Configure SMTP settings first.' });
+      return;
+    }
+    try {
+      const { sendEmailTo } = await import('../email');
+      await sendEmailTo(
+        recipients,
+        'Tasker Admin Login — Verification Code',
+        `Your Tasker admin login verification code is:\n\n  ${code}\n\nThis code expires in 10 minutes. Do not share it with anyone.`,
+      );
+    } catch (e: any) {
+      res.status(503).json({ error: `Could not send 2FA code: ${e?.message || 'SMTP error'}` });
+      return;
+    }
+    res.json({ requires2fa: true });
+    return;
+  }
+
   const s = req.session as any;
   s.userId = user.id;
   s.isAdmin = user.is_admin === 1;
@@ -118,7 +155,6 @@ router.post('/login', validateCsrf, async (req: Request, res: Response) => {
   s.lastActivity = Date.now();
   s.sessionDate = new Date().toISOString().split('T')[0];
   s.csrfToken = crypto.randomBytes(32).toString('hex');
-  db.prepare('UPDATE users SET failed_login_attempts=0, is_locked=0 WHERE id=?').run(user.id);
   logEvent('user_login');
   const groupInfo = db.prepare(
     'SELECT u.user_group_id, ug.name as user_group_name FROM users u LEFT JOIN user_groups ug ON ug.id=u.user_group_id WHERE u.id=?'
@@ -131,6 +167,91 @@ router.post('/login', validateCsrf, async (req: Request, res: Response) => {
     userGroupId: groupInfo?.user_group_id ?? null,
     userGroupName: groupInfo?.user_group_name ?? null,
   });
+});
+
+router.post('/verify-2fa', validateCsrf, async (req: Request, res: Response) => {
+  const s = req.session as any;
+  if (!s.mfaPendingUserId || !s.mfaCode) {
+    res.status(400).json({ error: 'No pending 2FA session. Please log in again.' });
+    return;
+  }
+  if (Date.now() > s.mfaCodeExpiry) {
+    delete s.mfaPendingUserId; delete s.mfaCode; delete s.mfaCodeExpiry; delete s.mfaAttempts;
+    res.status(401).json({ error: 'Verification code has expired. Please log in again.' });
+    return;
+  }
+  const { code } = req.body as { code: string };
+  s.mfaAttempts = (s.mfaAttempts || 0) + 1;
+  if (!code || code.trim() !== s.mfaCode) {
+    if (s.mfaAttempts >= 5) {
+      delete s.mfaPendingUserId; delete s.mfaCode; delete s.mfaCodeExpiry; delete s.mfaAttempts;
+      res.status(401).json({ error: 'Too many incorrect attempts. Please log in again.' });
+      return;
+    }
+    const remaining = 5 - s.mfaAttempts;
+    res.status(401).json({ error: `Incorrect code. ${remaining} attempt${remaining === 1 ? '' : 's'} remaining.` });
+    return;
+  }
+
+  const db = getDb();
+  const user = db.prepare('SELECT * FROM users WHERE id=?').get(s.mfaPendingUserId) as any;
+  delete s.mfaPendingUserId; delete s.mfaCode; delete s.mfaCodeExpiry; delete s.mfaAttempts;
+  if (!user) { res.status(404).json({ error: 'User not found.' }); return; }
+
+  s.userId = user.id;
+  s.isAdmin = user.is_admin === 1;
+  s.mustChangePassword = user.must_change_password === 1;
+  s.pendingActivation = user.must_change_password === 0 && user.pending_activation === 1;
+  s.lastActivity = Date.now();
+  s.sessionDate = new Date().toISOString().split('T')[0];
+  s.csrfToken = crypto.randomBytes(32).toString('hex');
+  logEvent('user_login');
+  const groupInfo = db.prepare(
+    'SELECT u.user_group_id, ug.name as user_group_name FROM users u LEFT JOIN user_groups ug ON ug.id=u.user_group_id WHERE u.id=?'
+  ).get(user.id) as { user_group_id: number | null; user_group_name: string | null } | undefined;
+  res.json({
+    success: true,
+    isAdmin: user.is_admin === 1,
+    mustChangePassword: user.must_change_password === 1,
+    pendingActivation: user.must_change_password === 0 && user.pending_activation === 1,
+    userGroupId: groupInfo?.user_group_id ?? null,
+    userGroupName: groupInfo?.user_group_name ?? null,
+  });
+});
+
+router.post('/resend-2fa', validateCsrf, async (req: Request, res: Response) => {
+  const s = req.session as any;
+  if (!s.mfaPendingUserId) {
+    res.status(400).json({ error: 'No pending 2FA session. Please log in again.' });
+    return;
+  }
+  const db = getDb();
+  const user = db.prepare('SELECT * FROM users WHERE id=?').get(s.mfaPendingUserId) as any;
+  if (!user) { res.status(404).json({ error: 'User not found.' }); return; }
+
+  const code = String(crypto.randomInt(100000, 999999));
+  s.mfaCode = code;
+  s.mfaCodeExpiry = Date.now() + 10 * 60 * 1000;
+  s.mfaAttempts = 0;
+
+  const adminEmail = getSetting('smtp_to') || '';
+  const backupEmail = user.mfa_backup_email || '';
+  const recipients = [adminEmail, backupEmail].filter(Boolean).join(', ');
+  if (!recipients) {
+    res.status(503).json({ error: 'No admin email address configured.' });
+    return;
+  }
+  try {
+    const { sendEmailTo } = await import('../email');
+    await sendEmailTo(
+      recipients,
+      'Tasker Admin Login — Verification Code (resent)',
+      `Your Tasker admin login verification code is:\n\n  ${code}\n\nThis code expires in 10 minutes. Do not share it with anyone.`,
+    );
+    res.json({ success: true });
+  } catch (e: any) {
+    res.status(503).json({ error: `Could not resend code: ${e?.message || 'SMTP error'}` });
+  }
 });
 
 router.post('/logout', (req: Request, res: Response) => {

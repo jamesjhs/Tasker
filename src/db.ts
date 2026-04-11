@@ -64,6 +64,7 @@ function initSchema(db: Database.Database): void {
       is_approved INTEGER NOT NULL DEFAULT 1,
       pending_activation INTEGER NOT NULL DEFAULT 0,
       mfa_enabled INTEGER NOT NULL DEFAULT 0,
+      mfa_backup_email TEXT,
       failed_login_attempts INTEGER NOT NULL DEFAULT 0,
       is_locked INTEGER NOT NULL DEFAULT 0,
       user_group_id INTEGER REFERENCES user_groups(id) ON DELETE SET NULL,
@@ -192,6 +193,12 @@ function initSchema(db: Database.Database): void {
   }
   if (!userCols.includes('user_group_id')) {
     db.exec('ALTER TABLE users ADD COLUMN user_group_id INTEGER');
+  }
+  if (!userCols.includes('mfa_enabled')) {
+    db.exec('ALTER TABLE users ADD COLUMN mfa_enabled INTEGER NOT NULL DEFAULT 0');
+  }
+  if (!userCols.includes('mfa_backup_email')) {
+    db.exec('ALTER TABLE users ADD COLUMN mfa_backup_email TEXT');
   }
 
   // Migrate existing databases: add is_approved to user_groups (for pending group proposals)

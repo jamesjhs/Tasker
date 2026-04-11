@@ -297,7 +297,7 @@ function getAppVersion() {
 
 function renderFooter() {
   const v = getAppVersion();
-  return `<p style="text-align:center;font-size:.75rem;color:#9ca3af;padding:8px 0 16px">v${v} &nbsp;·&nbsp; <a href="/policy" target="_blank" style="color:#9ca3af">Privacy Policy</a> &nbsp;·&nbsp; <a href="/dpia" target="_blank" style="color:#9ca3af">DPIA</a> &nbsp;·&nbsp; <a href="/help" target="_blank" style="color:#9ca3af">Help</a><br>© J Rowson ${new Date().getFullYear()} | <a href="https://jahosi.co.uk" target="_blank" style="color:#9ca3af">jahosi.co.uk</a></p>`;
+  return `<p style="text-align:center;font-size:.75rem;color:#9ca3af;padding:8px 0 16px">v${v} &nbsp;·&nbsp; <a href="/policy" style="color:#9ca3af">Privacy Policy</a> &nbsp;·&nbsp; <a href="/dpia" style="color:#9ca3af">DPIA</a> &nbsp;·&nbsp; <a href="/help" style="color:#9ca3af">Help</a><br>© J Rowson ${new Date().getFullYear()} | <a href="https://jahosi.co.uk" target="_blank" style="color:#9ca3af">jahosi.co.uk</a></p>`;
 }
 
 function showAlert(msg, type = 'error', parentId = null) {
@@ -618,8 +618,8 @@ async function renderLogin() {
     </div>
     <div style="text-align:center;margin-top:16px;display:flex;flex-direction:column;gap:10px">
       ${showRegister ? `<button class="link-btn" onclick="renderRegister()">Don't have an account? Register</button>` : ''}
-      <a href="/policy" target="_blank" style="font-size:.85rem;color:#6b7280">Data &amp; Use Policy</a>
-      <a href="/guide" target="_blank" style="font-size:.85rem;color:#1a56db;font-weight:600">📖 Quick Start Guide</a>
+      <a href="/policy" style="font-size:.85rem;color:#6b7280">Data &amp; Use Policy</a>
+      <a href="/guide" style="font-size:.85rem;color:#1a56db;font-weight:600">📖 Quick Start Guide</a>
     </div>
     ${statsHTML}
     ${renderFooter()}
@@ -643,6 +643,11 @@ async function doLogin() {
   try {
     const d = await api('POST', '/api/auth/login', { username, password });
     if (!d) return;
+    if (d.requires2fa) {
+      state._pending2faUsername = username;
+      render2faVerify();
+      return;
+    }
     // Clear all SW caches on login so every authenticated session starts with
     // the most recent assets, regardless of what the service worker had cached.
     if ('caches' in window) {
@@ -668,6 +673,77 @@ async function doLogin() {
     }
     btn.disabled = false; btn.textContent = 'Log in';
     showAlert(e.message, 'error', 'login-alerts');
+  }
+}
+
+async function render2faVerify() {
+  state.currentView = 'login';
+  replaceHistory('login');
+  app().innerHTML = `
+  <div class="view" style="min-height:auto;padding-bottom:24px">
+    <div style="text-align:center;padding-top:30px;margin-bottom:28px">
+      <div style="font-size:3rem">🔐</div>
+      <h1 style="font-size:1.8rem;color:#1a56db;margin-top:8px">Two-Factor Authentication</h1>
+      <p style="color:#6b7280;font-size:.9rem;margin-top:4px">A verification code has been sent to your registered admin email address.</p>
+    </div>
+    <div id="tfa-alerts"></div>
+    <div class="card">
+      <div class="form-group">
+        <label for="tfa-code">Verification Code</label>
+        <input id="tfa-code" class="input" type="text" inputmode="numeric" pattern="[0-9]*" autocomplete="one-time-code" maxlength="6" placeholder="6-digit code" style="letter-spacing:.2em;font-size:1.2rem;text-align:center">
+      </div>
+      <button class="btn btn-primary btn-full" id="tfa-btn" onclick="do2faVerify()" style="margin-top:10px">✅ Verify</button>
+      <button class="btn btn-outline btn-full" id="tfa-resend-btn" onclick="do2faResend()" style="margin-top:8px">🔄 Resend Code</button>
+    </div>
+    <div style="text-align:center;margin-top:16px">
+      <button class="link-btn" onclick="renderLogin()">← Back to Login</button>
+    </div>
+    ${renderFooter()}
+  </div>`;
+  document.getElementById('tfa-code').addEventListener('keydown', e => { if (e.key === 'Enter') do2faVerify(); });
+}
+
+async function do2faVerify() {
+  const btn = document.getElementById('tfa-btn');
+  const code = (document.getElementById('tfa-code').value || '').trim();
+  if (!code) { showAlert('Enter the verification code.', 'error', 'tfa-alerts'); return; }
+  btn.disabled = true; btn.textContent = 'Verifying…';
+  try {
+    const d = await api('POST', '/api/auth/verify-2fa', { code });
+    if (!d) { btn.disabled = false; btn.textContent = '✅ Verify'; return; }
+    if ('caches' in window) {
+      try { await Promise.all((await caches.keys()).map(k => caches.delete(k))); } catch(e) {}
+    }
+    const username = state._pending2faUsername || 'admin';
+    delete state._pending2faUsername;
+    state.user = { username, isAdmin: d.isAdmin, mustChangePassword: d.mustChangePassword, pendingActivation: d.pendingActivation, userGroupId: d.userGroupId ?? null, userGroupName: d.userGroupName ?? null };
+    await refreshCsrf();
+    if (d.mustChangePassword) { renderChangePassword(); return; }
+    if (d.pendingActivation) { renderAwaitActivation(); return; }
+    await loadDropdowns();
+    await checkActiveTask();
+    startActivityTracking();
+    renderPrivacySplash(async () => {
+      if (d.isAdmin) { renderAdmin(); return; }
+      if (!state.user.userGroupId) { await renderGroupSelection(() => renderHome()); return; }
+      renderHome();
+    });
+  } catch(e) {
+    btn.disabled = false; btn.textContent = '✅ Verify';
+    showAlert(e.message, 'error', 'tfa-alerts');
+  }
+}
+
+async function do2faResend() {
+  const btn = document.getElementById('tfa-resend-btn');
+  btn.disabled = true; btn.textContent = 'Sending…';
+  try {
+    await api('POST', '/api/auth/resend-2fa', {});
+    showAlert('A new code has been sent to your admin email.', 'success', 'tfa-alerts');
+  } catch(e) {
+    showAlert(e.message, 'error', 'tfa-alerts');
+  } finally {
+    btn.disabled = false; btn.textContent = '🔄 Resend Code';
   }
 }
 
@@ -708,9 +784,9 @@ function renderPrivacySplash(onContinue) {
       ✓ I Understand — Continue
     </button>
     <p style="text-align:center;font-size:.75rem;color:#9ca3af;margin-top:16px">
-      <a href="/policy" target="_blank" style="color:#9ca3af">Data &amp; Use Policy</a>
+      <a href="/policy" style="color:#9ca3af">Data &amp; Use Policy</a>
       &nbsp;·&nbsp;
-      <a href="/dpia" target="_blank" style="color:#9ca3af">Data Protection Impact Assessment</a>
+      <a href="/dpia" style="color:#9ca3af">Data Protection Impact Assessment</a>
     </p>
   </div>`;
   document.body.appendChild(overlay);
@@ -948,7 +1024,7 @@ function renderRegister() {
       <div class="form-group" style="display:flex;align-items:flex-start;gap:10px">
         <input id="r-policy" type="checkbox" style="margin-top:3px;width:18px;height:18px;flex-shrink:0">
         <label for="r-policy" style="font-size:.9rem;font-weight:400">
-          I have read the <a href="/policy" target="_blank">Data &amp; Use Policy</a> and 
+          I have read the <a href="/policy">Data &amp; Use Policy</a> and 
           I understand I must <strong>never enter patient or identifiable information</strong>.
         </label>
       </div>
@@ -1160,7 +1236,7 @@ function renderHomeHTML() {
   <div class="view">
     <div class="view-header">
       <h1>👋 Tasker</h1>
-      <a href="/guide" target="_blank" style="font-size:.8rem;color:#1a56db;font-weight:600;text-decoration:none;white-space:nowrap">📖 Guide</a>
+      <a href="/guide" style="font-size:.8rem;color:#1a56db;font-weight:600;text-decoration:none;white-space:nowrap">📖 Guide</a>
     </div>
     ${midnightWarn ? '<div class="midnight-warn">⚠️ Approaching midnight — your session will end at midnight. Complete any active task.</div>' : ''}
     <div id="home-alerts"></div>
@@ -1381,8 +1457,8 @@ function renderSettings() {
       <div class="divider"></div>
       <button class="btn btn-outline btn-full" style="margin-bottom:10px" onclick="renderChangePassword()">🔑 Change Password</button>
       ${showInvite ? `<button class="btn btn-outline btn-full" style="margin-bottom:10px" id="invite-btn" onclick="doInviteUser()">👤 Invite a User</button>` : ''}
-      <button class="btn btn-secondary btn-full" style="margin-bottom:10px" onclick="window.open('/policy','_blank')">📄 Data &amp; Use Policy</button>
-      <button class="btn btn-secondary btn-full" style="margin-bottom:10px" onclick="window.open('/help','_blank')">❓ Help &amp; User Guide</button>
+      <button class="btn btn-secondary btn-full" style="margin-bottom:10px" onclick="window.location.href='/policy'">📄 Data &amp; Use Policy</button>
+      <button class="btn btn-secondary btn-full" style="margin-bottom:10px" onclick="window.location.href='/help'">❓ Help &amp; User Guide</button>
       <button class="btn btn-danger btn-full" style="margin-bottom:10px" onclick="doLogout()">🚪 Log Out</button>
       <div class="divider"></div>
       <button class="btn btn-danger btn-full" onclick="renderDeleteAccount()">🗑️ Delete My Account</button>
@@ -2514,7 +2590,7 @@ async function renderAdmin() {
   pushHistory('admin');
   app().innerHTML = `<div class="view"><p class="loading">Loading admin panel…</p></div>`;
   try {
-    const [stats, users, dropOpts, settings, pendingUsers, awaitingUsers, userGroups, pendingGroups, smtpSettings, notices, flagOpts, proposals] = await Promise.all([
+    const [stats, users, dropOpts, settings, pendingUsers, awaitingUsers, userGroups, pendingGroups, smtpSettings, notices, flagOpts, proposals, twoFaSettings] = await Promise.all([
       api('GET', '/api/admin/stats'),
       api('GET', '/api/admin/users'),
       api('GET', '/api/dropdowns/admin/all'),
@@ -2527,16 +2603,17 @@ async function renderAdmin() {
       api('GET', '/api/admin/notices'),
       api('GET', '/api/flags/admin/all'),
       api('GET', '/api/admin/dropdown-proposals'),
+      api('GET', '/api/admin/2fa'),
     ]);
     if (!stats || !users || !dropOpts || !settings || !pendingUsers || !awaitingUsers || !userGroups || !pendingGroups) return;
-    renderAdminContent(stats, users?.users || [], dropOpts?.options || [], settings, pendingUsers?.users || [], awaitingUsers?.users || [], userGroups?.groups || [], pendingGroups?.groups || [], smtpSettings || {}, notices?.notices || [], flagOpts?.options || [], proposals?.proposals || []);
+    renderAdminContent(stats, users?.users || [], dropOpts?.options || [], settings, pendingUsers?.users || [], awaitingUsers?.users || [], userGroups?.groups || [], pendingGroups?.groups || [], smtpSettings || {}, notices?.notices || [], flagOpts?.options || [], proposals?.proposals || [], twoFaSettings || {});
   } catch(e) {
     app().innerHTML = `<div class="view"><div id="admin-alerts"></div></div>`;
     showAlert(e.message, 'error', 'admin-alerts');
   }
 }
 
-function renderAdminContent(stats, users, dropOpts, settings, pendingUsers, awaitingUsers, userGroups, pendingGroups, smtpSettings, notices, flagOpts, proposals) {
+function renderAdminContent(stats, users, dropOpts, settings, pendingUsers, awaitingUsers, userGroups, pendingGroups, smtpSettings, notices, flagOpts, proposals, twoFaSettings) {
   const pending = dropOpts.filter(o => !o.approved);
   const approved = dropOpts.filter(o => o.approved);
   const userCards = users.map(u => `
@@ -2804,6 +2881,27 @@ function renderAdminContent(stats, users, dropOpts, settings, pendingUsers, awai
       <div id="smtp-alerts" style="margin-top:8px"></div>
     </div>
 
+    <div class="section-heading">Admin Two-Factor Authentication (2FA)</div>
+    <p style="font-size:.85rem;color:#6b7280;margin-bottom:10px">When enabled, a one-time verification code is sent to your admin email address each time you log in. The primary email address is taken from the SMTP "Send suggestions to" field above.</p>
+    <div class="card">
+      <div class="form-group">
+        <label style="font-size:.9rem">Primary admin email</label>
+        <input class="input" type="text" value="${esc(twoFaSettings.primaryEmail || '')}" disabled style="margin-top:4px;background:#f3f4f6;color:#6b7280">
+        <p style="font-size:.75rem;color:#6b7280;margin-top:4px">Set in SMTP settings above (the "Send suggestions to" field).</p>
+      </div>
+      <div class="form-group" style="margin-top:10px">
+        <label style="font-size:.9rem">Backup email address <span style="font-weight:400;color:#6b7280">(optional)</span></label>
+        <input id="tfa-backup-email" class="input" type="email" value="${esc(twoFaSettings.backupEmail || '')}" placeholder="backup@example.com" style="margin-top:4px">
+        <p style="font-size:.75rem;color:#6b7280;margin-top:4px">Codes will also be sent here. Useful if the primary address is unavailable.</p>
+      </div>
+      <div class="form-group" style="margin-top:12px;display:flex;align-items:center;gap:10px">
+        <input id="tfa-enabled" type="checkbox" ${twoFaSettings.enabled ? 'checked' : ''} style="width:18px;height:18px;flex-shrink:0">
+        <label for="tfa-enabled" style="font-size:.9rem;font-weight:400">Enable 2FA for admin login</label>
+      </div>
+      <button class="btn btn-primary btn-full" style="margin-top:12px" onclick="save2faSettings()">🔒 Save 2FA Settings</button>
+      <div id="tfa-admin-alerts" style="margin-top:8px"></div>
+    </div>
+
     <div class="admin-desktop-grid" style="margin-top:0">
       <div>
         <div class="section-heading">Database</div>
@@ -3048,6 +3146,15 @@ async function testSmtp() {
     await api('POST', '/api/admin/smtp/test', {});
     showAlert('Test email sent successfully!', 'success', 'smtp-alerts');
   } catch(e) { showAlert(e.message, 'error', 'smtp-alerts'); }
+}
+
+async function save2faSettings() {
+  const enabled = document.getElementById('tfa-enabled')?.checked ?? false;
+  const backupEmail = document.getElementById('tfa-backup-email')?.value.trim() || '';
+  try {
+    await api('POST', '/api/admin/2fa', { enabled, backupEmail });
+    showAlert('2FA settings saved.', 'success', 'tfa-admin-alerts');
+  } catch(e) { showAlert(e.message, 'error', 'tfa-admin-alerts'); }
 }
 
 async function createNotice() {
