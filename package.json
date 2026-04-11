@@ -1,6 +1,6 @@
 {
   "name": "tasker",
-  "version": "1.8.4",
+  "version": "1.8.5",
   "description": "Anonymous task logger for healthcare staff",
   "main": "dist/server.js",
   "scripts": {

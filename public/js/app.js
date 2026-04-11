@@ -1211,6 +1211,7 @@ function renderHomeHTML() {
         ${state.notices.length ? state.notices.map(n => `<p style="font-size:.9rem;color:#374151;margin-bottom:6px;border-bottom:1px solid #f3f4f6;padding-bottom:6px">${esc(n.message)}</p>`).join('') : '<p style="font-size:.85rem;color:#6b7280;margin-bottom:10px">No active notices.</p>'}
         <div style="margin-top:12px;border-top:1px solid #f3f4f6;padding-top:12px">
           <div class="card-title" style="color:#374151;font-size:.875rem;margin-bottom:6px">💬 Send suggestion to developers</div>
+          <p style="font-size:.8rem;color:#b45309;background:#fffbeb;border:1px solid #fcd34d;border-radius:6px;padding:8px 10px;margin-bottom:8px">⚠️ Do <strong>NOT</strong> submit any patient, location, or staff-identifiable work information here. Your suggestion will be sent to an NHS.net email address — please treat it accordingly. If you would like a reply, you are welcome to include your email address.</p>
           <textarea id="feedback-text" class="textarea" placeholder="Type your suggestion or feedback…" style="margin-bottom:8px;min-height:70px"></textarea>
           <div id="feedback-alerts"></div>
           <button class="btn btn-outline btn-sm" onclick="submitFeedback()">Send</button>
