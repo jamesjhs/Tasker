@@ -1,6 +1,6 @@
 # Tasker
 
-**v1.8.5** — An anonymous task-logging PWA for healthcare staff. Built with TypeScript, Express 5, SQLite, and vanilla JS.
+**v1.8.6** — An anonymous task-logging PWA for healthcare staff. Built with TypeScript, Express 5, SQLite, and vanilla JS.
 
 ---
 
@@ -22,7 +22,7 @@
 - **Configurable registration** — administrator controls three levels for self-registration and user invitations.
 - **30-day data retention** — task data is automatically deleted after 30 days.
 - **Health-check endpoint** — `GET /readyz` returns a JSON status response for uptime/heartbeat monitoring.
-- **Asset version endpoint** — `GET /api/version` returns `{"version":"1.8.5"}` for client-side cache-busting.
+- **Asset version endpoint** — `GET /api/version` returns `{"version":"1.8.6"}` for client-side cache-busting.
 
 ---
 
@@ -151,7 +151,7 @@ See [`/policy`](/policy) for the full Data and Use Policy.
 
 ## Changelog
 
-### v1.8.5 (April 2026)
+### v1.8.6 (April 2026)
 
 - **Suggestion safety notice** — The "Send suggestion to developers" input now displays a prominent warning instructing users not to submit any patient, location, or staff-identifiable information. The notice also clarifies that submitted freetext is sent to an NHS.net email address and invites users to include their own email address if they wish to receive a reply.
 - **Documentation updates** — help.html, guide.html, dpia.html, technical-manual.html, installation.md, and maintenance.md updated to document the suggestion feature data flow and acceptable-use requirements.
