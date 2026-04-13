@@ -32,6 +32,12 @@ const state = {
   analyticsQuickPeriod: 'today', // 'today', '7d', '30d', or null
   analyticsQuickFrom: '',        // date string set by quick filter
   analyticsQuickTo: '',          // date string set by quick filter
+  analyticsFilterFrom: '',       // date string from advanced filter panel
+  analyticsFilterTo: '',         // date string from advanced filter panel
+  analyticsFilterDuty: '',       // duty filter from advanced filter panel
+  analyticsFilterCategory: '',   // category filter from advanced filter panel
+  analyticsFilterSubcategory: '', // subcategory filter from advanced filter panel
+  analyticsFilterOutcome: '',    // outcome filter from advanced filter panel
   analyticsTasksExpanded: false, // whether task list is expanded in analytics
   analyticsFiltersExpanded: false, // whether advanced filters are expanded in analytics
   analyticsData: null,           // { data, mode, pendingLog } for re-rendering on toggle
@@ -2090,6 +2096,12 @@ async function renderAnalyticsSession() {
   stopTimer(); clearCharts(); state.currentView = 'analytics-session';
   state.analyticsQuickPeriod = 'today';
   state.analyticsFiltersExpanded = false;
+  state.analyticsFilterFrom = '';
+  state.analyticsFilterTo = '';
+  state.analyticsFilterDuty = '';
+  state.analyticsFilterCategory = '';
+  state.analyticsFilterSubcategory = '';
+  state.analyticsFilterOutcome = '';
   pushHistory('analytics-session');
   app().innerHTML = `<div class="view"><p class="loading">Loading analytics…</p></div>`;
   try {
@@ -2106,8 +2118,8 @@ async function renderAnalyticsSession() {
 async function renderAnalyticsHistory() {
   stopTimer(); clearCharts(); state.currentView = 'analytics-history';
   pushHistory('analytics-history');
-  app().innerHTML = `<div class="view"><p class="loading">Loading history…</p></div>`;
   const params = buildHistoryParams();
+  app().innerHTML = `<div class="view"><p class="loading">Loading history…</p></div>`;
   try {
     const [d, pendingRes] = await Promise.all([
       api('GET', '/api/analytics/history' + params),
@@ -2120,12 +2132,27 @@ async function renderAnalyticsHistory() {
 }
 
 function buildHistoryParams() {
-  const from = document.getElementById('h-from')?.value || state.analyticsQuickFrom || '';
-  const to = document.getElementById('h-to')?.value || state.analyticsQuickTo || '';
-  const isDuty = document.getElementById('h-duty')?.value || '';
-  const cat = document.getElementById('h-cat')?.value || '';
-  const sub = document.getElementById('h-sub')?.value || '';
-  const out = document.getElementById('h-out')?.value || '';
+  // Snapshot current DOM filter values into state while the filter panel is still rendered
+  const fromEl = document.getElementById('h-from');
+  const toEl = document.getElementById('h-to');
+  const dutyEl = document.getElementById('h-duty');
+  const catEl = document.getElementById('h-cat');
+  const subEl = document.getElementById('h-sub');
+  const outEl = document.getElementById('h-out');
+  if (fromEl !== null) state.analyticsFilterFrom = fromEl.value;
+  if (toEl !== null) state.analyticsFilterTo = toEl.value;
+  if (dutyEl !== null) state.analyticsFilterDuty = dutyEl.value;
+  if (catEl !== null) state.analyticsFilterCategory = catEl.value;
+  if (subEl !== null) state.analyticsFilterSubcategory = subEl.value;
+  if (outEl !== null) state.analyticsFilterOutcome = outEl.value;
+
+  // Build params from persisted state (date inputs override quick-filter dates)
+  const from = state.analyticsFilterFrom || state.analyticsQuickFrom || '';
+  const to = state.analyticsFilterTo || state.analyticsQuickTo || '';
+  const isDuty = state.analyticsFilterDuty;
+  const cat = state.analyticsFilterCategory;
+  const sub = state.analyticsFilterSubcategory;
+  const out = state.analyticsFilterOutcome;
   const parts = [];
   if (from) parts.push('from=' + encodeURIComponent(from));
   if (to) parts.push('to=' + encodeURIComponent(to));
@@ -2137,17 +2164,15 @@ function buildHistoryParams() {
 }
 
 function setDatePreset(days) {
-  state.analyticsQuickPeriod = null;
-  state.analyticsQuickFrom = '';
-  state.analyticsQuickTo = '';
   const to = new Date();
   const from = new Date();
   from.setDate(from.getDate() - days + 1);
   const fmt = d => d.toISOString().split('T')[0];
-  const fromEl = document.getElementById('h-from');
-  const toEl = document.getElementById('h-to');
-  if (fromEl) fromEl.value = fmt(from);
-  if (toEl) toEl.value = fmt(to);
+  state.analyticsQuickPeriod = null;
+  state.analyticsQuickFrom = '';
+  state.analyticsQuickTo = '';
+  state.analyticsFilterFrom = fmt(from);
+  state.analyticsFilterTo = fmt(to);
   renderAnalyticsHistory();
 }
 
@@ -2159,6 +2184,8 @@ function applyHistoryFilters() {
 function setAnalyticsQuickFilter(period) {
   state.analyticsFiltersExpanded = false;
   state.analyticsQuickPeriod = period;
+  state.analyticsFilterFrom = '';
+  state.analyticsFilterTo = '';
   if (period === 'today') {
     const today = new Date().toISOString().split('T')[0];
     state.analyticsQuickFrom = today;
@@ -2209,39 +2236,39 @@ function renderAnalyticsContent(data, mode, pendingLog) {
     <div class="filter-bar" style="margin-bottom:0">
       <div class="form-group" style="margin-bottom:0">
         <label>From date</label>
-        <input id="h-from" class="input" type="date">
+        <input id="h-from" class="input" type="date" value="${state.analyticsFilterFrom}">
       </div>
       <div class="form-group" style="margin-bottom:0">
         <label>To date</label>
-        <input id="h-to" class="input" type="date">
+        <input id="h-to" class="input" type="date" value="${state.analyticsFilterTo}">
       </div>
       <div class="form-group" style="margin-bottom:0">
         <label>Type</label>
         <select id="h-duty" class="select">
-          <option value="">All</option>
-          <option value="duty">My Group only</option>
-          <option value="personal">Personal only</option>
+          <option value="" ${!state.analyticsFilterDuty ? 'selected' : ''}>All</option>
+          <option value="duty" ${state.analyticsFilterDuty === 'duty' ? 'selected' : ''}>My Group only</option>
+          <option value="personal" ${state.analyticsFilterDuty === 'personal' ? 'selected' : ''}>Personal only</option>
         </select>
       </div>
       <div class="form-group" style="margin-bottom:0">
         <label>Category</label>
         <select id="h-cat" class="select">
-          <option value="">All</option>
-          ${state.dropdowns.category.map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join('')}
+          <option value="" ${!state.analyticsFilterCategory ? 'selected' : ''}>All</option>
+          ${state.dropdowns.category.map(c => `<option value="${esc(c)}" ${state.analyticsFilterCategory === c ? 'selected' : ''}>${esc(c)}</option>`).join('')}
         </select>
       </div>
       <div class="form-group" style="margin-bottom:0">
         <label>Task type</label>
         <select id="h-sub" class="select">
-          <option value="">All</option>
-          ${state.dropdowns.subcategory.map(o => `<option value="${esc(o)}">${esc(o)}</option>`).join('')}
+          <option value="" ${!state.analyticsFilterSubcategory ? 'selected' : ''}>All</option>
+          ${state.dropdowns.subcategory.map(o => `<option value="${esc(o)}" ${state.analyticsFilterSubcategory === o ? 'selected' : ''}>${esc(o)}</option>`).join('')}
         </select>
       </div>
       <div class="form-group" style="margin-bottom:0">
         <label>Outcome</label>
         <select id="h-out" class="select">
-          <option value="">All</option>
-          ${state.dropdowns.outcome.map(o => `<option value="${esc(o)}">${esc(o)}</option>`).join('')}
+          <option value="" ${!state.analyticsFilterOutcome ? 'selected' : ''}>All</option>
+          ${state.dropdowns.outcome.map(o => `<option value="${esc(o)}" ${state.analyticsFilterOutcome === o ? 'selected' : ''}>${esc(o)}</option>`).join('')}
         </select>
       </div>
       <button class="btn btn-primary btn-full" onclick="applyHistoryFilters()">Apply Filters</button>
