@@ -169,6 +169,7 @@ function initSchema(db: Database.Database): void {
     CREATE TABLE IF NOT EXISTS flag_proposals (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       review_token TEXT NOT NULL UNIQUE,
+      user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
 
@@ -217,6 +218,12 @@ function initSchema(db: Database.Database): void {
   const proposalCols = (db.prepare("PRAGMA table_info(dropdown_proposals)").all() as { name: string }[]).map(c => c.name);
   if (!proposalCols.includes('review_token')) {
     db.exec('ALTER TABLE dropdown_proposals ADD COLUMN review_token TEXT');
+  }
+
+  // Migrate existing databases: add user_id to flag_proposals if missing
+  const flagProposalCols = (db.prepare("PRAGMA table_info(flag_proposals)").all() as { name: string }[]).map(c => c.name);
+  if (!flagProposalCols.includes('user_id')) {
+    db.exec('ALTER TABLE flag_proposals ADD COLUMN user_id INTEGER REFERENCES users(id) ON DELETE CASCADE');
   }
 
   // Seed default registration settings if not present
