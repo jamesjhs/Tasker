@@ -27,7 +27,7 @@ router.post('/propose', requireAuth, requirePasswordChange, requireActivation, v
   const reviewToken = crypto.randomBytes(32).toString('hex');
   let proposalId: number | bigint;
   try {
-    const ins = getDb().prepare('INSERT INTO flag_proposals (review_token) VALUES (?)').run(reviewToken);
+    const ins = getDb().prepare('INSERT INTO flag_proposals (review_token, user_id) VALUES (?,?)').run(reviewToken, s.userId);
     proposalId = ins.lastInsertRowid;
   } catch (err) {
     console.error('[flags] Failed to insert flag proposal record:', err);
