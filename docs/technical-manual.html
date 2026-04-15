@@ -107,7 +107,7 @@
 <div class="page">
 
 <h1>Tasker — Technical Reference Manual</h1>
-<p class="subtitle">Version 1.8.7 &nbsp;·&nbsp; April 2026 &nbsp;·&nbsp; <em>Prepared in the role of Professor of Digital Engineering Product Design</em></p>
+<p class="subtitle">Version 1.8.8 &nbsp;·&nbsp; April 2026 &nbsp;·&nbsp; <em>Prepared in the role of Professor of Digital Engineering Product Design</em></p>
 
 <div class="toc">
   <h2>Table of Contents</h2>
@@ -467,6 +467,7 @@
   <li>Total tasks/minutes/interruptions, duty vs personal counts and minutes, averages (duration, interruptions per task)</li>
   <li>Breakdowns by category, outcome, date, hour-of-day, day-of-week, subcategory, and interruptions-by-category</li>
   <li>Cross-tab aggregations (v1.8.7): <code>byCategoryBySubcategory</code>, <code>byDowBySubcategory</code>, <code>byFlagByCategory</code>, <code>byOutcomeByCategory</code></li>
+  <li>Personal-task assignment-day aggregations (v1.8.8): <code>byDowPersonalByCategory</code>, <code>byDowPersonalBySubcategory</code> — same structure as <code>byDowBySubcategory</code> but restricted to tasks where <code>is_duty = 0</code> and <code>assigned_date</code> is set</li>
   <li>Average duration per subcategory (<code>avgDurBySubcategory</code>)</li>
   <li>Assignment lag statistics (<code>lagStats</code>): count, avg, median, p75, min/max, and a day-bucket histogram for tasks that have an <code>assigned_date</code></li>
   <li>Linear regression on daily task counts (slope, intercept, R² — computed when ≥ 3 date points exist)</li>
@@ -751,6 +752,14 @@ R²        = 1 - SS_res / SS_tot</code></pre>
   <li><strong>Task Type Patterns by Day of Week</strong> — stacked bar; temporal pattern of task types (shown when ≥2 distinct types present)</li>
   <li><strong>Days from Assignment to Action</strong> — histogram of lag in days between <code>assigned_date</code> and <code>start_time</code>, with avg/median/range displayed above the chart</li>
 </ul>
+
+<h3>18.5 Personal Assignment-Day Charts (v1.8.8)</h3>
+<p>Two further stacked column charts show the day-of-week distribution of Personal task assignments only (tasks with <code>is_duty = 0</code> and a populated <code>assigned_date</code>). Each is displayed when at least one Personal task with an assigned date is present in the current data set:</p>
+<ul>
+  <li><strong>Personal Tasks by Day Assigned — by Task Origin</strong> — stacked column; each column represents a day of the week; each stack segment represents a task origin (category), drawn using the same <code>COLORS</code> palette and <code>renderChart</code> helper as all other charts</li>
+  <li><strong>Personal Tasks by Day Assigned — by Task Type</strong> — stacked column; same axes but stack segments represent task types (subcategory)</li>
+</ul>
+<p>The underlying data is produced by <code>buildSummary</code> fields <code>byDowPersonalByCategory</code> and <code>byDowPersonalBySubcategory</code> respectively (see §18.2).</p>
 
 <hr>
 

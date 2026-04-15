@@ -44,6 +44,8 @@ function buildSummary(tasks: any[]) {
   const bySubcategory: Record<string, { count: number; minutes: number }> = {};
   const interruptionsByCategory: Record<string, number> = {};
   const byDowBySubcategory: Record<number, Record<string, number>> = {};
+  const byDowPersonalByCategory: Record<number, Record<string, number>> = {};
+  const byDowPersonalBySubcategory: Record<number, Record<string, number>> = {};
   const byCategoryBySubcategory: Record<string, Record<string, number>> = {};
   const byFlagByCategory: Record<string, Record<string, number>> = {};
   const byOutcomeByCategory: Record<string, Record<string, number>> = {};
@@ -86,6 +88,14 @@ function buildSummary(tasks: any[]) {
       const assignedDow = parseAssignedDate(t.assigned_date).getDay();
       if (!byDowBySubcategory[assignedDow]) byDowBySubcategory[assignedDow] = {};
       byDowBySubcategory[assignedDow][sub] = (byDowBySubcategory[assignedDow][sub] || 0) + 1;
+
+      if (t.is_duty === 0) {
+        if (!byDowPersonalByCategory[assignedDow]) byDowPersonalByCategory[assignedDow] = {};
+        byDowPersonalByCategory[assignedDow][cat] = (byDowPersonalByCategory[assignedDow][cat] || 0) + 1;
+
+        if (!byDowPersonalBySubcategory[assignedDow]) byDowPersonalBySubcategory[assignedDow] = {};
+        byDowPersonalBySubcategory[assignedDow][sub] = (byDowPersonalBySubcategory[assignedDow][sub] || 0) + 1;
+      }
     }
 
     if (!bySubcategory[sub]) bySubcategory[sub] = { count: 0, minutes: 0 };
@@ -193,7 +203,8 @@ function buildSummary(tasks: any[]) {
     personalMins: personal.reduce((s, t) => s + mins(t.start_time, t.end_time, t.interruptions), 0),
     byCategory, byOutcome, byDate, byHour, byDayOfWeek, bySubcategory, interruptionsByCategory,
     byFlag, tasksWithFlags,
-    byDowBySubcategory, byCategoryBySubcategory, byFlagByCategory, byOutcomeByCategory,
+    byDowBySubcategory, byDowPersonalByCategory, byDowPersonalBySubcategory,
+    byCategoryBySubcategory, byFlagByCategory, byOutcomeByCategory,
     lagStats, lagStatsDuty, lagStatsPersonal, avgDurBySubcategory,
     dates, regression,
   };
