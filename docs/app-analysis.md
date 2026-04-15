@@ -1,6 +1,6 @@
 # Tasker — Detailed Application Analysis
 
-> Generated April 2026. Covers repository state at v1.7.1.
+> Generated April 2026. Covers repository state at v1.8.7.
 > Intended for non-developer stakeholders and external analysis engines.
 
 ---
@@ -360,8 +360,13 @@ The server does **not** technically scan for or block PII text in free-text fiel
 
 1. Tap **"📊 Analytics"** in the bottom nav → Today's session view
 2. Tap **"📅 Long-term History"** → Up to 30 days; filter by date/type/category/outcome; linear regression trendline appears with ≥3 days of data
-3. Tap **"⬇️ Download Excel"** → Downloads `Tasker-YYYYMMDDHHmm.xlsx` with two sheets:
-   - **Tasks** sheet: Type, Task From, Task Type, Outcome, Date Assigned, Start Time, End Time, Duration (secs), Interruptions count, Notes
+3. The analytics section presents charts grouped into four logical sections:
+   - **Overview**: time by category (doughnut), My Group vs Personal split, outcome distribution, outcome breakdown by category (stacked bar, when >1 category)
+   - **Task types & durations**: tasks by type, avg duration by category, avg duration by task type, task types by source group (stacked bar, when cross-tab data is meaningful)
+   - **Flags**: flag distribution, flags by source group (stacked bar)
+   - **Temporal patterns**: activity by hour and day of week, task type patterns by day of week (stacked, when ≥2 types), tasks/time over time with regression overlay, interruptions trend, assignment-to-action lag histogram (for tasks with an assigned date)
+4. Tap **"⬇️ Download Excel"** → Downloads `Tasker-YYYYMMDDHHmm.xlsx` with two sheets:
+   - **Tasks** sheet: Type, Task From, Task Type, Outcome, Date Assigned, Start Time, End Time, Duration (secs), Interruptions count, Flags
    - **Summary** sheet: Latest pending task count and when it was logged
 
 ---

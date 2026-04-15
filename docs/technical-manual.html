@@ -107,7 +107,7 @@
 <div class="page">
 
 <h1>Tasker — Technical Reference Manual</h1>
-<p class="subtitle">Version 1.8.6 &nbsp;·&nbsp; April 2026 &nbsp;·&nbsp; <em>Prepared in the role of Professor of Digital Engineering Product Design</em></p>
+<p class="subtitle">Version 1.8.7 &nbsp;·&nbsp; April 2026 &nbsp;·&nbsp; <em>Prepared in the role of Professor of Digital Engineering Product Design</em></p>
 
 <div class="toc">
   <h2>Table of Contents</h2>
@@ -462,7 +462,15 @@
 <p><code>mins(start, end, interruptions)</code> and <code>secs(start, end, interruptions)</code> compute net task duration by subtracting total interruption duration from gross elapsed time. Results are clamped to zero.</p>
 
 <h4><code>buildSummary(tasks)</code></h4>
-<p>Core analytics computation given an array of task objects. Produces: total tasks/minutes/interruptions, averages, breakdowns by category/outcome/date/hour-of-day/day-of-week/subcategory/interruptions-by-category, and a <strong>linear regression</strong> on daily task counts (slope, intercept, R² — computed when ≥ 3 date points exist).</p>
+<p>Core analytics computation given an array of task objects. Produces the following aggregations:</p>
+<ul>
+  <li>Total tasks/minutes/interruptions, duty vs personal counts and minutes, averages (duration, interruptions per task)</li>
+  <li>Breakdowns by category, outcome, date, hour-of-day, day-of-week, subcategory, and interruptions-by-category</li>
+  <li>Cross-tab aggregations (v1.8.7): <code>byCategoryBySubcategory</code>, <code>byDowBySubcategory</code>, <code>byFlagByCategory</code>, <code>byOutcomeByCategory</code></li>
+  <li>Average duration per subcategory (<code>avgDurBySubcategory</code>)</li>
+  <li>Assignment lag statistics (<code>lagStats</code>): count, avg, median, p75, min/max, and a day-bucket histogram for tasks that have an <code>assigned_date</code></li>
+  <li>Linear regression on daily task counts (slope, intercept, R² — computed when ≥ 3 date points exist)</li>
+</ul>
 
 <table>
   <thead><tr><th>Endpoint</th><th>Description</th></tr></thead>
@@ -525,7 +533,7 @@
 <p>A custom searchable dropdown with: trigger button, search input, options list, and "Add new" row. Keyboard-navigable (arrow keys, Enter, Escape). Only one open at a time. The <code>filterCombo</code> function re-renders the options list on each keystroke.</p>
 
 <h3>12.8 Chart Rendering</h3>
-<p><code>renderChart(canvasId, type, labels, datasets, options)</code> wraps <code>new Chart(ctx, {...})</code>. Instances stored in <code>state.charts</code> and destroyed by <code>clearCharts()</code> before any view transition. Charts include: category time (doughnut), outcome distribution (doughnut), avg duration by category (horizontal bar), duty/personal split (grouped bar), subcategory counts (horizontal bar), hour-of-day activity (bar), day-of-week activity (bar), task/time trend with regression overlay (line), interruptions trend (line).</p>
+<p><code>renderChart(canvasId, type, labels, datasets, options)</code> wraps <code>new Chart(ctx, {...})</code>. Instances stored in <code>state.charts</code> and destroyed by <code>clearCharts()</code> before any view transition. Charts are grouped into four logical sections: <strong>overview</strong> (category time doughnut, My Group vs Personal bar, outcome distribution doughnut, outcome breakdown by category stacked bar), <strong>task-type &amp; duration</strong> (avg duration by category, tasks by type, avg duration by task type, task types by source group stacked bar), <strong>flags</strong> (flag distribution, flags by source group stacked bar), and <strong>temporal patterns</strong> (hour-of-day, day-of-week, task type patterns by DOW stacked bar, tasks/time/regression trend line, interruptions trend line, assignment-to-action lag histogram). New charts are only rendered when sufficient cross-tab data exists.</p>
 
 <h3>12.9 XSS Prevention</h3>
 <p>All user-supplied data rendered into HTML is passed through <code>esc()</code> (HTML-entity encoding of <code>&amp;</code>, <code>&lt;</code>, <code>&gt;</code>, <code>"</code>, <code>'</code>). A secondary helper <code>safeId()</code> strips all non-alphanumeric/hyphen/underscore characters from strings used as DOM element ID suffixes.</p>
@@ -731,7 +739,18 @@ R²        = 1 - SS_res / SS_tot</code></pre>
 <p>Calculated when ≥ 3 distinct dates exist. Displayed as e.g. <em>+0.3 tasks/day (R²=0.85, increasing)</em>.</p>
 
 <h3>18.3 Client-Side Insight Generation</h3>
-<p><code>buildInsights(summary)</code> produces human-readable insight strings: busiest hour, busiest day of week, most time-consuming category, most interrupted category, average task duration classification, interruption rate (% of tasks with ≥1 interruption).</p>
+<p><code>buildInsights(summary)</code> produces human-readable insight strings: busiest hour, busiest day of week, most time-consuming category, most interrupted category, average task duration classification, interruption rate (% of tasks with ≥1 interruption), average assignment-to-action lag, longest task type by average duration, and top flag–source-group combination.</p>
+
+<h3>18.4 Cross-Tab Charts (v1.8.7)</h3>
+<p>Six additional charts appear when sufficient data is present, grouped logically with their related base charts:</p>
+<ul>
+  <li><strong>Outcome Breakdown by Category</strong> — stacked bar; outcome distribution per source group (shown when &gt;1 category)</li>
+  <li><strong>Avg Duration by Task Type</strong> — horizontal bar; average minutes per subcategory</li>
+  <li><strong>Task Types by Source Group</strong> — stacked bar; task-type composition per category (shown when &gt;1 category or any category has &gt;1 type)</li>
+  <li><strong>Flags by Source Group</strong> — horizontal stacked bar; which source groups generate which flags</li>
+  <li><strong>Task Type Patterns by Day of Week</strong> — stacked bar; temporal pattern of task types (shown when ≥2 distinct types present)</li>
+  <li><strong>Days from Assignment to Action</strong> — histogram of lag in days between <code>assigned_date</code> and <code>start_time</code>, with avg/median/range displayed above the chart</li>
+</ul>
 
 <hr>
 

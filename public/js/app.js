@@ -2328,8 +2328,13 @@ function renderAnalyticsContent(data, mode, pendingLog) {
   const hasDow = Object.keys(s.byDayOfWeek || {}).length > 0;
   const hasOutcome = Object.keys(s.byOutcome || {}).length > 0;
   const hasFlags = Object.keys(s.byFlag || {}).length > 0;
-  const hasCatSub = hasSubcategory && Object.keys(s.byCategoryBySubcategory || {}).length > 0;
-  const hasDowSub = hasDow && hasSubcategory && Object.keys(s.byDowBySubcategory || {}).length > 0;
+  const byCatSubCats = Object.keys(s.byCategoryBySubcategory || {});
+  const hasCatSub = hasSubcategory && (
+    byCatSubCats.length > 1 ||
+    byCatSubCats.some(c => Object.keys(s.byCategoryBySubcategory[c] || {}).length > 1)
+  );
+  const dowSubTypes = new Set(Object.values(s.byDowBySubcategory || {}).flatMap(v => Object.keys(v)));
+  const hasDowSub = hasDow && dowSubTypes.size > 1;
   const hasFlagCat = hasFlags && Object.keys(s.byFlagByCategory || {}).length > 0;
   const hasOutcomeCat = hasOutcome && Object.keys(s.byCategory || {}).length > 1;
   const hasLag = !!(s.lagStats && s.lagStats.count > 0);
@@ -2360,28 +2365,47 @@ function renderAnalyticsContent(data, mode, pendingLog) {
       <div class="card-title">Time by Category (mins)</div>
       <div class="chart-container" style="height:240px"><canvas id="chart-cat"></canvas></div>
     </div>
+    <div class="card">
+      <div class="card-title">My Group vs Personal</div>
+      <div class="chart-container" style="height:200px"><canvas id="chart-split"></canvas></div>
+    </div>
     ${hasOutcome ? `
     <div class="card">
       <div class="card-title">Outcome Distribution</div>
       <div class="chart-container" style="height:220px"><canvas id="chart-outcome"></canvas></div>
     </div>` : ''}
+    ${hasOutcomeCat ? `
+    <div class="card">
+      <div class="card-title">Outcome Breakdown by Category</div>
+      <div class="chart-container" style="height:220px"><canvas id="chart-outcome-cat"></canvas></div>
+    </div>` : ''}
     <div class="card">
       <div class="card-title">Avg Duration by Category (mins)</div>
       <div class="chart-container" style="height:${Math.max(180, Object.keys(s.byCategory).length * 44)}px"><canvas id="chart-cat-dur"></canvas></div>
-    </div>
-    <div class="card">
-      <div class="card-title">My Group vs Personal</div>
-      <div class="chart-container" style="height:200px"><canvas id="chart-split"></canvas></div>
     </div>
     ${hasSubcategory ? `
     <div class="card">
       <div class="card-title">Tasks by Type</div>
       <div class="chart-container" style="height:${Math.max(180, subLabels.length * 44)}px"><canvas id="chart-sub"></canvas></div>
+    </div>
+    <div class="card">
+      <div class="card-title">Avg Duration by Task Type (mins)</div>
+      <div class="chart-container" style="height:${Math.max(180, subLabels.length * 44)}px"><canvas id="chart-sub-dur"></canvas></div>
+    </div>` : ''}
+    ${hasCatSub ? `
+    <div class="card">
+      <div class="card-title">Task Types by Source Group</div>
+      <div class="chart-container" style="height:240px"><canvas id="chart-cat-sub"></canvas></div>
     </div>` : ''}
     ${hasFlags ? `
     <div class="card">
       <div class="card-title">Task Flag Distribution</div>
       <div class="chart-container" style="height:${Math.max(180, Object.keys(s.byFlag).length * 44)}px"><canvas id="chart-flags"></canvas></div>
+    </div>` : ''}
+    ${hasFlagCat ? `
+    <div class="card">
+      <div class="card-title">Flags by Source Group</div>
+      <div class="chart-container" style="height:${Math.max(180, Object.keys(s.byFlagByCategory || {}).length * 44)}px"><canvas id="chart-flag-cat"></canvas></div>
     </div>` : ''}
     ${hasHour ? `
     <div class="card">
@@ -2393,6 +2417,11 @@ function renderAnalyticsContent(data, mode, pendingLog) {
       <div class="card-title">Activity by Day of Week</div>
       <div class="chart-container" style="height:200px"><canvas id="chart-dow"></canvas></div>
     </div>` : ''}
+    ${hasDowSub ? `
+    <div class="card">
+      <div class="card-title">Task Type Patterns by Day of Week</div>
+      <div class="chart-container" style="height:240px"><canvas id="chart-dow-sub"></canvas></div>
+    </div>` : ''}
     ${hasMultiDates ? `
     <div class="card">
       <div class="card-title">Tasks &amp; Time Over Time</div>
@@ -2402,34 +2431,10 @@ function renderAnalyticsContent(data, mode, pendingLog) {
       <div class="card-title">Interruptions Over Time</div>
       <div class="chart-container" style="height:200px"><canvas id="chart-intr-trend"></canvas></div>
     </div>` : ''}
-    ${hasSubcategory ? `
-    <div class="card">
-      <div class="card-title">Avg Duration by Task Type (mins)</div>
-      <div class="chart-container" style="height:${Math.max(180, subLabels.length * 44)}px"><canvas id="chart-sub-dur"></canvas></div>
-    </div>` : ''}
-    ${hasCatSub ? `
-    <div class="card">
-      <div class="card-title">Task Types by Source Group</div>
-      <div class="chart-container" style="height:240px"><canvas id="chart-cat-sub"></canvas></div>
-    </div>` : ''}
-    ${hasDowSub ? `
-    <div class="card">
-      <div class="card-title">Task Type Patterns by Day of Week</div>
-      <div class="chart-container" style="height:240px"><canvas id="chart-dow-sub"></canvas></div>
-    </div>` : ''}
-    ${hasOutcomeCat ? `
-    <div class="card">
-      <div class="card-title">Outcome Breakdown by Category</div>
-      <div class="chart-container" style="height:220px"><canvas id="chart-outcome-cat"></canvas></div>
-    </div>` : ''}
-    ${hasFlagCat ? `
-    <div class="card">
-      <div class="card-title">Flags by Source Group</div>
-      <div class="chart-container" style="height:${Math.max(180, Object.keys(s.byFlagByCategory || {}).length * 44)}px"><canvas id="chart-flag-cat"></canvas></div>
-    </div>` : ''}
     ${hasLag ? `
     <div class="card">
       <div class="card-title">Days from Assignment to Action</div>
+      <p style="font-size:.8rem;color:#6b7280;margin:0 0 8px">Avg: ${s.lagStats.avg}d &nbsp;·&nbsp; Median: ${s.lagStats.median}d &nbsp;·&nbsp; Range: ${s.lagStats.min}–${s.lagStats.max}d</p>
       <div class="chart-container" style="height:200px"><canvas id="chart-lag"></canvas></div>
     </div>` : ''}
     ` : '<div class="card"><p style="color:#6b7280;text-align:center;padding:20px">No completed tasks yet.</p></div>'}
