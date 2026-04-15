@@ -2338,6 +2338,10 @@ function renderAnalyticsContent(data, mode, pendingLog) {
   const hasFlagCat = hasFlags && Object.keys(s.byFlagByCategory || {}).length > 0;
   const hasOutcomeCat = hasOutcome && Object.keys(s.byCategory || {}).length > 1;
   const hasLag = !!(s.lagStats && s.lagStats.count > 0);
+  const personalDowCatTypes = new Set(Object.values(s.byDowPersonalByCategory || {}).flatMap(v => Object.keys(v)));
+  const hasPersonalDowCat = personalDowCatTypes.size > 0;
+  const personalDowSubTypes = new Set(Object.values(s.byDowPersonalBySubcategory || {}).flatMap(v => Object.keys(v)));
+  const hasPersonalDowSub = personalDowSubTypes.size > 0;
 
   app().innerHTML = `
   <div class="view">
@@ -2421,6 +2425,16 @@ function renderAnalyticsContent(data, mode, pendingLog) {
     <div class="card">
       <div class="card-title">Task Type Patterns by Day Assigned</div>
       <div class="chart-container" style="height:540px"><canvas id="chart-dow-sub"></canvas></div>
+    </div>` : ''}
+    ${hasPersonalDowCat ? `
+    <div class="card">
+      <div class="card-title">Personal Tasks by Day Assigned — by Task Origin</div>
+      <div class="chart-container" style="height:300px"><canvas id="chart-personal-dow-cat"></canvas></div>
+    </div>` : ''}
+    ${hasPersonalDowSub ? `
+    <div class="card">
+      <div class="card-title">Personal Tasks by Day Assigned — by Task Type</div>
+      <div class="chart-container" style="height:300px"><canvas id="chart-personal-dow-sub"></canvas></div>
     </div>` : ''}
     ${hasMultiDates ? `
     <div class="card">
@@ -2580,6 +2594,32 @@ function renderAnalyticsContent(data, mode, pendingLog) {
         backgroundColor: COLORS[i % COLORS.length],
       }));
       renderChart('chart-dow-sub', 'bar', dowNames, dowSubDatasets,
+        { plugins: { legend: { position: 'bottom' } }, scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true, ticks: { stepSize: 1 } } } });
+    }
+
+    // Personal tasks by day assigned — by task origin (category) — stacked column
+    if (hasPersonalDowCat) {
+      const dowNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+      const allPersonalCats = [...new Set(Object.values(s.byDowPersonalByCategory).flatMap(v => Object.keys(v)))];
+      const personalDowCatDatasets = allPersonalCats.map((cat, i) => ({
+        label: cat,
+        data: dowNames.map((_, di) => ((s.byDowPersonalByCategory[di] || {})[cat] || 0)),
+        backgroundColor: COLORS[i % COLORS.length],
+      }));
+      renderChart('chart-personal-dow-cat', 'bar', dowNames, personalDowCatDatasets,
+        { plugins: { legend: { position: 'bottom' } }, scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true, ticks: { stepSize: 1 } } } });
+    }
+
+    // Personal tasks by day assigned — by task type (subcategory) — stacked column
+    if (hasPersonalDowSub) {
+      const dowNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+      const allPersonalSubs = [...new Set(Object.values(s.byDowPersonalBySubcategory).flatMap(v => Object.keys(v)))];
+      const personalDowSubDatasets = allPersonalSubs.map((sub, i) => ({
+        label: sub,
+        data: dowNames.map((_, di) => ((s.byDowPersonalBySubcategory[di] || {})[sub] || 0)),
+        backgroundColor: COLORS[i % COLORS.length],
+      }));
+      renderChart('chart-personal-dow-sub', 'bar', dowNames, personalDowSubDatasets,
         { plugins: { legend: { position: 'bottom' } }, scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true, ticks: { stepSize: 1 } } } });
     }
 
