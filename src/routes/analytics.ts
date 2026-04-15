@@ -43,6 +43,8 @@ function buildSummary(tasks: any[]) {
   const byFlagByCategory: Record<string, Record<string, number>> = {};
   const byOutcomeByCategory: Record<string, Record<string, number>> = {};
   const assignedLagDays: number[] = [];
+  const assignedLagDaysDuty: number[] = [];
+  const assignedLagDaysPersonal: number[] = [];
 
   for (const t of tasks) {
     const cat = t.category || 'Uncategorised';
@@ -90,7 +92,10 @@ function buildSummary(tasks: any[]) {
     if (t.assigned_date && t.start_time) {
       const aMs = new Date(/^\d{4}-\d{2}-\d{2}$/.test(t.assigned_date) ? t.assigned_date + 'T00:00:00' : t.assigned_date).getTime();
       const sMs = new Date(t.start_time).getTime();
-      assignedLagDays.push(Math.max(0, Math.floor((sMs - aMs) / 86400000)));
+      const lagDay = Math.max(0, Math.floor((sMs - aMs) / 86400000));
+      assignedLagDays.push(lagDay);
+      if (t.is_duty === 1) assignedLagDaysDuty.push(lagDay);
+      else assignedLagDaysPersonal.push(lagDay);
     }
 
     interruptionsByCategory[cat] = (interruptionsByCategory[cat] || 0) + (t.interruptions?.length || 0);
@@ -108,10 +113,10 @@ function buildSummary(tasks: any[]) {
   }
   const tasksWithFlags = tasks.filter(t => (t.flag_labels?.length || 0) > 0).length;
 
-  // Lag stats: days between assigned_date and start_time
-  let lagStats: { count: number; avg: number; median: number; min: number; max: number; p75: number; buckets: Record<string, number> } | null = null;
-  if (assignedLagDays.length > 0) {
-    const sorted = [...assignedLagDays].sort((a, b) => a - b);
+  // Lag stats helper: days between assigned_date and start_time
+  function computeLagStats(days: number[]) {
+    if (days.length === 0) return null;
+    const sorted = [...days].sort((a, b) => a - b);
     const n = sorted.length;
     const lagAvg = Math.round(sorted.reduce((s, d) => s + d, 0) / n * 10) / 10;
     const lagMedian = n % 2 === 0 ? (sorted[n / 2 - 1] + sorted[n / 2]) / 2 : sorted[Math.floor(n / 2)];
@@ -125,8 +130,11 @@ function buildSummary(tasks: any[]) {
       else { b = '>30'; }
       buckets[b] = (buckets[b] || 0) + 1;
     }
-    lagStats = { count: n, avg: lagAvg, median: lagMedian, min: sorted[0], max: sorted[n - 1], p75, buckets };
+    return { count: n, avg: lagAvg, median: lagMedian, min: sorted[0], max: sorted[n - 1], p75, buckets };
   }
+  const lagStats = computeLagStats(assignedLagDays);
+  const lagStatsDuty = computeLagStats(assignedLagDaysDuty);
+  const lagStatsPersonal = computeLagStats(assignedLagDaysPersonal);
 
   // Avg duration per subcategory (minutes)
   const avgDurBySubcategory: Record<string, number> = {};
@@ -177,7 +185,7 @@ function buildSummary(tasks: any[]) {
     byCategory, byOutcome, byDate, byHour, byDayOfWeek, bySubcategory, interruptionsByCategory,
     byFlag, tasksWithFlags,
     byDowBySubcategory, byCategoryBySubcategory, byFlagByCategory, byOutcomeByCategory,
-    lagStats, avgDurBySubcategory,
+    lagStats, lagStatsDuty, lagStatsPersonal, avgDurBySubcategory,
     dates, regression,
   };
 }

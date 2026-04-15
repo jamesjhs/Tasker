@@ -2377,7 +2377,7 @@ function renderAnalyticsContent(data, mode, pendingLog) {
     ${hasOutcomeCat ? `
     <div class="card">
       <div class="card-title">Outcome Breakdown by Category</div>
-      <div class="chart-container" style="height:220px"><canvas id="chart-outcome-cat"></canvas></div>
+      <div class="chart-container" style="height:340px"><canvas id="chart-outcome-cat"></canvas></div>
     </div>` : ''}
     <div class="card">
       <div class="card-title">Avg Duration by Category (mins)</div>
@@ -2395,7 +2395,7 @@ function renderAnalyticsContent(data, mode, pendingLog) {
     ${hasCatSub ? `
     <div class="card">
       <div class="card-title">Task Types by Source Group</div>
-      <div class="chart-container" style="height:240px"><canvas id="chart-cat-sub"></canvas></div>
+      <div class="chart-container" style="height:360px"><canvas id="chart-cat-sub"></canvas></div>
     </div>` : ''}
     ${hasFlags ? `
     <div class="card">
@@ -2405,7 +2405,7 @@ function renderAnalyticsContent(data, mode, pendingLog) {
     ${hasFlagCat ? `
     <div class="card">
       <div class="card-title">Flags by Source Group</div>
-      <div class="chart-container" style="height:${Math.max(180, Object.keys(s.byFlagByCategory || {}).length * 44)}px"><canvas id="chart-flag-cat"></canvas></div>
+      <div class="chart-container" style="height:${Math.max(280, Object.keys(s.byFlagByCategory || {}).length * 44)}px"><canvas id="chart-flag-cat"></canvas></div>
     </div>` : ''}
     ${hasHour ? `
     <div class="card">
@@ -2420,7 +2420,7 @@ function renderAnalyticsContent(data, mode, pendingLog) {
     ${hasDowSub ? `
     <div class="card">
       <div class="card-title">Task Type Patterns by Day of Week</div>
-      <div class="chart-container" style="height:240px"><canvas id="chart-dow-sub"></canvas></div>
+      <div class="chart-container" style="height:360px"><canvas id="chart-dow-sub"></canvas></div>
     </div>` : ''}
     ${hasMultiDates ? `
     <div class="card">
@@ -2434,8 +2434,9 @@ function renderAnalyticsContent(data, mode, pendingLog) {
     ${hasLag ? `
     <div class="card">
       <div class="card-title">Days from Assignment to Action</div>
-      <p style="font-size:.8rem;color:#6b7280;margin:0 0 8px">Avg: ${s.lagStats.avg}d &nbsp;·&nbsp; Median: ${s.lagStats.median}d &nbsp;·&nbsp; Range: ${s.lagStats.min}–${s.lagStats.max}d</p>
-      <div class="chart-container" style="height:200px"><canvas id="chart-lag"></canvas></div>
+      ${s.lagStatsDuty && s.lagStatsDuty.count > 0 ? `<p style="font-size:.8rem;color:#6b7280;margin:0 0 4px">My Group — Avg: ${s.lagStatsDuty.avg}d &nbsp;·&nbsp; Median: ${s.lagStatsDuty.median}d &nbsp;·&nbsp; Range: ${s.lagStatsDuty.min}–${s.lagStatsDuty.max}d</p>` : ''}
+      ${s.lagStatsPersonal && s.lagStatsPersonal.count > 0 ? `<p style="font-size:.8rem;color:#6b7280;margin:0 0 8px">Personal — Avg: ${s.lagStatsPersonal.avg}d &nbsp;·&nbsp; Median: ${s.lagStatsPersonal.median}d &nbsp;·&nbsp; Range: ${s.lagStatsPersonal.min}–${s.lagStatsPersonal.max}d</p>` : ''}
+      <div class="chart-container" style="height:240px"><canvas id="chart-lag"></canvas></div>
     </div>` : ''}
     ` : '<div class="card"><p style="color:#6b7280;text-align:center;padding:20px">No completed tasks yet.</p></div>'}
     <div style="display:flex;gap:10px;margin-bottom:12px;flex-wrap:wrap">
@@ -2607,14 +2608,25 @@ function renderAnalyticsContent(data, mode, pendingLog) {
         { indexAxis: 'y', plugins: { legend: { position: 'bottom' } }, scales: { x: { stacked: true, beginAtZero: true }, y: { stacked: true } } });
     }
 
-    // Assignment-to-action lag distribution — bar chart
+    // Assignment-to-action lag distribution — grouped bar chart (My Group vs Personal)
     if (hasLag) {
       const lagBucketOrder = ['0','1','2','3','4','5','6','7','8–14','15–30','>30'];
-      const lagLabels = lagBucketOrder.filter(k => s.lagStats.buckets[k] !== undefined);
-      const lagCounts = lagLabels.map(k => s.lagStats.buckets[k]);
-      renderChart('chart-lag', 'bar', lagLabels,
-        [{ label: 'Tasks', data: lagCounts, backgroundColor: '#0891b2' }],
-        { plugins: { legend: { display: false } }, scales: {
+      const lagLabels = lagBucketOrder.filter(k =>
+        (s.lagStatsDuty   && s.lagStatsDuty.buckets[k]   !== undefined) ||
+        (s.lagStatsPersonal && s.lagStatsPersonal.buckets[k] !== undefined)
+      );
+      const lagDatasets = [];
+      if (s.lagStatsDuty && s.lagStatsDuty.count > 0) {
+        lagDatasets.push({ label: 'My Group', data: lagLabels.map(k => s.lagStatsDuty.buckets[k] || 0), backgroundColor: '#1a56db' });
+      }
+      if (s.lagStatsPersonal && s.lagStatsPersonal.count > 0) {
+        lagDatasets.push({ label: 'Personal', data: lagLabels.map(k => s.lagStatsPersonal.buckets[k] || 0), backgroundColor: '#7c3aed' });
+      }
+      if (lagDatasets.length === 0) {
+        lagDatasets.push({ label: 'Tasks', data: lagLabels.map(k => s.lagStats.buckets[k] || 0), backgroundColor: '#0891b2' });
+      }
+      renderChart('chart-lag', 'bar', lagLabels, lagDatasets,
+        { plugins: { legend: { position: 'bottom' } }, scales: {
           x: { title: { display: true, text: 'Days' } },
           y: { beginAtZero: true, ticks: { stepSize: 1 } },
         } });
