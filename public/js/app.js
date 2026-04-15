@@ -2328,6 +2328,16 @@ function renderAnalyticsContent(data, mode, pendingLog) {
   const hasDow = Object.keys(s.byDayOfWeek || {}).length > 0;
   const hasOutcome = Object.keys(s.byOutcome || {}).length > 0;
   const hasFlags = Object.keys(s.byFlag || {}).length > 0;
+  const byCatSubCats = Object.keys(s.byCategoryBySubcategory || {});
+  const hasCatSub = hasSubcategory && (
+    byCatSubCats.length > 1 ||
+    byCatSubCats.some(c => Object.keys(s.byCategoryBySubcategory[c] || {}).length > 1)
+  );
+  const dowSubTypes = new Set(Object.values(s.byDowBySubcategory || {}).flatMap(v => Object.keys(v)));
+  const hasDowSub = hasDow && dowSubTypes.size > 1;
+  const hasFlagCat = hasFlags && Object.keys(s.byFlagByCategory || {}).length > 0;
+  const hasOutcomeCat = hasOutcome && Object.keys(s.byCategory || {}).length > 1;
+  const hasLag = !!(s.lagStats && s.lagStats.count > 0);
 
   app().innerHTML = `
   <div class="view">
@@ -2355,28 +2365,47 @@ function renderAnalyticsContent(data, mode, pendingLog) {
       <div class="card-title">Time by Category (mins)</div>
       <div class="chart-container" style="height:240px"><canvas id="chart-cat"></canvas></div>
     </div>
+    <div class="card">
+      <div class="card-title">My Group vs Personal</div>
+      <div class="chart-container" style="height:200px"><canvas id="chart-split"></canvas></div>
+    </div>
     ${hasOutcome ? `
     <div class="card">
       <div class="card-title">Outcome Distribution</div>
       <div class="chart-container" style="height:220px"><canvas id="chart-outcome"></canvas></div>
     </div>` : ''}
+    ${hasOutcomeCat ? `
+    <div class="card">
+      <div class="card-title">Outcome Breakdown by Category</div>
+      <div class="chart-container" style="height:510px"><canvas id="chart-outcome-cat"></canvas></div>
+    </div>` : ''}
     <div class="card">
       <div class="card-title">Avg Duration by Category (mins)</div>
       <div class="chart-container" style="height:${Math.max(180, Object.keys(s.byCategory).length * 44)}px"><canvas id="chart-cat-dur"></canvas></div>
-    </div>
-    <div class="card">
-      <div class="card-title">My Group vs Personal</div>
-      <div class="chart-container" style="height:200px"><canvas id="chart-split"></canvas></div>
     </div>
     ${hasSubcategory ? `
     <div class="card">
       <div class="card-title">Tasks by Type</div>
       <div class="chart-container" style="height:${Math.max(180, subLabels.length * 44)}px"><canvas id="chart-sub"></canvas></div>
+    </div>
+    <div class="card">
+      <div class="card-title">Avg Duration by Task Type (mins)</div>
+      <div class="chart-container" style="height:${Math.max(180, subLabels.length * 44)}px"><canvas id="chart-sub-dur"></canvas></div>
+    </div>` : ''}
+    ${hasCatSub ? `
+    <div class="card">
+      <div class="card-title">Task Types by Source Group</div>
+      <div class="chart-container" style="height:540px"><canvas id="chart-cat-sub"></canvas></div>
     </div>` : ''}
     ${hasFlags ? `
     <div class="card">
       <div class="card-title">Task Flag Distribution</div>
       <div class="chart-container" style="height:${Math.max(180, Object.keys(s.byFlag).length * 44)}px"><canvas id="chart-flags"></canvas></div>
+    </div>` : ''}
+    ${hasFlagCat ? `
+    <div class="card">
+      <div class="card-title">Flags by Source Group</div>
+      <div class="chart-container" style="height:${Math.max(420, Object.keys(s.byFlagByCategory || {}).length * 44)}px"><canvas id="chart-flag-cat"></canvas></div>
     </div>` : ''}
     ${hasHour ? `
     <div class="card">
@@ -2388,6 +2417,11 @@ function renderAnalyticsContent(data, mode, pendingLog) {
       <div class="card-title">Activity by Day of Week</div>
       <div class="chart-container" style="height:200px"><canvas id="chart-dow"></canvas></div>
     </div>` : ''}
+    ${hasDowSub ? `
+    <div class="card">
+      <div class="card-title">Task Type Patterns by Day Assigned</div>
+      <div class="chart-container" style="height:540px"><canvas id="chart-dow-sub"></canvas></div>
+    </div>` : ''}
     ${hasMultiDates ? `
     <div class="card">
       <div class="card-title">Tasks &amp; Time Over Time</div>
@@ -2396,6 +2430,13 @@ function renderAnalyticsContent(data, mode, pendingLog) {
     <div class="card">
       <div class="card-title">Interruptions Over Time</div>
       <div class="chart-container" style="height:200px"><canvas id="chart-intr-trend"></canvas></div>
+    </div>` : ''}
+    ${hasLag ? `
+    <div class="card">
+      <div class="card-title">Days from Assignment to Action</div>
+      ${s.lagStatsDuty && s.lagStatsDuty.count > 0 ? `<p style="font-size:.8rem;color:#6b7280;margin:0 0 4px">My Group — Avg: ${s.lagStatsDuty.avg}d &nbsp;·&nbsp; Median: ${s.lagStatsDuty.median}d &nbsp;·&nbsp; Range: ${s.lagStatsDuty.min}–${s.lagStatsDuty.max}d</p>` : ''}
+      ${s.lagStatsPersonal && s.lagStatsPersonal.count > 0 ? `<p style="font-size:.8rem;color:#6b7280;margin:0 0 8px">Personal — Avg: ${s.lagStatsPersonal.avg}d &nbsp;·&nbsp; Median: ${s.lagStatsPersonal.median}d &nbsp;·&nbsp; Range: ${s.lagStatsPersonal.min}–${s.lagStatsPersonal.max}d</p>` : ''}
+      <div class="chart-container" style="height:360px"><canvas id="chart-lag"></canvas></div>
     </div>` : ''}
     ` : '<div class="card"><p style="color:#6b7280;text-align:center;padding:20px">No completed tasks yet.</p></div>'}
     <div style="display:flex;gap:10px;margin-bottom:12px;flex-wrap:wrap">
@@ -2506,6 +2547,90 @@ function renderAnalyticsContent(data, mode, pendingLog) {
         [{ label: 'Interruptions', data: intrCounts, borderColor: '#d97706', backgroundColor: 'rgba(217,119,6,.1)', tension: 0.3, fill: true }],
         { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } } });
     }
+
+    // Avg duration by task type (subcategory) — horizontal bar
+    if (hasSubcategory) {
+      const subAvgDur = subLabels.map(k => s.bySubcategory[k] && s.bySubcategory[k].count > 0
+        ? Math.round(s.bySubcategory[k].minutes / s.bySubcategory[k].count) : 0);
+      renderChart('chart-sub-dur', 'bar', subLabels,
+        [{ label: 'Avg mins', data: subAvgDur, backgroundColor: COLORS }],
+        { indexAxis: 'y', plugins: { legend: { display: false } }, scales: { x: { beginAtZero: true } } });
+    }
+
+    // Task types by source group — stacked bar (category × subcategory)
+    if (hasCatSub) {
+      const csCategories = Object.keys(s.byCategoryBySubcategory);
+      const allSubTypes = [...new Set(csCategories.flatMap(c => Object.keys(s.byCategoryBySubcategory[c])))];
+      const csDatasets = allSubTypes.map((sub, i) => ({
+        label: sub,
+        data: csCategories.map(c => (s.byCategoryBySubcategory[c][sub] || 0)),
+        backgroundColor: COLORS[i % COLORS.length],
+      }));
+      renderChart('chart-cat-sub', 'bar', csCategories, csDatasets,
+        { plugins: { legend: { position: 'bottom' } }, scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true } } });
+    }
+
+    // Task type patterns by day of week — stacked bar
+    if (hasDowSub) {
+      const dowNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+      const allDowSubs = [...new Set(Object.values(s.byDowBySubcategory).flatMap(v => Object.keys(v)))];
+      const dowSubDatasets = allDowSubs.map((sub, i) => ({
+        label: sub,
+        data: dowNames.map((_, di) => ((s.byDowBySubcategory[di] || {})[sub] || 0)),
+        backgroundColor: COLORS[i % COLORS.length],
+      }));
+      renderChart('chart-dow-sub', 'bar', dowNames, dowSubDatasets,
+        { plugins: { legend: { position: 'bottom' } }, scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true, ticks: { stepSize: 1 } } } });
+    }
+
+    // Outcome breakdown by category — stacked bar
+    if (hasOutcomeCat) {
+      const allOutcomes = Object.keys(s.byOutcome);
+      const ocDatasets = allOutcomes.map((out, i) => ({
+        label: out,
+        data: catLabels.map(c => ((s.byOutcomeByCategory[out] || {})[c] || 0)),
+        backgroundColor: COLORS[i % COLORS.length],
+      }));
+      renderChart('chart-outcome-cat', 'bar', catLabels, ocDatasets,
+        { plugins: { legend: { position: 'bottom' } }, scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true, ticks: { stepSize: 1 } } } });
+    }
+
+    // Flags by source group — horizontal stacked bar
+    if (hasFlagCat) {
+      const flagCatFlags = Object.keys(s.byFlagByCategory);
+      const allFlagCats = [...new Set(flagCatFlags.flatMap(f => Object.keys(s.byFlagByCategory[f])))];
+      const fcDatasets = allFlagCats.map((cat, i) => ({
+        label: cat,
+        data: flagCatFlags.map(f => ((s.byFlagByCategory[f] || {})[cat] || 0)),
+        backgroundColor: COLORS[i % COLORS.length],
+      }));
+      renderChart('chart-flag-cat', 'bar', flagCatFlags, fcDatasets,
+        { indexAxis: 'y', plugins: { legend: { position: 'bottom' } }, scales: { x: { stacked: true, beginAtZero: true }, y: { stacked: true } } });
+    }
+
+    // Assignment-to-action lag distribution — stacked bar chart (My Group vs Personal)
+    if (hasLag) {
+      const lagBucketOrder = ['0','1','2','3','4','5','6','7','8–14','15–30','>30'];
+      const lagLabels = lagBucketOrder.filter(k =>
+        (s.lagStatsDuty   && s.lagStatsDuty.buckets[k]   !== undefined) ||
+        (s.lagStatsPersonal && s.lagStatsPersonal.buckets[k] !== undefined)
+      );
+      const lagDatasets = [];
+      if (s.lagStatsDuty && s.lagStatsDuty.count > 0) {
+        lagDatasets.push({ label: 'My Group', data: lagLabels.map(k => s.lagStatsDuty.buckets[k] || 0), backgroundColor: '#1a56db' });
+      }
+      if (s.lagStatsPersonal && s.lagStatsPersonal.count > 0) {
+        lagDatasets.push({ label: 'Personal', data: lagLabels.map(k => s.lagStatsPersonal.buckets[k] || 0), backgroundColor: '#7c3aed' });
+      }
+      if (lagDatasets.length === 0) {
+        lagDatasets.push({ label: 'Tasks', data: lagLabels.map(k => s.lagStats.buckets[k] || 0), backgroundColor: '#0891b2' });
+      }
+      renderChart('chart-lag', 'bar', lagLabels, lagDatasets,
+        { plugins: { legend: { position: 'bottom' } }, scales: {
+          x: { stacked: true, title: { display: true, text: 'Days' } },
+          y: { stacked: true, beginAtZero: true, ticks: { stepSize: 1 } },
+        } });
+    }
   }
 }
 
@@ -2554,6 +2679,31 @@ function buildInsights(s) {
   if (s.total > 0 && s.tasksWithInterruptions > 0) {
     const pct = Math.round((s.tasksWithInterruptions / s.total) * 100);
     items.push(`🔔 <strong>Interruption rate:</strong> ${pct}% of tasks`);
+  }
+
+  // Average assignment-to-action lag
+  if (s.lagStats && s.lagStats.count > 0) {
+    let lagNote;
+    if (s.lagStats.avg === 0) { lagNote = 'same day'; }
+    else if (s.lagStats.avg <= 1) { lagNote = 'next day'; }
+    else { lagNote = `${s.lagStats.avg} days`; }
+    items.push(`⏰ <strong>Avg assignment lag:</strong> ${lagNote} (${s.lagStats.count} dated tasks)`);
+  }
+
+  // Subcategory (task type) with highest average duration
+  const subDurEntries = Object.entries(s.avgDurBySubcategory || {}).filter(([k]) => k !== 'Unspecified');
+  if (subDurEntries.length > 0) {
+    const [topSub, topDur] = subDurEntries.sort((a, b) => b[1] - a[1])[0];
+    if (topDur > 0) items.push(`🔍 <strong>Longest task type:</strong> ${esc(topSub)} (avg ${topDur}m)`);
+  }
+
+  // Most common flag–source-group combination
+  const flagCatPairs = Object.entries(s.byFlagByCategory || {}).flatMap(([f, cats]) =>
+    Object.entries(cats).map(([c, n]) => ({ flag: f, cat: c, n }))
+  );
+  if (flagCatPairs.length > 0) {
+    const top = flagCatPairs.sort((a, b) => b.n - a.n)[0];
+    items.push(`🚩 <strong>Top flag source:</strong> "${esc(top.flag)}" from ${esc(top.cat)}`);
   }
 
   return items;
