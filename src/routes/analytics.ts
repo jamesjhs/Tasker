@@ -26,6 +26,11 @@ function secs(start: string, end: string, interruptions: any[]): number {
   return Math.max(0, Math.round(ms / 1000));
 }
 
+/** Parse an assigned_date string (YYYY-MM-DD or ISO datetime) to a Date object. */
+function parseAssignedDate(d: string): Date {
+  return new Date(/^\d{4}-\d{2}-\d{2}$/.test(d) ? d + 'T00:00:00' : d);
+}
+
 function buildSummary(tasks: any[]) {
   const duty = tasks.filter(t => t.is_duty === 1);
   const personal = tasks.filter(t => t.is_duty === 0);
@@ -75,8 +80,12 @@ function buildSummary(tasks: any[]) {
       byDayOfWeek[dow].count++;
       byDayOfWeek[dow].minutes += mins(t.start_time, t.end_time, t.interruptions);
 
-      if (!byDowBySubcategory[dow]) byDowBySubcategory[dow] = {};
-      byDowBySubcategory[dow][sub] = (byDowBySubcategory[dow][sub] || 0) + 1;
+    }
+
+    if (t.assigned_date) {
+      const assignedDow = parseAssignedDate(t.assigned_date).getDay();
+      if (!byDowBySubcategory[assignedDow]) byDowBySubcategory[assignedDow] = {};
+      byDowBySubcategory[assignedDow][sub] = (byDowBySubcategory[assignedDow][sub] || 0) + 1;
     }
 
     if (!bySubcategory[sub]) bySubcategory[sub] = { count: 0, minutes: 0 };
@@ -90,7 +99,7 @@ function buildSummary(tasks: any[]) {
     byOutcomeByCategory[out][cat] = (byOutcomeByCategory[out][cat] || 0) + 1;
 
     if (t.assigned_date && t.start_time) {
-      const aMs = new Date(/^\d{4}-\d{2}-\d{2}$/.test(t.assigned_date) ? t.assigned_date + 'T00:00:00' : t.assigned_date).getTime();
+      const aMs = parseAssignedDate(t.assigned_date).getTime();
       const sMs = new Date(t.start_time).getTime();
       const lagDay = Math.max(0, Math.floor((sMs - aMs) / 86400000));
       assignedLagDays.push(lagDay);
