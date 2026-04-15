@@ -2328,6 +2328,11 @@ function renderAnalyticsContent(data, mode, pendingLog) {
   const hasDow = Object.keys(s.byDayOfWeek || {}).length > 0;
   const hasOutcome = Object.keys(s.byOutcome || {}).length > 0;
   const hasFlags = Object.keys(s.byFlag || {}).length > 0;
+  const hasCatSub = hasSubcategory && Object.keys(s.byCategoryBySubcategory || {}).length > 0;
+  const hasDowSub = hasDow && hasSubcategory && Object.keys(s.byDowBySubcategory || {}).length > 0;
+  const hasFlagCat = hasFlags && Object.keys(s.byFlagByCategory || {}).length > 0;
+  const hasOutcomeCat = hasOutcome && Object.keys(s.byCategory || {}).length > 1;
+  const hasLag = !!(s.lagStats && s.lagStats.count > 0);
 
   app().innerHTML = `
   <div class="view">
@@ -2396,6 +2401,36 @@ function renderAnalyticsContent(data, mode, pendingLog) {
     <div class="card">
       <div class="card-title">Interruptions Over Time</div>
       <div class="chart-container" style="height:200px"><canvas id="chart-intr-trend"></canvas></div>
+    </div>` : ''}
+    ${hasSubcategory ? `
+    <div class="card">
+      <div class="card-title">Avg Duration by Task Type (mins)</div>
+      <div class="chart-container" style="height:${Math.max(180, subLabels.length * 44)}px"><canvas id="chart-sub-dur"></canvas></div>
+    </div>` : ''}
+    ${hasCatSub ? `
+    <div class="card">
+      <div class="card-title">Task Types by Source Group</div>
+      <div class="chart-container" style="height:240px"><canvas id="chart-cat-sub"></canvas></div>
+    </div>` : ''}
+    ${hasDowSub ? `
+    <div class="card">
+      <div class="card-title">Task Type Patterns by Day of Week</div>
+      <div class="chart-container" style="height:240px"><canvas id="chart-dow-sub"></canvas></div>
+    </div>` : ''}
+    ${hasOutcomeCat ? `
+    <div class="card">
+      <div class="card-title">Outcome Breakdown by Category</div>
+      <div class="chart-container" style="height:220px"><canvas id="chart-outcome-cat"></canvas></div>
+    </div>` : ''}
+    ${hasFlagCat ? `
+    <div class="card">
+      <div class="card-title">Flags by Source Group</div>
+      <div class="chart-container" style="height:${Math.max(180, Object.keys(s.byFlagByCategory || {}).length * 44)}px"><canvas id="chart-flag-cat"></canvas></div>
+    </div>` : ''}
+    ${hasLag ? `
+    <div class="card">
+      <div class="card-title">Days from Assignment to Action</div>
+      <div class="chart-container" style="height:200px"><canvas id="chart-lag"></canvas></div>
     </div>` : ''}
     ` : '<div class="card"><p style="color:#6b7280;text-align:center;padding:20px">No completed tasks yet.</p></div>'}
     <div style="display:flex;gap:10px;margin-bottom:12px;flex-wrap:wrap">
@@ -2506,6 +2541,79 @@ function renderAnalyticsContent(data, mode, pendingLog) {
         [{ label: 'Interruptions', data: intrCounts, borderColor: '#d97706', backgroundColor: 'rgba(217,119,6,.1)', tension: 0.3, fill: true }],
         { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } } });
     }
+
+    // Avg duration by task type (subcategory) — horizontal bar
+    if (hasSubcategory) {
+      const subAvgDur = subLabels.map(k => s.bySubcategory[k] && s.bySubcategory[k].count > 0
+        ? Math.round(s.bySubcategory[k].minutes / s.bySubcategory[k].count) : 0);
+      renderChart('chart-sub-dur', 'bar', subLabels,
+        [{ label: 'Avg mins', data: subAvgDur, backgroundColor: COLORS }],
+        { indexAxis: 'y', plugins: { legend: { display: false } }, scales: { x: { beginAtZero: true } } });
+    }
+
+    // Task types by source group — stacked bar (category × subcategory)
+    if (hasCatSub) {
+      const csCategories = Object.keys(s.byCategoryBySubcategory);
+      const allSubTypes = [...new Set(csCategories.flatMap(c => Object.keys(s.byCategoryBySubcategory[c])))];
+      const csDatasets = allSubTypes.map((sub, i) => ({
+        label: sub,
+        data: csCategories.map(c => (s.byCategoryBySubcategory[c][sub] || 0)),
+        backgroundColor: COLORS[i % COLORS.length],
+      }));
+      renderChart('chart-cat-sub', 'bar', csCategories, csDatasets,
+        { plugins: { legend: { position: 'bottom' } }, scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true } } });
+    }
+
+    // Task type patterns by day of week — stacked bar
+    if (hasDowSub) {
+      const dowNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+      const allDowSubs = [...new Set(Object.values(s.byDowBySubcategory).flatMap(v => Object.keys(v)))];
+      const dowSubDatasets = allDowSubs.map((sub, i) => ({
+        label: sub,
+        data: dowNames.map((_, di) => ((s.byDowBySubcategory[di] || {})[sub] || 0)),
+        backgroundColor: COLORS[i % COLORS.length],
+      }));
+      renderChart('chart-dow-sub', 'bar', dowNames, dowSubDatasets,
+        { plugins: { legend: { position: 'bottom' } }, scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true, ticks: { stepSize: 1 } } } });
+    }
+
+    // Outcome breakdown by category — stacked bar
+    if (hasOutcomeCat) {
+      const allOutcomes = Object.keys(s.byOutcome);
+      const ocDatasets = allOutcomes.map((out, i) => ({
+        label: out,
+        data: catLabels.map(c => ((s.byOutcomeByCategory[out] || {})[c] || 0)),
+        backgroundColor: COLORS[i % COLORS.length],
+      }));
+      renderChart('chart-outcome-cat', 'bar', catLabels, ocDatasets,
+        { plugins: { legend: { position: 'bottom' } }, scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true, ticks: { stepSize: 1 } } } });
+    }
+
+    // Flags by source group — horizontal stacked bar
+    if (hasFlagCat) {
+      const flagCatFlags = Object.keys(s.byFlagByCategory);
+      const allFlagCats = [...new Set(flagCatFlags.flatMap(f => Object.keys(s.byFlagByCategory[f])))];
+      const fcDatasets = allFlagCats.map((cat, i) => ({
+        label: cat,
+        data: flagCatFlags.map(f => ((s.byFlagByCategory[f] || {})[cat] || 0)),
+        backgroundColor: COLORS[i % COLORS.length],
+      }));
+      renderChart('chart-flag-cat', 'bar', flagCatFlags, fcDatasets,
+        { indexAxis: 'y', plugins: { legend: { position: 'bottom' } }, scales: { x: { stacked: true, beginAtZero: true }, y: { stacked: true } } });
+    }
+
+    // Assignment-to-action lag distribution — bar chart
+    if (hasLag) {
+      const lagBucketOrder = ['0','1','2','3','4','5','6','7','8–14','15–30','>30'];
+      const lagLabels = lagBucketOrder.filter(k => s.lagStats.buckets[k] !== undefined);
+      const lagCounts = lagLabels.map(k => s.lagStats.buckets[k]);
+      renderChart('chart-lag', 'bar', lagLabels,
+        [{ label: 'Tasks', data: lagCounts, backgroundColor: '#0891b2' }],
+        { plugins: { legend: { display: false } }, scales: {
+          x: { title: { display: true, text: 'Days' } },
+          y: { beginAtZero: true, ticks: { stepSize: 1 } },
+        } });
+    }
   }
 }
 
@@ -2554,6 +2662,31 @@ function buildInsights(s) {
   if (s.total > 0 && s.tasksWithInterruptions > 0) {
     const pct = Math.round((s.tasksWithInterruptions / s.total) * 100);
     items.push(`🔔 <strong>Interruption rate:</strong> ${pct}% of tasks`);
+  }
+
+  // Average assignment-to-action lag
+  if (s.lagStats && s.lagStats.count > 0) {
+    let lagNote;
+    if (s.lagStats.avg === 0) { lagNote = 'same day'; }
+    else if (s.lagStats.avg <= 1) { lagNote = 'next day'; }
+    else { lagNote = `${s.lagStats.avg} days`; }
+    items.push(`⏰ <strong>Avg assignment lag:</strong> ${lagNote} (${s.lagStats.count} dated tasks)`);
+  }
+
+  // Subcategory (task type) with highest average duration
+  const subDurEntries = Object.entries(s.avgDurBySubcategory || {}).filter(([k]) => k !== 'Unspecified');
+  if (subDurEntries.length > 0) {
+    const [topSub, topDur] = subDurEntries.sort((a, b) => b[1] - a[1])[0];
+    if (topDur > 0) items.push(`🔍 <strong>Longest task type:</strong> ${esc(topSub)} (avg ${topDur}m)`);
+  }
+
+  // Most common flag–source-group combination
+  const flagCatPairs = Object.entries(s.byFlagByCategory || {}).flatMap(([f, cats]) =>
+    Object.entries(cats).map(([c, n]) => ({ flag: f, cat: c, n }))
+  );
+  if (flagCatPairs.length > 0) {
+    const top = flagCatPairs.sort((a, b) => b.n - a.n)[0];
+    items.push(`🚩 <strong>Top flag source:</strong> "${esc(top.flag)}" from ${esc(top.cat)}`);
   }
 
   return items;

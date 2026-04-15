@@ -38,6 +38,11 @@ function buildSummary(tasks: any[]) {
   const byDayOfWeek: Record<number, { count: number; minutes: number }> = {};
   const bySubcategory: Record<string, { count: number; minutes: number }> = {};
   const interruptionsByCategory: Record<string, number> = {};
+  const byDowBySubcategory: Record<number, Record<string, number>> = {};
+  const byCategoryBySubcategory: Record<string, Record<string, number>> = {};
+  const byFlagByCategory: Record<string, Record<string, number>> = {};
+  const byOutcomeByCategory: Record<string, Record<string, number>> = {};
+  const assignedLagDays: number[] = [];
 
   for (const t of tasks) {
     const cat = t.category || 'Uncategorised';
@@ -56,6 +61,7 @@ function buildSummary(tasks: any[]) {
       if (t.is_duty === 1) byDate[d].duty++; else byDate[d].personal++;
     }
 
+    const sub = t.subcategory || 'Unspecified';
     if (t.start_time) {
       const h = new Date(t.start_time).getHours();
       if (!byHour[h]) byHour[h] = { count: 0, minutes: 0 };
@@ -66,12 +72,26 @@ function buildSummary(tasks: any[]) {
       if (!byDayOfWeek[dow]) byDayOfWeek[dow] = { count: 0, minutes: 0 };
       byDayOfWeek[dow].count++;
       byDayOfWeek[dow].minutes += mins(t.start_time, t.end_time, t.interruptions);
+
+      if (!byDowBySubcategory[dow]) byDowBySubcategory[dow] = {};
+      byDowBySubcategory[dow][sub] = (byDowBySubcategory[dow][sub] || 0) + 1;
     }
 
-    const sub = t.subcategory || 'Unspecified';
     if (!bySubcategory[sub]) bySubcategory[sub] = { count: 0, minutes: 0 };
     bySubcategory[sub].count++;
     bySubcategory[sub].minutes += mins(t.start_time, t.end_time, t.interruptions);
+
+    if (!byCategoryBySubcategory[cat]) byCategoryBySubcategory[cat] = {};
+    byCategoryBySubcategory[cat][sub] = (byCategoryBySubcategory[cat][sub] || 0) + 1;
+
+    if (!byOutcomeByCategory[out]) byOutcomeByCategory[out] = {};
+    byOutcomeByCategory[out][cat] = (byOutcomeByCategory[out][cat] || 0) + 1;
+
+    if (t.assigned_date && t.start_time) {
+      const aMs = new Date(/^\d{4}-\d{2}-\d{2}$/.test(t.assigned_date) ? t.assigned_date + 'T00:00:00' : t.assigned_date).getTime();
+      const sMs = new Date(t.start_time).getTime();
+      assignedLagDays.push(Math.max(0, Math.floor((sMs - aMs) / 86400000)));
+    }
 
     interruptionsByCategory[cat] = (interruptionsByCategory[cat] || 0) + (t.interruptions?.length || 0);
   }
@@ -79,11 +99,40 @@ function buildSummary(tasks: any[]) {
   // Flag breakdown
   const byFlag: Record<string, number> = {};
   for (const t of tasks) {
+    const tCat = t.category || 'Uncategorised';
     for (const f of (t.flag_labels || [])) {
       byFlag[f] = (byFlag[f] || 0) + 1;
+      if (!byFlagByCategory[f]) byFlagByCategory[f] = {};
+      byFlagByCategory[f][tCat] = (byFlagByCategory[f][tCat] || 0) + 1;
     }
   }
   const tasksWithFlags = tasks.filter(t => (t.flag_labels?.length || 0) > 0).length;
+
+  // Lag stats: days between assigned_date and start_time
+  let lagStats: { count: number; avg: number; median: number; min: number; max: number; p75: number; buckets: Record<string, number> } | null = null;
+  if (assignedLagDays.length > 0) {
+    const sorted = [...assignedLagDays].sort((a, b) => a - b);
+    const n = sorted.length;
+    const lagAvg = Math.round(sorted.reduce((s, d) => s + d, 0) / n * 10) / 10;
+    const lagMedian = n % 2 === 0 ? (sorted[n / 2 - 1] + sorted[n / 2]) / 2 : sorted[Math.floor(n / 2)];
+    const p75 = sorted[Math.floor(n * 0.75)];
+    const buckets: Record<string, number> = {};
+    for (const d of sorted) {
+      let b: string;
+      if (d <= 7) { b = String(d); }
+      else if (d <= 14) { b = '8–14'; }
+      else if (d <= 30) { b = '15–30'; }
+      else { b = '>30'; }
+      buckets[b] = (buckets[b] || 0) + 1;
+    }
+    lagStats = { count: n, avg: lagAvg, median: lagMedian, min: sorted[0], max: sorted[n - 1], p75, buckets };
+  }
+
+  // Avg duration per subcategory (minutes)
+  const avgDurBySubcategory: Record<string, number> = {};
+  for (const [k, v] of Object.entries(bySubcategory)) {
+    avgDurBySubcategory[k] = v.count > 0 ? Math.round(v.minutes / v.count) : 0;
+  }
 
   // Linear regression on daily counts
   const dates = Object.keys(byDate).sort();
@@ -127,6 +176,8 @@ function buildSummary(tasks: any[]) {
     personalMins: personal.reduce((s, t) => s + mins(t.start_time, t.end_time, t.interruptions), 0),
     byCategory, byOutcome, byDate, byHour, byDayOfWeek, bySubcategory, interruptionsByCategory,
     byFlag, tasksWithFlags,
+    byDowBySubcategory, byCategoryBySubcategory, byFlagByCategory, byOutcomeByCategory,
+    lagStats, avgDurBySubcategory,
     dates, regression,
   };
 }
