@@ -22,6 +22,7 @@ const state = {
   currentView: null,
   dropdowns: { category: [], subcategory: [], outcome: [] },
   flagOptions: [],       // [{ id, value }]
+  commonFields: { category: [], subcategory: [], outcome: [] },
   taskForm: {},
   lastUsedCombos: {},
   editTask: null,
@@ -525,16 +526,18 @@ async function init() {
 
 async function loadDropdowns() {
   try {
-    const [cats, subs, outs, flagOpts] = await Promise.all([
+    const [cats, subs, outs, flagOpts, common] = await Promise.all([
       api('GET','/api/dropdowns/category'),
       api('GET','/api/dropdowns/subcategory'),
       api('GET','/api/dropdowns/outcome'),
       api('GET','/api/flags'),
+      api('GET','/api/tasks/common-fields'),
     ]);
     if (cats) state.dropdowns.category = cats.options;
     if (subs) state.dropdowns.subcategory = subs.options;
     if (outs) state.dropdowns.outcome = outs.options;
     if (flagOpts) state.flagOptions = flagOpts.options || [];
+    if (common) state.commonFields = common;
   } catch(e) {}
 }
 
@@ -1604,7 +1607,9 @@ function renderTaskStart() {
       </div>
     </div>
     ${buildDropdownGroup('category','Task From', state.dropdowns.category, 'ts-cat')}
+    ${buildQuickPickRow('category', 'ts-cat', state.commonFields.category, 2)}
     ${buildDropdownGroup('subcategory','Task Type', state.dropdowns.subcategory, 'ts-sub')}
+    ${buildQuickPickRow('subcategory', 'ts-sub', state.commonFields.subcategory, 2)}
     <div class="form-group">
       <label for="ts-assigned">Date assigned</label>
       <input id="ts-assigned" class="input" type="date" value="${new Date().toISOString().split('T')[0]}">
@@ -1621,6 +1626,58 @@ function setDuty(isDuty) {
 
 function buildDropdownGroup(field, label, options, containerId) {
   return buildComboBox(field, label, options, containerId, true, null);
+}
+
+function buildQuickPickRow(field, containerId, values, cols) {
+  if (!values || values.length === 0) return '';
+  const colClass = cols === 3 ? ' quick-pick-grid--3col' : '';
+  const max = cols === 3 ? 6 : 4;
+  const items = values.slice(0, max).map(v =>
+    `<button type="button" class="quick-pick-btn" onclick="selectComboOpt('${safeId(containerId)}','${safeId(field)}','${esc(v)}')">${esc(v)}</button>`
+  ).join('');
+  return `<div class="quick-pick-grid${colClass}">${items}</div>`;
+}
+
+function buildRunningOutcomeGroup(options, current) {
+  const sid = 'tr-outcome';
+  const displayValue = current || '';
+  const picks = (state.commonFields.outcome || []).slice(0, 6);
+  const picksHtml = picks.length ? `
+  <div id="tr-outcome-picks" class="quick-pick-grid quick-pick-grid--3col" style="margin-bottom:8px">
+    ${picks.map(v => `<button type="button" class="quick-pick-btn${displayValue === v ? ' qp-selected' : ''}" onclick="selectRunningOutcome('${esc(v)}')">${esc(v)}</button>`).join('')}
+  </div>` : '';
+  return `
+  <div class="form-group" style="margin-top:4px">
+    <label>Task Outcome</label>
+    ${picksHtml}
+    <div class="combo-wrap" id="${sid}">
+      <button type="button" id="${sid}-btn"
+              class="combo-btn${displayValue ? '' : ' placeholder'}"
+              onclick="openCombo('${sid}','outcome',false)"
+              aria-haspopup="listbox" aria-expanded="false">
+        ${displayValue ? esc(displayValue) : '— Select Outcome —'}
+      </button>
+      <div class="combo-panel" id="${sid}-panel" role="listbox">
+        <input class="combo-search" id="${sid}-search" type="text" autocomplete="off"
+               placeholder="Search…"
+               oninput="filterCombo('${sid}','outcome',false)"
+               onkeydown="comboKeydown(event,'${sid}','outcome',false)">
+        <div class="combo-opts" id="${sid}-opts"></div>
+      </div>
+      <input type="hidden" id="${sid}-sel" value="${esc(displayValue)}">
+    </div>
+  </div>`;
+}
+
+function selectRunningOutcome(value) {
+  const hidden = document.getElementById('tr-outcome-sel');
+  const btn = document.getElementById('tr-outcome-btn');
+  if (hidden) hidden.value = value;
+  if (btn) { btn.textContent = value; btn.classList.remove('placeholder'); }
+  document.querySelectorAll('#tr-outcome-picks .quick-pick-btn').forEach(el => {
+    el.classList.toggle('qp-selected', el.textContent.trim() === value);
+  });
+  closeCombo('tr-outcome');
 }
 
 function onDropdownChange(containerId, field) {
@@ -1689,12 +1746,14 @@ function renderTaskActive() {
     ${midWarn ? '<div class="midnight-warn">⚠️ Approaching midnight — your session will end at midnight!</div>' : ''}
     ${t.category ? `<p style="text-align:center;font-size:1rem;color:#374151;margin-bottom:4px">${esc(t.category)}${t.subcategory ? ' › ' + esc(t.subcategory) : ''}</p>` : ''}
     <div class="timer-display" id="timer-display">00:00:00</div>
-    <div style="text-align:center;font-size:.85rem;color:#6b7280;margin-bottom:24px">
+    <div style="text-align:center;font-size:.85rem;color:#6b7280;margin-bottom:16px">
       Started: ${formatTimeShort(t.start_time)} 
       ${t.interruptions?.length ? ` · ${t.interruptions.length} interruption(s)` : ''}
     </div>
+    ${buildRunningOutcomeGroup(state.dropdowns.outcome, t.outcome || null)}
     <button class="btn btn-secondary btn-full" style="margin-bottom:10px" onclick="showInterruptModal()">⏸️ Interrupted</button>
-    <button class="btn btn-primary btn-full" onclick="renderTaskEnd()">⏹️ End Task</button>
+    <button class="btn btn-primary btn-full" style="margin-bottom:10px" onclick="renderTaskEnd()">⏹️ End Task</button>
+    <button class="btn btn-danger btn-full" onclick="cancelActiveTask()">✕ Cancel Task</button>
   </div>`;
 
   // Start live timer
@@ -1838,12 +1897,25 @@ async function discardFromModal() {
   } catch(e) { alert(e.message); }
 }
 
+async function cancelActiveTask() {
+  if (!confirm('Cancel this task? It will be discarded and all data deleted.')) return;
+  try {
+    await api('PATCH', `/api/tasks/${state.activeTask.id}`, { status: 'discarded' });
+    state.activeTask = null;
+    stopActivityTracking();
+    renderHome();
+  } catch(e) { alert(e.message); }
+}
+
 // ── TASK END ─────────────────────────────────────────────────────────────────
 function renderTaskEnd() {
   stopTimer();
   const t = state.activeTask;
   if (!t) { renderHome(); return; }
   t.end_time = new Date().toISOString();
+  // Carry over any outcome selected on the Task Running page
+  const runningOutcome = document.getElementById('tr-outcome-sel')?.value;
+  if (runningOutcome) t.outcome = runningOutcome;
   renderTaskReview(t, false);
 }
 
@@ -1867,11 +1939,11 @@ function renderTaskReview(t, isEdit) {
   </div>`).join('') : '<p style="font-size:.85rem;color:#6b7280">No interruptions recorded.</p>';
 
   const taskSummaryHtml = !isEdit ? `
-      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:10px 0;border-bottom:1px solid #e5e7eb;margin-bottom:4px">
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:10px 0;border-bottom:1px solid #e5e7eb;margin-bottom:12px">
         <span class="badge ${t.is_duty ? 'badge-duty' : 'badge-personal'}">${t.is_duty ? '🏥 My Group' : '👤 Personal'}</span>
-        ${t.category ? `<span style="font-weight:600;color:#374151">${esc(t.category)}</span>` : ''}
-        ${t.subcategory ? `<span style="color:#6b7280">›</span><span style="color:#374151">${esc(t.subcategory)}</span>` : ''}
-      </div>` : `
+      </div>
+      ${buildReviewDropdown('category', 'Task From', state.dropdowns.category, t.category)}
+      ${buildReviewDropdown('subcategory', 'Task Type', state.dropdowns.subcategory, t.subcategory)}` : `
       <div class="form-group">
         <label>Task type</label>
         <div class="toggle-group">
@@ -2035,6 +2107,8 @@ async function submitTaskReview(taskId, isEdit, dest) {
   const subcategoryVal = document.getElementById('te-subcategory-sel')?.value || t.subcategory || null;
   if (isEdit && !categoryVal) { showAlert('Please select a Task From.', 'error', 'te-alerts'); return; }
   if (isEdit && !subcategoryVal) { showAlert('Please select a Task Type.', 'error', 'te-alerts'); return; }
+  if (!isEdit && !categoryVal) { showAlert('Please select a Task From.', 'error', 'te-alerts'); return; }
+  if (!isEdit && !subcategoryVal) { showAlert('Please select a Task Type.', 'error', 'te-alerts'); return; }
   // Collect selected flag IDs
   const flagChecks = document.querySelectorAll('#te-flags .flag-check:checked');
   const flag_ids = Array.from(flagChecks).map(el => Number(el.dataset.id));

@@ -464,6 +464,35 @@ html, body {
 .combo-opt.combo-new { color: #1a56db; border-top: 1.5px solid #e5e7eb; }
 .combo-opt.combo-empty { color: #9ca3af; pointer-events: none; }
 
+/* ── Quick-pick button grid ──────────────────────────────────────── */
+.quick-pick-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+.quick-pick-grid--3col { grid-template-columns: 1fr 1fr 1fr; }
+.quick-pick-btn {
+  background: #f0f4ff;
+  border: 1.5px solid #1a56db;
+  border-radius: 8px;
+  color: #1a56db;
+  font-size: .8rem;
+  font-weight: 600;
+  padding: 8px 6px;
+  cursor: pointer;
+  min-height: 40px;
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: background .15s, color .15s;
+  line-height: 1.2;
+  -webkit-tap-highlight-color: transparent;
+}
+.quick-pick-btn:hover { background: #dbeafe; }
+.quick-pick-btn.qp-selected { background: #1a56db; color: #fff; }
+
 /* ── Task card ────────────────────────────────────────────────────── */
 .task-card { position: relative; }
 .task-card-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
