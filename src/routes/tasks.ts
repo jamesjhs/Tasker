@@ -171,6 +171,20 @@ router.get('/', (req: Request, res: Response) => {
   res.json({ tasks });
 });
 
+router.get('/common-fields', (req: Request, res: Response) => {
+  const s = req.session as any;
+  const db = getDb();
+  const topN = (field: string, limit: number): string[] =>
+    (db.prepare(
+      `SELECT ${field}, COUNT(*) as cnt FROM tasks WHERE user_id=? AND ${field} IS NOT NULL AND status='completed' GROUP BY ${field} ORDER BY cnt DESC LIMIT ?`
+    ).all(s.userId, limit) as any[]).map(r => r[field]);
+  res.json({
+    category:    topN('category', 4),
+    subcategory: topN('subcategory', 4),
+    outcome:     topN('outcome', 6),
+  });
+});
+
 router.get('/:id', (req: Request, res: Response) => {
   const s = req.session as any;
   const db = getDb();
