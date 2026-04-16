@@ -256,6 +256,416 @@ router.get('/history', (req: Request, res: Response) => {
   res.json({ tasks, summary: buildSummary(tasks) });
 });
 
+router.get('/report', async (req: Request, res: Response) => {
+  const s = req.session as any;
+  const db = getDb();
+  const { mode, from, to, is_duty, category, subcategory, outcome } = req.query as Record<string, string>;
+
+  let raw: any[];
+  if (mode === 'session') {
+    const dateStr = s.sessionDate || new Date().toISOString().split('T')[0];
+    raw = (db.prepare(
+      `SELECT * FROM tasks WHERE user_id=? AND status='completed' AND date(start_time)=? ORDER BY start_time`
+    ).all(s.userId, dateStr) as any[]).map(t => ({ ...t, interruptions: JSON.parse(t.interruptions || '[]') }));
+  } else {
+    let q = `SELECT * FROM tasks WHERE user_id=? AND status='completed' AND start_time>=datetime('now','-30 days')`;
+    const p: any[] = [s.userId];
+    if (from)                              { q += ' AND date(start_time)>=?'; p.push(from); }
+    if (to)                                { q += ' AND date(start_time)<=?'; p.push(to); }
+    if (is_duty !== undefined && is_duty !== '') { q += ' AND is_duty=?'; p.push(is_duty === 'true' ? 1 : 0); }
+    if (category)                          { q += ' AND category=?'; p.push(category); }
+    if (subcategory)                       { q += ' AND subcategory=?'; p.push(subcategory); }
+    if (outcome)                           { q += ' AND outcome=?'; p.push(outcome); }
+    q += ' ORDER BY start_time';
+    raw = (db.prepare(q).all(...p) as any[]).map(t => ({ ...t, interruptions: JSON.parse(t.interruptions || '[]') }));
+  }
+
+  const tasks = attachFlagLabels(db, raw);
+  const sum = buildSummary(tasks);
+
+  // Interruptions per date (for Interruptions Over Time sheet)
+  const intrByDate: Record<string, number> = {};
+  for (const t of tasks) {
+    const d = (t.start_time || '').split('T')[0];
+    if (d) intrByDate[d] = (intrByDate[d] || 0) + (t.interruptions?.length || 0);
+  }
+
+  const wb = new ExcelJS.Workbook();
+
+  function styleHeader(ws: ExcelJS.Worksheet) {
+    ws.getRow(1).font = { bold: true };
+    ws.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEFF6FF' } };
+  }
+
+  function addCrossTabSheet(
+    name: string,
+    rowLabels: string[],
+    colLabels: string[],
+    getData: (row: string, col: string) => number,
+    rowHeader: string
+  ) {
+    if (rowLabels.length === 0 || colLabels.length === 0) return;
+    const ws = wb.addWorksheet(name);
+    ws.columns = [
+      { header: rowHeader, key: '__row', width: 28 },
+      ...colLabels.map(c => ({ header: c, key: c, width: 18 })),
+    ];
+    for (const row of rowLabels) {
+      const r: Record<string, any> = { __row: row };
+      for (const col of colLabels) r[col] = getData(row, col);
+      ws.addRow(r);
+    }
+    styleHeader(ws);
+  }
+
+  // 1. Summary
+  {
+    const ws = wb.addWorksheet('Summary');
+    ws.columns = [
+      { header: 'Metric', key: 'Metric', width: 32 },
+      { header: 'Value',  key: 'Value',  width: 16 },
+    ];
+    ws.addRows([
+      { Metric: 'Total tasks',                 Value: sum.total },
+      { Metric: 'Total minutes',               Value: sum.totalMins },
+      { Metric: 'Avg minutes per task',        Value: sum.avgDurMins },
+      { Metric: 'My Group tasks',              Value: sum.dutyCount },
+      { Metric: 'My Group minutes',            Value: sum.dutyMins },
+      { Metric: 'Personal tasks',              Value: sum.personalCount },
+      { Metric: 'Personal minutes',            Value: sum.personalMins },
+      { Metric: 'Total interruptions',         Value: sum.totalInterruptions },
+      { Metric: 'Tasks with interruptions',    Value: sum.tasksWithInterruptions },
+      { Metric: 'Avg interruptions per task',  Value: sum.avgInterruptionsPerTask },
+      { Metric: 'Flagged tasks',               Value: sum.tasksWithFlags },
+    ]);
+    styleHeader(ws);
+  }
+
+  // 2. Time by Category
+  {
+    const cats = Object.keys(sum.byCategory);
+    if (cats.length > 0) {
+      const ws = wb.addWorksheet('Time by Category');
+      ws.columns = [
+        { header: 'Category',      key: 'Category', width: 28 },
+        { header: 'Task Count',    key: 'Count',    width: 14 },
+        { header: 'Total Minutes', key: 'Minutes',  width: 16 },
+        { header: 'Avg Minutes',   key: 'AvgMins',  width: 16 },
+      ];
+      for (const cat of cats) {
+        const v = sum.byCategory[cat];
+        ws.addRow({ Category: cat, Count: v.count, Minutes: v.minutes, AvgMins: v.count > 0 ? Math.round(v.minutes / v.count) : 0 });
+      }
+      styleHeader(ws);
+    }
+  }
+
+  // 3. Duty vs Personal
+  {
+    const ws = wb.addWorksheet('Duty vs Personal');
+    ws.columns = [
+      { header: 'Type',          key: 'Type',    width: 16 },
+      { header: 'Task Count',    key: 'Count',   width: 14 },
+      { header: 'Total Minutes', key: 'Minutes', width: 16 },
+    ];
+    ws.addRows([
+      { Type: 'My Group', Count: sum.dutyCount,     Minutes: sum.dutyMins },
+      { Type: 'Personal', Count: sum.personalCount, Minutes: sum.personalMins },
+    ]);
+    styleHeader(ws);
+  }
+
+  // 4. Outcome Distribution
+  {
+    const outcomes = Object.keys(sum.byOutcome);
+    if (outcomes.length > 0) {
+      const ws = wb.addWorksheet('Outcome Distribution');
+      ws.columns = [
+        { header: 'Outcome', key: 'Outcome', width: 20 },
+        { header: 'Count',   key: 'Count',   width: 12 },
+      ];
+      for (const out of outcomes) ws.addRow({ Outcome: out, Count: sum.byOutcome[out] });
+      styleHeader(ws);
+    }
+  }
+
+  // 5. Outcome by Category
+  {
+    const cats = Object.keys(sum.byCategory);
+    const outcomes = Object.keys(sum.byOutcome);
+    if (cats.length > 1 && outcomes.length > 0) {
+      addCrossTabSheet(
+        'Outcome by Category',
+        cats, outcomes,
+        (cat, out) => (sum.byOutcomeByCategory[out]?.[cat] || 0),
+        'Category'
+      );
+    }
+  }
+
+  // 6. Avg Duration (Category)
+  {
+    const cats = Object.keys(sum.byCategory);
+    if (cats.length > 0) {
+      const ws = wb.addWorksheet('Avg Duration (Category)');
+      ws.columns = [
+        { header: 'Category',    key: 'Category', width: 28 },
+        { header: 'Avg Minutes', key: 'AvgMins',  width: 16 },
+      ];
+      for (const cat of cats) {
+        const v = sum.byCategory[cat];
+        ws.addRow({ Category: cat, AvgMins: v.count > 0 ? Math.round(v.minutes / v.count) : 0 });
+      }
+      styleHeader(ws);
+    }
+  }
+
+  // 7. Tasks by Type
+  {
+    const subs = Object.keys(sum.bySubcategory);
+    if (subs.length > 0) {
+      const ws = wb.addWorksheet('Tasks by Type');
+      ws.columns = [
+        { header: 'Task Type',     key: 'Type',    width: 28 },
+        { header: 'Count',         key: 'Count',   width: 12 },
+        { header: 'Total Minutes', key: 'Minutes', width: 16 },
+        { header: 'Avg Minutes',   key: 'AvgMins', width: 16 },
+      ];
+      for (const sub of subs) {
+        const v = sum.bySubcategory[sub];
+        ws.addRow({ Type: sub, Count: v.count, Minutes: v.minutes, AvgMins: v.count > 0 ? Math.round(v.minutes / v.count) : 0 });
+      }
+      styleHeader(ws);
+    }
+  }
+
+  // 8. Avg Duration (Task Type)
+  {
+    const subs = Object.keys(sum.avgDurBySubcategory);
+    if (subs.length > 0) {
+      const ws = wb.addWorksheet('Avg Duration (Task Type)');
+      ws.columns = [
+        { header: 'Task Type',   key: 'Type',    width: 28 },
+        { header: 'Avg Minutes', key: 'AvgMins', width: 16 },
+      ];
+      for (const sub of subs) ws.addRow({ Type: sub, AvgMins: sum.avgDurBySubcategory[sub] });
+      styleHeader(ws);
+    }
+  }
+
+  // 9. Task Types by Source Group
+  {
+    const cats = Object.keys(sum.byCategoryBySubcategory);
+    const allSubs = [...new Set(cats.flatMap(c => Object.keys(sum.byCategoryBySubcategory[c])))];
+    const hasMeaningful = cats.length > 1 || cats.some(c => Object.keys(sum.byCategoryBySubcategory[c]).length > 1);
+    if (hasMeaningful && allSubs.length > 0) {
+      addCrossTabSheet(
+        'Task Types by Source Group',
+        cats, allSubs,
+        (cat, sub) => (sum.byCategoryBySubcategory[cat]?.[sub] || 0),
+        'Category'
+      );
+    }
+  }
+
+  // 10. Flag Distribution
+  {
+    const flags = Object.keys(sum.byFlag);
+    if (flags.length > 0) {
+      const ws = wb.addWorksheet('Flag Distribution');
+      ws.columns = [
+        { header: 'Flag',  key: 'Flag',  width: 28 },
+        { header: 'Count', key: 'Count', width: 12 },
+      ];
+      for (const flag of flags) ws.addRow({ Flag: flag, Count: sum.byFlag[flag] });
+      styleHeader(ws);
+    }
+  }
+
+  // 11. Flags by Source Group
+  {
+    const flags = Object.keys(sum.byFlagByCategory);
+    if (flags.length > 0) {
+      const allCats = [...new Set(flags.flatMap(f => Object.keys(sum.byFlagByCategory[f])))];
+      addCrossTabSheet(
+        'Flags by Source Group',
+        flags, allCats,
+        (flag, cat) => (sum.byFlagByCategory[flag]?.[cat] || 0),
+        'Flag'
+      );
+    }
+  }
+
+  // 12. Activity by Hour
+  {
+    const anyHour = Object.keys(sum.byHour).length > 0;
+    if (anyHour) {
+      const ws = wb.addWorksheet('Activity by Hour');
+      ws.columns = [
+        { header: 'Hour',          key: 'Hour',    width: 12 },
+        { header: 'Task Count',    key: 'Count',   width: 14 },
+        { header: 'Total Minutes', key: 'Minutes', width: 16 },
+      ];
+      for (let h = 0; h < 24; h++) {
+        const label = h === 0 ? '12am' : h < 12 ? `${h}am` : h === 12 ? '12pm' : `${h - 12}pm`;
+        const v = sum.byHour[h] || { count: 0, minutes: 0 };
+        ws.addRow({ Hour: label, Count: v.count, Minutes: v.minutes });
+      }
+      styleHeader(ws);
+    }
+  }
+
+  // 13. Activity by Day of Week
+  {
+    const dowFull = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    const anyDow = Object.keys(sum.byDayOfWeek).length > 0;
+    if (anyDow) {
+      const ws = wb.addWorksheet('Activity by Day of Week');
+      ws.columns = [
+        { header: 'Day',           key: 'Day',     width: 14 },
+        { header: 'Task Count',    key: 'Count',   width: 14 },
+        { header: 'Total Minutes', key: 'Minutes', width: 16 },
+      ];
+      for (let i = 0; i < 7; i++) {
+        const v = sum.byDayOfWeek[i] || { count: 0, minutes: 0 };
+        ws.addRow({ Day: dowFull[i], Count: v.count, Minutes: v.minutes });
+      }
+      styleHeader(ws);
+    }
+  }
+
+  // 14. Task Types by Day Assigned
+  {
+    const dowFull = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    const allDowSubs = [...new Set(Object.values(sum.byDowBySubcategory).flatMap(v => Object.keys(v)))];
+    if (allDowSubs.length > 1) {
+      addCrossTabSheet(
+        'Task Types by Day Assigned',
+        dowFull, allDowSubs,
+        (day, sub) => (sum.byDowBySubcategory[dowFull.indexOf(day)]?.[sub] || 0),
+        'Day'
+      );
+    }
+  }
+
+  // 15. Personal by Day (Origin)
+  {
+    const dowFull = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    const allCats = [...new Set(Object.values(sum.byDowPersonalByCategory).flatMap(v => Object.keys(v)))];
+    if (allCats.length > 0) {
+      addCrossTabSheet(
+        'Personal by Day (Origin)',
+        dowFull, allCats,
+        (day, cat) => (sum.byDowPersonalByCategory[dowFull.indexOf(day)]?.[cat] || 0),
+        'Day'
+      );
+    }
+  }
+
+  // 16. Personal by Day (Type)
+  {
+    const dowFull = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    const allSubs = [...new Set(Object.values(sum.byDowPersonalBySubcategory).flatMap(v => Object.keys(v)))];
+    if (allSubs.length > 0) {
+      addCrossTabSheet(
+        'Personal by Day (Type)',
+        dowFull, allSubs,
+        (day, sub) => (sum.byDowPersonalBySubcategory[dowFull.indexOf(day)]?.[sub] || 0),
+        'Day'
+      );
+    }
+  }
+
+  // 17. Tasks Over Time
+  {
+    if (sum.dates.length > 1) {
+      const ws = wb.addWorksheet('Tasks Over Time');
+      const cols: Partial<ExcelJS.Column>[] = [
+        { header: 'Date',           key: 'Date',     width: 14, style: { numFmt: 'yyyy-mm-dd' } },
+        { header: 'Task Count',     key: 'Count',    width: 14 },
+        { header: 'Total Minutes',  key: 'Minutes',  width: 16 },
+        { header: 'Duty Tasks',     key: 'Duty',     width: 14 },
+        { header: 'Personal Tasks', key: 'Personal', width: 16 },
+      ];
+      if (sum.regression) cols.push({ header: 'Trend (regression)', key: 'Trend', width: 20 });
+      ws.columns = cols;
+      sum.dates.forEach((d, i) => {
+        const v = sum.byDate[d];
+        const row: Record<string, any> = {
+          Date:     new Date(/^\d{4}-\d{2}-\d{2}$/.test(d) ? d + 'T00:00:00' : d),
+          Count:    v.count,
+          Minutes:  v.minutes,
+          Duty:     v.duty,
+          Personal: v.personal,
+        };
+        if (sum.regression) row.Trend = Math.round((sum.regression.slope * i + sum.regression.intercept) * 10) / 10;
+        ws.addRow(row);
+      });
+      styleHeader(ws);
+    }
+  }
+
+  // 18. Interruptions Over Time
+  {
+    if (sum.dates.length > 1) {
+      const ws = wb.addWorksheet('Interruptions Over Time');
+      ws.columns = [
+        { header: 'Date',               key: 'Date',  width: 14, style: { numFmt: 'yyyy-mm-dd' } },
+        { header: 'Interruption Count', key: 'Count', width: 20 },
+      ];
+      for (const d of sum.dates) {
+        ws.addRow({
+          Date:  new Date(/^\d{4}-\d{2}-\d{2}$/.test(d) ? d + 'T00:00:00' : d),
+          Count: intrByDate[d] || 0,
+        });
+      }
+      styleHeader(ws);
+    }
+  }
+
+  // 19. Assignment Lag
+  {
+    if (sum.lagStats && sum.lagStats.count > 0) {
+      const lagBucketOrder = ['0','1','2','3','4','5','6','7','8–14','15–30','>30'];
+      const ws = wb.addWorksheet('Assignment Lag');
+      ws.columns = [
+        { header: 'Days from Assignment', key: 'Days',     width: 22 },
+        { header: 'My Group Count',       key: 'Duty',     width: 18 },
+        { header: 'Personal Count',       key: 'Personal', width: 18 },
+        { header: 'All Tasks',            key: 'All',      width: 14 },
+      ];
+      ws.addRows([
+        { Days: 'Count',         Duty: sum.lagStatsDuty?.count   ?? '', Personal: sum.lagStatsPersonal?.count   ?? '', All: sum.lagStats.count },
+        { Days: 'Average (days)',Duty: sum.lagStatsDuty?.avg     ?? '', Personal: sum.lagStatsPersonal?.avg     ?? '', All: sum.lagStats.avg },
+        { Days: 'Median (days)', Duty: sum.lagStatsDuty?.median  ?? '', Personal: sum.lagStatsPersonal?.median  ?? '', All: sum.lagStats.median },
+        { Days: 'Min (days)',    Duty: sum.lagStatsDuty?.min     ?? '', Personal: sum.lagStatsPersonal?.min     ?? '', All: sum.lagStats.min },
+        { Days: 'Max (days)',    Duty: sum.lagStatsDuty?.max     ?? '', Personal: sum.lagStatsPersonal?.max     ?? '', All: sum.lagStats.max },
+        { Days: '',              Duty: '',                              Personal: '',                                  All: '' },
+        { Days: 'Lag Distribution', Duty: '', Personal: '', All: '' },
+      ]);
+      for (const bucket of lagBucketOrder) {
+        const dutyVal    = sum.lagStatsDuty?.buckets[bucket];
+        const personalVal = sum.lagStatsPersonal?.buckets[bucket];
+        const allVal     = sum.lagStats.buckets[bucket];
+        if (dutyVal !== undefined || personalVal !== undefined || allVal !== undefined) {
+          ws.addRow({ Days: bucket, Duty: dutyVal || 0, Personal: personalVal || 0, All: allVal || 0 });
+        }
+      }
+      styleHeader(ws);
+    }
+  }
+
+  const now = new Date();
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const stamp = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}${pad(now.getHours())}${pad(now.getMinutes())}`;
+  const filename = `Tasker-Analytics-${stamp}.xlsx`;
+  res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  res.setHeader('Last-Modified', now.toUTCString());
+  await wb.xlsx.write(res);
+  res.end();
+});
+
 router.get('/export', async (req: Request, res: Response) => {
   const s = req.session as any;
   const db = getDb();
