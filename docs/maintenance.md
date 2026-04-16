@@ -1,6 +1,6 @@
 # Tasker — Maintenance and Troubleshooting Manual
 
-**Version 1.8.7 — April 2026**
+**Version 1.9.0 — April 2026**
 
 ---
 
@@ -260,7 +260,7 @@ Tasker exposes `GET /readyz` for uptime monitoring and heartbeat polling. No aut
 {
   "ok": true,
   "service": "Tasker",
-  "version": "1.8.1",
+  "version": "1.9.0",
   "timestamp": "2026-04-04T12:09:26.477Z"
 }
 ```
