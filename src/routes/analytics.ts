@@ -636,7 +636,7 @@ router.get('/report', async (req: Request, res: Response) => {
       ];
       ws.addRows([
         { Days: 'Count',         Duty: sum.lagStatsDuty?.count   ?? '', Personal: sum.lagStatsPersonal?.count   ?? '', All: sum.lagStats.count },
-        { Days: 'Average (days)',Duty: sum.lagStatsDuty?.avg     ?? '', Personal: sum.lagStatsPersonal?.avg     ?? '', All: sum.lagStats.avg },
+        { Days: 'Average (days)', Duty: sum.lagStatsDuty?.avg     ?? '', Personal: sum.lagStatsPersonal?.avg     ?? '', All: sum.lagStats.avg },
         { Days: 'Median (days)', Duty: sum.lagStatsDuty?.median  ?? '', Personal: sum.lagStatsPersonal?.median  ?? '', All: sum.lagStats.median },
         { Days: 'Min (days)',    Duty: sum.lagStatsDuty?.min     ?? '', Personal: sum.lagStatsPersonal?.min     ?? '', All: sum.lagStats.min },
         { Days: 'Max (days)',    Duty: sum.lagStatsDuty?.max     ?? '', Personal: sum.lagStatsPersonal?.max     ?? '', All: sum.lagStats.max },
