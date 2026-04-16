@@ -2457,6 +2457,7 @@ function renderAnalyticsContent(data, mode, pendingLog) {
     ` : '<div class="card"><p style="color:#6b7280;text-align:center;padding:20px">No completed tasks yet.</p></div>'}
     <div style="display:flex;gap:10px;margin-bottom:12px;flex-wrap:wrap">
       <button class="btn btn-secondary" style="flex:1" onclick="downloadExport()">⬇️ Download Log (.xlsx)</button>
+      <button class="btn btn-secondary" style="flex:1" onclick="exportAnalyticsPdf()">📄 Print / Save as PDF</button>
     </div>
     <div style="display:flex;align-items:center;justify-content:space-between;margin:20px 0 10px">
       <div class="section-heading" style="margin:0">Tasks</div>
@@ -2803,6 +2804,123 @@ function toggleAnalyticsFilters() {
 
 async function downloadExport() {
   window.location.href = '/api/analytics/export';
+}
+
+function exportAnalyticsPdf() {
+  if (!state.analyticsData) return;
+  const s = state.analyticsData.data.summary;
+  const mode = state.analyticsData.mode;
+
+  // Build a human-readable period label
+  const from = state.analyticsFilterFrom || state.analyticsQuickFrom || '';
+  const to   = state.analyticsFilterTo   || state.analyticsQuickTo   || '';
+  const qp   = state.analyticsQuickPeriod;
+  const fmtDate = d => {
+    if (!d) return '';
+    const [y, m, day] = d.split('-');
+    return `${parseInt(day)} ${['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][parseInt(m)-1]} ${y}`;
+  };
+  let periodLabel;
+  if (mode === 'session' || qp === 'today') {
+    periodLabel = `Today — ${fmtDate(from || new Date().toISOString().split('T')[0])}`;
+  } else if (qp === '7d') {
+    periodLabel = `Last 7 Days — ${fmtDate(from)} to ${fmtDate(to)}`;
+  } else if (qp === '30d') {
+    periodLabel = `Last 30 Days — ${fmtDate(from)} to ${fmtDate(to)}`;
+  } else if (from || to) {
+    periodLabel = [fmtDate(from), fmtDate(to)].filter(Boolean).join(' – ');
+  } else {
+    periodLabel = 'All Data';
+  }
+
+  // Map canvas IDs to readable chart titles
+  const chartTitleMap = {
+    'chart-cat':             'Time by Category (mins)',
+    'chart-split':           'My Group vs Personal',
+    'chart-outcome':         'Outcome Distribution',
+    'chart-outcome-cat':     'Outcome Breakdown by Category',
+    'chart-cat-dur':         'Avg Duration by Category (mins)',
+    'chart-sub':             'Tasks by Type',
+    'chart-sub-dur':         'Avg Duration by Task Type (mins)',
+    'chart-cat-sub':         'Task Types by Source Group',
+    'chart-flags':           'Task Flag Distribution',
+    'chart-flag-cat':        'Flags by Source Group',
+    'chart-hour':            'Activity by Hour of Day',
+    'chart-dow':             'Activity by Day of Week',
+    'chart-dow-sub':         'Task Type Patterns by Day Assigned',
+    'chart-personal-dow-cat':'Personal Tasks by Day Assigned — by Task Origin',
+    'chart-personal-dow-sub':'Personal Tasks by Day Assigned — by Task Type',
+    'chart-trend':           'Tasks & Time Over Time',
+    'chart-intr-trend':      'Interruptions Over Time',
+    'chart-lag':             'Days from Assignment to Action',
+  };
+
+  // Capture each active chart in the order they appear in the DOM
+  const canvasOrder = Array.from(document.querySelectorAll('canvas[id^="chart-"]')).map(c => c.id);
+  const chartSections = canvasOrder
+    .filter(id => state.charts[id])
+    .map(id => {
+      const title = chartTitleMap[id] || id;
+      const imgSrc = state.charts[id].toBase64Image('image/png', 1);
+      return `<div class="chart-block">
+        <h2>${title}</h2>
+        <img src="${imgSrc}" alt="${title}">
+      </div>`;
+    }).join('\n');
+
+  const generated = new Date().toLocaleString();
+
+  const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Analytics Report — ${periodLabel}</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; color: #1a1a2e; background: #fff; padding: 24px; font-size: 14px; }
+    h1 { font-size: 1.4rem; font-weight: 700; margin-bottom: 4px; }
+    .subtitle { color: #6b7280; font-size: 0.85rem; margin-bottom: 4px; }
+    .generated { color: #9ca3af; font-size: 0.75rem; margin-bottom: 20px; }
+    .stats-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 24px; }
+    .stat-card { border: 1px solid #e5e7eb; border-radius: 8px; padding: 10px; text-align: center; }
+    .stat-number { font-size: 1.4rem; font-weight: 700; color: #1a56db; }
+    .stat-label { font-size: 0.7rem; color: #6b7280; margin-top: 2px; }
+    .chart-block { page-break-inside: avoid; break-inside: avoid; margin-bottom: 28px; border: 1px solid #e5e7eb; border-radius: 8px; padding: 16px; }
+    .chart-block h2 { font-size: 0.95rem; font-weight: 600; margin-bottom: 12px; color: #1a1a2e; }
+    .chart-block img { width: 100%; height: auto; display: block; }
+    @media print {
+      body { padding: 0; }
+      .stats-grid { page-break-inside: avoid; break-inside: avoid; }
+      .chart-block { page-break-inside: avoid; break-inside: avoid; }
+    }
+  </style>
+</head>
+<body>
+  <h1>📊 Analytics Report</h1>
+  <p class="subtitle">${periodLabel}</p>
+  <p class="generated">Generated: ${generated}</p>
+  <div class="stats-grid">
+    <div class="stat-card"><div class="stat-number">${s.total}</div><div class="stat-label">Total tasks</div></div>
+    <div class="stat-card"><div class="stat-number">${s.totalMins}</div><div class="stat-label">Total mins</div></div>
+    <div class="stat-card"><div class="stat-number">${s.avgDurMins ?? 0}</div><div class="stat-label">Avg mins/task</div></div>
+    <div class="stat-card"><div class="stat-number">${s.dutyCount}</div><div class="stat-label">My Group tasks</div></div>
+    <div class="stat-card"><div class="stat-number">${s.personalCount}</div><div class="stat-label">Personal</div></div>
+    <div class="stat-card"><div class="stat-number">${s.totalInterruptions || 0}</div><div class="stat-label">Interruptions</div></div>
+    <div class="stat-card"><div class="stat-number">${s.avgInterruptionsPerTask ?? 0}</div><div class="stat-label">Avg intr/task</div></div>
+    <div class="stat-card"><div class="stat-number">${s.tasksWithFlags ?? 0}</div><div class="stat-label">Flagged tasks</div></div>
+  </div>
+  ${chartSections || '<p style="color:#6b7280;text-align:center;padding:20px">No charts to display.</p>'}
+</body>
+</html>`;
+
+  const printWindow = window.open('', '_blank', 'width=900,height=700');
+  if (!printWindow) { showAlert('Pop-up blocked. Please allow pop-ups for this site to generate the PDF.'); return; }
+  printWindow.document.write(html);
+  printWindow.document.close();
+  printWindow.addEventListener('load', () => {
+    printWindow.focus();
+    printWindow.print();
+  });
 }
 
 // ── ADMIN ────────────────────────────────────────────────────────────────────
