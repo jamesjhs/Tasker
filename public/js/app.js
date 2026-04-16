@@ -1889,19 +1889,24 @@ function renderTaskReview(t, isEdit) {
   const currentFlagIds = t.flag_ids || [];
   const flagsHtml = state.flagOptions.length ? `
       <div class="form-group">
-        <label style="font-weight:600;color:#374151">Task Flags <span style="font-size:.8rem;color:#6b7280;font-weight:400">(optional — select any that apply)</span></label>
-        <div id="te-flags" style="display:flex;flex-direction:column;gap:6px;margin-top:6px">
-          ${state.flagOptions.map(f => `
-          <label style="display:flex;align-items:center;gap:8px;font-size:.9rem;cursor:pointer">
-            <input type="checkbox" class="flag-check" data-id="${f.id}" ${currentFlagIds.includes(f.id) ? 'checked' : ''}
-                   style="width:16px;height:16px;accent-color:#1a56db">
-            ${esc(f.value)}
-          </label>`).join('')}
-        </div>
-        <div id="te-flag-new" style="margin-top:8px;display:flex;gap:6px">
-          <input id="te-flag-new-input" class="input" type="text" placeholder="Suggest a new flag…" style="flex:1">
-          <button class="btn btn-outline btn-sm" onclick="suggestNewFlag()">Send</button>
-        </div>
+        <details id="te-flags-details" ${currentFlagIds.length ? 'open' : ''} ontoggle="document.getElementById('te-flags-arrow').style.transform=this.open?'rotate(90deg)':''">
+          <summary style="font-weight:600;color:#374151;cursor:pointer;list-style:none;display:flex;align-items:center;gap:6px">
+            <span id="te-flags-arrow" style="font-size:.75rem;color:#6b7280;transition:transform .2s${currentFlagIds.length ? ';transform:rotate(90deg)' : ''}">▶</span>
+            Task Flags <span style="font-size:.8rem;color:#6b7280;font-weight:400">(optional — select any that apply)</span>
+          </summary>
+          <div id="te-flags" style="display:flex;flex-direction:column;gap:6px;margin-top:6px">
+            ${state.flagOptions.map(f => `
+            <label style="display:flex;align-items:center;gap:8px;font-size:.9rem;cursor:pointer">
+              <input type="checkbox" class="flag-check" data-id="${f.id}" ${currentFlagIds.includes(f.id) ? 'checked' : ''}
+                     style="width:16px;height:16px;accent-color:#1a56db">
+              ${esc(f.value)}
+            </label>`).join('')}
+          </div>
+          <div id="te-flag-new" style="margin-top:8px;display:flex;gap:6px">
+            <input id="te-flag-new-input" class="input" type="text" placeholder="Suggest a new flag…" style="flex:1">
+            <button class="btn btn-outline btn-sm" onclick="suggestNewFlag()">Send</button>
+          </div>
+        </details>
       </div>` : '';
 
   app().innerHTML = `
