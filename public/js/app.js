@@ -1633,9 +1633,13 @@ function buildQuickPickRow(field, containerId, values, cols) {
   const colClass = cols === 3 ? ' quick-pick-grid--3col' : '';
   const max = cols === 3 ? 6 : 4;
   const items = values.slice(0, max).map(v =>
-    `<button type="button" class="quick-pick-btn" onclick="selectComboOpt('${safeId(containerId)}','${safeId(field)}','${esc(v)}')">${esc(v)}</button>`
+    `<button type="button" class="quick-pick-btn" data-container="${safeId(containerId)}" data-field="${safeId(field)}" data-value="${esc(v)}" onclick="handleQuickPick(this)">${esc(v)}</button>`
   ).join('');
   return `<div class="quick-pick-grid${colClass}">${items}</div>`;
+}
+
+function handleQuickPick(el) {
+  selectComboOpt(el.dataset.container, el.dataset.field, el.dataset.value);
 }
 
 function buildRunningOutcomeGroup(options, current) {
@@ -1644,7 +1648,7 @@ function buildRunningOutcomeGroup(options, current) {
   const picks = (state.commonFields.outcome || []).slice(0, 6);
   const picksHtml = picks.length ? `
   <div id="tr-outcome-picks" class="quick-pick-grid quick-pick-grid--3col" style="margin-bottom:8px">
-    ${picks.map(v => `<button type="button" class="quick-pick-btn${displayValue === v ? ' qp-selected' : ''}" onclick="selectRunningOutcome('${esc(v)}')">${esc(v)}</button>`).join('')}
+    ${picks.map(v => `<button type="button" class="quick-pick-btn${displayValue === v ? ' qp-selected' : ''}" data-value="${esc(v)}" onclick="handleRunningOutcomePick(this)">${esc(v)}</button>`).join('')}
   </div>` : '';
   return `
   <div class="form-group" style="margin-top:4px">
@@ -1669,13 +1673,17 @@ function buildRunningOutcomeGroup(options, current) {
   </div>`;
 }
 
+function handleRunningOutcomePick(el) {
+  selectRunningOutcome(el.dataset.value);
+}
+
 function selectRunningOutcome(value) {
   const hidden = document.getElementById('tr-outcome-sel');
   const btn = document.getElementById('tr-outcome-btn');
   if (hidden) hidden.value = value;
   if (btn) { btn.textContent = value; btn.classList.remove('placeholder'); }
   document.querySelectorAll('#tr-outcome-picks .quick-pick-btn').forEach(el => {
-    el.classList.toggle('qp-selected', el.textContent.trim() === value);
+    el.classList.toggle('qp-selected', el.dataset.value === value);
   });
   closeCombo('tr-outcome');
 }
