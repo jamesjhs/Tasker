@@ -517,7 +517,7 @@ async function init() {
       setLoadingStatus('Rendering…');
       await (state.user.isAdmin ? renderAdmin() : renderHome());
     } else {
-      await renderLogin();
+      await renderLanding();
     }
   } catch(e) {
     showLoadingError(`Initialization failed: ${e.message || e}`);
@@ -582,6 +582,426 @@ function renderStatsCards(stats, marginTop = '20px') {
       <div class="stat-card"><div class="stat-number">${stats.userCount}</div><div class="stat-label">Registered users</div></div>
       <div class="stat-card"><div class="stat-number">${stats.taskCount}</div><div class="stat-label">Tasks logged</div></div>
     </div>`;
+}
+
+// ── LANDING PAGE ─────────────────────────────────────────────────────────────
+
+/** Phone frame wrapper for mockup screenshots */
+function phoneFrame(label, labelSub, screenHTML) {
+  return `
+  <div class="phone-wrap">
+    <div class="phone-frame">
+      <div class="phone-top-bar"><div class="phone-notch-pill"></div></div>
+      <div class="phone-screen">${screenHTML}</div>
+    </div>
+    <div class="phone-label">${label}</div>
+    ${labelSub ? `<div class="phone-label-sub">${labelSub}</div>` : ''}
+  </div>`;
+}
+
+function mockupHomeScreen() {
+  return phoneFrame('Home Dashboard', 'Your daily hub', `
+    <div class="example-badge">Example</div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:7px">
+      <span style="font-weight:800;font-size:10.5px;color:#1a1a2e">👋 Tasker</span>
+      <span style="font-size:8px;color:#1a56db;font-weight:600">📖 Guide</span>
+    </div>
+    <button style="width:100%;padding:9px;background:#1a56db;color:#fff;border:none;border-radius:7px;font-size:9.5px;font-weight:800;margin-bottom:7px;letter-spacing:.01em">▶ Log Task</button>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-bottom:7px">
+      <div style="background:#fff;border-radius:7px;padding:7px;text-align:center;box-shadow:0 1px 5px rgba(0,0,0,.09)">
+        <div style="font-size:15px;font-weight:800;color:#1a56db">14</div>
+        <div style="font-size:7px;color:#6b7280;margin-top:1px">Active users</div>
+      </div>
+      <div style="background:#fff;border-radius:7px;padding:7px;text-align:center;box-shadow:0 1px 5px rgba(0,0,0,.09)">
+        <div style="font-size:15px;font-weight:800;color:#1a56db">1,247</div>
+        <div style="font-size:7px;color:#6b7280;margin-top:1px">Tasks logged</div>
+      </div>
+    </div>
+    <div style="background:#fff;border-radius:7px;padding:7px;box-shadow:0 1px 5px rgba(0,0,0,.09)">
+      <div style="font-weight:700;font-size:8.5px;margin-bottom:4px;color:#1a1a2e">📋 Pending Tasks</div>
+      <div style="font-size:7.5px;color:#6b7280;margin-bottom:4px">Last logged: <strong>23</strong> tasks</div>
+      <div style="font-size:7.5px;color:#6b7280;margin-bottom:5px">Handled (7 days): <strong>47</strong></div>
+      <div style="display:flex;gap:4px">
+        <div style="background:#1a56db;color:#fff;border-radius:4px;padding:2px 5px;font-size:7px;font-weight:700">📈 7 days</div>
+        <div style="background:#e5e7eb;color:#374151;border-radius:4px;padding:2px 5px;font-size:7px">📈 30 days</div>
+      </div>
+    </div>`);
+}
+
+function mockupLogTaskScreen() {
+  return phoneFrame('Log a Task', 'Category-based, no patient data', `
+    <div class="example-badge">Example</div>
+    <div style="font-weight:800;font-size:10.5px;color:#1a1a2e;margin-bottom:7px">← New Task</div>
+    <div style="display:flex;border-radius:7px;overflow:hidden;border:1.5px solid #1a56db;margin-bottom:7px">
+      <div style="flex:1;padding:5px;text-align:center;background:#1a56db;color:#fff;font-size:8px;font-weight:800">My Group</div>
+      <div style="flex:1;padding:5px;text-align:center;background:#fff;color:#1a56db;font-size:8px;font-weight:700">Personal</div>
+    </div>
+    <div style="margin-bottom:6px">
+      <div style="font-size:8px;font-weight:700;color:#333;margin-bottom:3px">Category</div>
+      <div style="border:1.5px solid #d1d5db;border-radius:6px;padding:5px 8px;font-size:8.5px;color:#1a1a2e;background:#fff">Prescription Query ▾</div>
+    </div>
+    <div style="margin-bottom:6px">
+      <div style="font-size:8px;font-weight:700;color:#333;margin-bottom:3px">Sub-type</div>
+      <div style="border:1.5px solid #1a56db;border-radius:6px;padding:5px 8px;font-size:8.5px;color:#1a1a2e;background:#fff">Clarification Needed ▾</div>
+    </div>
+    <div style="margin-bottom:8px">
+      <div style="font-size:8px;font-weight:700;color:#333;margin-bottom:3px">Outcome <span style="font-weight:400;color:#9ca3af">(optional)</span></div>
+      <div style="border:1.5px solid #d1d5db;border-radius:6px;padding:5px 8px;font-size:8.5px;color:#9ca3af;background:#fff">Select outcome… ▾</div>
+    </div>
+    <button style="width:100%;padding:7px;background:#1a56db;color:#fff;border:none;border-radius:6px;font-size:9px;font-weight:800">▶ Start Task</button>`);
+}
+
+function mockupAnalyticsScreen() {
+  const bars = [
+    { label: 'Prescr.', w: 64, count: 34 },
+    { label: 'Calls',   w: 42, count: 22 },
+    { label: 'Letters', w: 36, count: 19 },
+    { label: 'Results', w: 24, count: 12 },
+  ];
+  const chartHTML = bars.map(b => `
+    <div style="display:flex;align-items:center;gap:4px;margin-bottom:3px">
+      <span style="font-size:7px;color:#374151;width:30px;text-align:right;flex-shrink:0">${b.label}</span>
+      <div style="height:10px;background:#1a56db;border-radius:3px;width:${b.w}px;flex-shrink:0"></div>
+      <span style="font-size:7px;color:#6b7280">${b.count}</span>
+    </div>`).join('');
+  return phoneFrame('Analytics', 'Understand your workload', `
+    <div class="example-badge">Example</div>
+    <div style="font-weight:800;font-size:10.5px;color:#1a1a2e;margin-bottom:5px">📊 Analytics</div>
+    <div style="display:flex;gap:3px;margin-bottom:7px">
+      <div style="background:#1a56db;color:#fff;border-radius:4px;padding:3px 5px;font-size:7.5px;font-weight:800">Today</div>
+      <div style="background:#e5e7eb;border-radius:4px;padding:3px 5px;font-size:7.5px;color:#374151">7 days</div>
+      <div style="background:#e5e7eb;border-radius:4px;padding:3px 5px;font-size:7.5px;color:#374151">30 days</div>
+    </div>
+    <div style="background:#fff;border-radius:7px;padding:7px;box-shadow:0 1px 5px rgba(0,0,0,.09);margin-bottom:6px">
+      <div style="font-size:8px;font-weight:700;color:#374151;margin-bottom:5px">Tasks by Category</div>
+      ${chartHTML}
+    </div>
+    <div style="background:#fff;border-radius:7px;padding:7px;box-shadow:0 1px 5px rgba(0,0,0,.09)">
+      <div style="font-size:8px;font-weight:700;margin-bottom:2px">⏱️ Avg task time</div>
+      <div style="font-size:14px;font-weight:800;color:#1a56db">8m 32s</div>
+      <div style="font-size:7px;color:#6b7280">Based on 34 tasks today</div>
+    </div>`);
+}
+
+function mockupTaskActiveScreen() {
+  return phoneFrame('Task in Progress', 'Timer + interruption tracking', `
+    <div class="example-badge">Example</div>
+    <div style="font-weight:800;font-size:10.5px;color:#1a1a2e;margin-bottom:6px">⏸️ Task Active</div>
+    <div style="background:#fff;border-radius:7px;padding:8px;border:1.5px solid #f59e0b;margin-bottom:7px">
+      <div style="background:#dbeafe;color:#1e40af;border-radius:4px;padding:2px 7px;font-size:7.5px;font-weight:800;display:inline-block;margin-bottom:5px">MY GROUP</div>
+      <div style="font-size:9px;font-weight:800;color:#1a1a2e">Prescription Query</div>
+      <div style="font-size:8px;color:#6b7280;margin-top:1px">› Clarification Needed</div>
+      <div style="font-size:7.5px;color:#6b7280;margin-top:2px">Started: 09:34</div>
+    </div>
+    <div style="font-size:22px;font-weight:800;color:#1a56db;text-align:center;font-family:monospace;margin:4px 0 8px;letter-spacing:.04em">00:08:42</div>
+    <div style="display:flex;gap:5px;margin-bottom:5px">
+      <button style="flex:1;padding:6px;background:#16a34a;color:#fff;border:none;border-radius:6px;font-size:8px;font-weight:800">✓ Complete</button>
+      <button style="flex:1;padding:6px;background:#e5e7eb;color:#1a1a2e;border:none;border-radius:6px;font-size:8px;font-weight:700">⏸ Interrupt</button>
+    </div>
+    <div style="font-size:7.5px;color:#6b7280;text-align:center">Interruptions are tracked separately</div>`);
+}
+
+function mockupSettingsScreen() {
+  return phoneFrame('Settings', 'Export & account options', `
+    <div class="example-badge">Example</div>
+    <div style="font-weight:800;font-size:10.5px;color:#1a1a2e;margin-bottom:7px">⚙️ Settings</div>
+    <div style="background:#fff;border-radius:7px;padding:8px;box-shadow:0 1px 5px rgba(0,0,0,.09);margin-bottom:6px">
+      <div style="font-size:8.5px;font-weight:700;margin-bottom:6px">📤 Export My Data</div>
+      <button style="width:100%;padding:5px;background:#1a56db;color:#fff;border:none;border-radius:5px;font-size:7.5px;font-weight:700;margin-bottom:3px">Download Excel Report</button>
+      <div style="font-size:7px;color:#6b7280">Anonymised — no personal data</div>
+    </div>
+    <div style="background:#fff;border-radius:7px;padding:8px;box-shadow:0 1px 5px rgba(0,0,0,.09);margin-bottom:6px">
+      <div style="font-size:8.5px;font-weight:700;margin-bottom:4px">👥 My Group</div>
+      <div style="border:1.5px solid #d1d5db;border-radius:5px;padding:4px 7px;font-size:8px;color:#1a1a2e;background:#fff">Reception Team ▾</div>
+    </div>
+    <div style="background:#fff;border-radius:7px;padding:8px;box-shadow:0 1px 5px rgba(0,0,0,.09)">
+      <div style="font-size:8.5px;font-weight:700;margin-bottom:4px;color:#dc2626">⚠️ Data &amp; Privacy</div>
+      <div style="font-size:7.5px;color:#6b7280">Auto-deleted after 30 days</div>
+      <div style="font-size:7px;color:#9ca3af;margin-top:2px">No patient data ever stored</div>
+    </div>`);
+}
+
+function mockupPendingTasksScreen() {
+  const pts = [12,18,23,15,27,22,19];
+  const maxPt = Math.max(...pts);
+  const sparkHTML = pts.map((v, i) => {
+    const h = Math.round((v / maxPt) * 36);
+    return `<div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:40px">
+      <div style="background:#1a56db;border-radius:2px 2px 0 0;width:80%;height:${h}px"></div>
+      <div style="font-size:6px;color:#6b7280;margin-top:2px">${['M','T','W','T','F','S','S'][i]}</div>
+    </div>`;
+  }).join('');
+  return phoneFrame('Pending Tasks', '7-day workload trend', `
+    <div class="example-badge">Example</div>
+    <div style="font-weight:800;font-size:10.5px;color:#1a1a2e;margin-bottom:6px">📋 Pending Tasks</div>
+    <div style="background:#fff;border-radius:7px;padding:7px;box-shadow:0 1px 5px rgba(0,0,0,.09);margin-bottom:6px">
+      <div style="font-size:8px;color:#6b7280;margin-bottom:3px">Last logged: <strong>23 tasks</strong></div>
+      <div style="font-size:8px;color:#6b7280;margin-bottom:7px">Handled this week: <strong>47</strong></div>
+      <div style="display:flex;align-items:flex-end;gap:2px;height:48px;margin-bottom:4px">
+        ${sparkHTML}
+      </div>
+      <div style="font-size:7px;color:#9ca3af;text-align:center">7-day pending task trend</div>
+    </div>
+    <div style="display:flex;align-items:center;gap:6px">
+      <input style="flex:1;border:1.5px solid #d1d5db;border-radius:5px;padding:4px 6px;font-size:8px;color:#9ca3af" placeholder="Enter today's count…" readonly>
+      <button style="padding:4px 8px;background:#1a56db;color:#fff;border:none;border-radius:5px;font-size:7.5px;font-weight:700">Log</button>
+    </div>`);
+}
+
+async function renderLanding() {
+  stopTimer(); stopActivityTracking(); clearCharts(); state.currentView = 'landing';
+  replaceHistory('landing');
+  // Fetch registration config and public stats in parallel
+  try {
+    const [cfgRes, statsRes] = await Promise.all([
+      fetch('/api/auth/registration-config', { credentials: 'same-origin' }),
+      fetch('/api/auth/stats', { credentials: 'same-origin' }),
+    ]);
+    if (cfgRes.ok) state.registrationConfig = await cfgRes.json();
+    if (statsRes.ok) state.appStats = await statsRes.json();
+  } catch(e) {}
+  const showRegister = state.registrationConfig?.selfRegistration !== 'disabled';
+  const stats = state.appStats;
+
+  app().innerHTML = `
+  <div class="landing">
+
+    <!-- Privacy notice bar -->
+    <div class="privacy-notice-bar">
+      🔒 Zero patient data, ever — anonymous by design. <a href="/dpia">Read our DPIA</a>
+    </div>
+
+    <!-- Hero -->
+    <div class="landing-hero">
+      <div style="font-size:3.2rem;margin-bottom:2px">🔒</div>
+      <h1>Tasker</h1>
+      <p class="tagline">Private, anonymous admin-task logging — built for healthcare teams who need real workload insight without risking patient confidentiality.</p>
+      <div class="hero-btns">
+        <button class="btn btn-white" onclick="renderLogin()">Log In</button>
+        ${showRegister ? `<button class="btn btn-outline-white" onclick="renderRegister()">Create Account — Free</button>` : ''}
+      </div>
+      ${stats ? `
+      <div class="hero-stats">
+        <div class="hero-stat">
+          <div class="hero-stat-num">${stats.userCount}</div>
+          <div class="hero-stat-label">Active users</div>
+        </div>
+        <div class="hero-stat">
+          <div class="hero-stat-num">${Number(stats.taskCount).toLocaleString()}</div>
+          <div class="hero-stat-label">Tasks logged</div>
+        </div>
+        <div class="hero-stat">
+          <div class="hero-stat-num">0</div>
+          <div class="hero-stat-label">Patient records stored</div>
+        </div>
+      </div>` : ''}
+    </div>
+
+    <!-- Privacy pillars -->
+    <div class="landing-section landing-section--alt">
+      <div class="section-inner">
+        <p class="section-eyebrow">Built for healthcare, with privacy at its core</p>
+        <h2 class="section-title">Anonymity &amp; Privacy, by Design</h2>
+        <p class="section-sub">Tasker was created specifically for NHS and healthcare admin staff. It lets you track your workload without ever capturing a single piece of patient, staff, or organisation-identifiable information.</p>
+        <div class="privacy-pillars">
+          <div class="privacy-pill">
+            <div class="pp-icon">👤</div>
+            <div class="pp-label">Anonymous usernames — no names, no email required</div>
+          </div>
+          <div class="privacy-pill">
+            <div class="pp-icon">🚫</div>
+            <div class="pp-label">Zero patient data — ever stored or processed</div>
+          </div>
+          <div class="privacy-pill">
+            <div class="pp-icon">⏱️</div>
+            <div class="pp-label">All data auto-deleted after 30 days</div>
+          </div>
+          <div class="privacy-pill">
+            <div class="pp-icon">📋</div>
+            <div class="pp-label">Full DPIA available — GDPR compliant by design</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- App screenshots -->
+    <div class="landing-section" style="background:#fff">
+      <div class="section-inner">
+        <p class="section-eyebrow">See every screen</p>
+        <h2 class="section-title">Purpose-built for safety at every step</h2>
+        <p class="section-sub">
+          All data shown below is <strong>example only</strong> — illustrative healthcare workflows with no real users, no patient information, and no identifiable details of any kind.
+        </p>
+        <div class="mockup-grid">
+          ${mockupHomeScreen()}
+          ${mockupLogTaskScreen()}
+          ${mockupAnalyticsScreen()}
+          ${mockupTaskActiveScreen()}
+        </div>
+        <div class="mockup-grid" style="margin-top:24px">
+          ${mockupPendingTasksScreen()}
+          ${mockupSettingsScreen()}
+          <div class="phone-wrap" style="grid-column:span 2;align-items:center;justify-content:center">
+            <div style="background:#f0f4ff;border-radius:14px;padding:20px 24px;max-width:280px;text-align:center">
+              <div style="font-size:2rem;margin-bottom:8px">📖</div>
+              <div style="font-weight:700;font-size:.95rem;margin-bottom:6px">Quick Start Guide</div>
+              <p style="font-size:.83rem;color:#6b7280;margin-bottom:12px">New to Tasker? Our step-by-step guide walks you through registering, logging your first task, and reading your analytics.</p>
+              <a href="/guide" class="btn btn-primary btn-sm">Read the Guide</a>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- How it works -->
+    <div class="landing-section landing-section--alt">
+      <div class="section-inner">
+        <p class="section-eyebrow">Simple workflow</p>
+        <h2 class="section-title">Up and running in three steps</h2>
+        <div class="steps-grid">
+          <div class="step-card">
+            <div class="step-number">1</div>
+            <div class="step-title">Register Anonymously</div>
+            <div class="step-text">You're assigned a randomly-generated, memorable username — no name, no email, no identifiable information required. Just choose a password and you're in.</div>
+          </div>
+          <div class="step-card">
+            <div class="step-number">2</div>
+            <div class="step-title">Log Tasks as They Happen</div>
+            <div class="step-text">Tap <strong>▶ Log Task</strong> when a work item starts. Select a category (e.g. "Prescription Query") and a sub-type. Tasker records the time — no patient details, no free text.</div>
+          </div>
+          <div class="step-card">
+            <div class="step-number">3</div>
+            <div class="step-title">Review, Export &amp; Act</div>
+            <div class="step-text">Use the Analytics view to see where your time goes. Export an anonymised Excel report to use in team meetings, appraisals, or workforce planning conversations.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Example task categories -->
+    <div class="landing-section" style="background:#fff">
+      <div class="section-inner">
+        <p class="section-eyebrow">Healthcare-ready out of the box</p>
+        <h2 class="section-title">Example task categories</h2>
+        <div class="alert alert-warning" style="max-width:540px;margin:0 auto 28px;font-size:.83rem;text-align:left">
+          ⚠️ <strong>These categories are illustrative examples only.</strong> Tasker never stores patient names, NHS numbers, dates of birth, locations, or any identifying information. Category names describe the <em>type</em> of administrative work — nothing more. Administrators can customise all categories for their team.
+        </div>
+        <div class="task-examples">
+          <div class="task-example-card">
+            <div class="tec-title">💊 Prescription Queries</div>
+            <ul class="tec-items">
+              <li>Dose Query</li>
+              <li>Clarification Request</li>
+              <li>Stock / Availability Issue</li>
+              <li>Repeat Prescription Request</li>
+              <li>Medication Change Query</li>
+            </ul>
+          </div>
+          <div class="task-example-card">
+            <div class="tec-title">📞 Phone Triage</div>
+            <ul class="tec-items">
+              <li>Callback Request</li>
+              <li>Urgent Clinical Query</li>
+              <li>Appointment Query</li>
+              <li>Results / Test Query</li>
+              <li>Third-party Enquiry</li>
+            </ul>
+          </div>
+          <div class="task-example-card">
+            <div class="tec-title">📄 Correspondence</div>
+            <ul class="tec-items">
+              <li>Referral Letter</li>
+              <li>Results / Discharge Letter</li>
+              <li>Appointment Letter</li>
+              <li>Patient Communication</li>
+              <li>Insurance / Legal Request</li>
+            </ul>
+          </div>
+          <div class="task-example-card">
+            <div class="tec-title">🗂️ Administration</div>
+            <ul class="tec-items">
+              <li>Record Scanning / Filing</li>
+              <li>Appointment Booking</li>
+              <li>Form Processing</li>
+              <li>Inbox Management</li>
+              <li>System / Data Entry</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Features -->
+    <div class="landing-section landing-section--dark">
+      <div class="section-inner">
+        <p class="section-eyebrow">Everything you need</p>
+        <h2 class="section-title">Nothing you shouldn't have</h2>
+        <p class="section-sub">Tasker gives you real insight into your workload without creating any data risk for your organisation.</p>
+        <div class="feature-row">
+          <div class="feature-item">
+            <div class="feature-icon">📊</div>
+            <div class="feature-text">
+              <h3>Real-time Analytics</h3>
+              <p>See instantly where your time goes — by category, type, and outcome — filtered by today, this week, or this month.</p>
+            </div>
+          </div>
+          <div class="feature-item">
+            <div class="feature-icon">⏸️</div>
+            <div class="feature-text">
+              <h3>Interruption Tracking</h3>
+              <p>Record mid-task interruptions with a single tap. Understand the true cost of context-switching on your working day.</p>
+            </div>
+          </div>
+          <div class="feature-item">
+            <div class="feature-icon">📋</div>
+            <div class="feature-text">
+              <h3>Pending Workload Log</h3>
+              <p>Log a simple daily pending count and watch the trend over time — a powerful signal for workload conversations with management.</p>
+            </div>
+          </div>
+          <div class="feature-item">
+            <div class="feature-icon">📤</div>
+            <div class="feature-text">
+              <h3>Anonymised Exports</h3>
+              <p>Download Excel reports of your task history — fully anonymised, ready to use in appraisals, team meetings, or audit submissions.</p>
+            </div>
+          </div>
+          <div class="feature-item">
+            <div class="feature-icon">👥</div>
+            <div class="feature-text">
+              <h3>Team Groups</h3>
+              <p>Organise users into role-based groups — reception, nursing, admin — with customised category lists tailored to each team.</p>
+            </div>
+          </div>
+          <div class="feature-item">
+            <div class="feature-icon">🔒</div>
+            <div class="feature-text">
+              <h3>DPIA-Ready &amp; GDPR-Compliant</h3>
+              <p>A full Data Protection Impact Assessment is publicly available, confirming no personal data is processed or stored by design.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- CTA -->
+    <div class="landing-cta">
+      <h2>Ready to understand your workload?</h2>
+      <p>Join healthcare teams already logging tasks anonymously with Tasker — free, private, and no patient data risk.</p>
+      <div class="landing-cta-btns">
+        <button class="btn btn-white" onclick="renderLogin()" style="font-size:1rem">Log In</button>
+        ${showRegister ? `<button class="btn btn-outline-white" onclick="renderRegister()" style="font-size:1rem">Create Account — Free</button>` : ''}
+      </div>
+      <div class="landing-footer-links">
+        <a href="/policy">Privacy Policy</a>
+        <a href="/dpia">Data Protection Impact Assessment</a>
+        <a href="/guide">Quick Start Guide</a>
+        <a href="/help">Help</a>
+      </div>
+    </div>
+
+    ${renderFooter()}
+  </div>`;
 }
 
 // ── LOGIN ────────────────────────────────────────────────────────────────────
@@ -1485,7 +1905,7 @@ async function doLogout() {
   state.user = null; state.activeTask = null; state.csrfToken = null;
   state.registrationConfig = null;
   try { await refreshCsrf(); } catch(e){}
-  renderLogin();
+  renderLanding();
 }
 
 async function doInviteUser() {
@@ -1580,7 +2000,7 @@ async function doDeleteAccount() {
     await api('DELETE', '/api/auth/account', { username, password });
     state.user = null; state.activeTask = null; state.csrfToken = null;
     try { await refreshCsrf(); } catch(e){}
-    renderLogin();
+    renderLanding();
   } catch(e) {
     btn.disabled = false; btn.textContent = '🗑️ Permanently Delete My Account';
     showAlert(e.message, 'error', 'da-alerts');
@@ -3644,6 +4064,7 @@ async function saveGroupDropdowns(groupId) {
 
 // ── SPA back/forward navigation ───────────────────────────────────────────────
 const HISTORY_RENDER_MAP = {
+  'landing':            () => renderLanding(),
   'home':               () => renderHome(),
   'login':              () => renderLogin(),
   'register':           () => renderRegister(),
@@ -3672,7 +4093,7 @@ window.addEventListener('popstate', async (e) => {
   const view = e.state?.view;
   if (!view) return;
   // Redirect to appropriate landing page if auth state doesn't match the view
-  if ((view === 'login' || view === 'register') && state.user) {
+  if ((view === 'login' || view === 'register' || view === 'landing') && state.user) {
     const targetView = state.user.isAdmin ? 'admin' : 'home';
     replaceHistory(targetView);
     await (state.user.isAdmin ? renderAdmin() : renderHome());
@@ -3696,7 +4117,7 @@ window.addEventListener('popstate', async (e) => {
 // ── Bootstrap ────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('loading-retry-btn')?.addEventListener('click', init);
-  document.getElementById('loading-login-btn')?.addEventListener('click', renderLogin);
+  document.getElementById('loading-login-btn')?.addEventListener('click', renderLanding);
   init();
 });
 
