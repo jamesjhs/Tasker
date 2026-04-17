@@ -783,7 +783,7 @@ async function renderLanding() {
       ${stats ? `
       <div class="hero-stats">
         <div class="hero-stat">
-          <div class="hero-stat-num">${stats.userCount}</div>
+          <div class="hero-stat-num">${Number(stats.userCount).toLocaleString()}</div>
           <div class="hero-stat-label">Active users</div>
         </div>
         <div class="hero-stat">
