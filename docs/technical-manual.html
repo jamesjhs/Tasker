@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Tasker — Technical Reference Manual v1.6.0</title>
+  <title>Tasker — Technical Reference Manual v1.9.1</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; }
     body {
@@ -107,7 +107,7 @@
 <div class="page">
 
 <h1>Tasker — Technical Reference Manual</h1>
-<p class="subtitle">Version 1.9.0 &nbsp;·&nbsp; April 2026 &nbsp;·&nbsp; <em>Prepared in the role of Professor of Digital Engineering Product Design</em></p>
+<p class="subtitle">Version 1.9.1 &nbsp;·&nbsp; April 2026 &nbsp;·&nbsp; <em>Prepared in the role of Professor of Digital Engineering Product Design</em></p>
 
 <div class="toc">
   <h2>Table of Contents</h2>
@@ -478,7 +478,8 @@
   <tbody>
     <tr><td><code>GET /api/analytics/session</code></td><td>Tasks for the current session date with summary. Session date is frozen at login time.</td></tr>
     <tr><td><code>GET /api/analytics/history</code></td><td>Completed tasks from the past 30 days with optional date/category/duty/outcome filtering. Includes summary.</td></tr>
-    <tr><td><code>GET /api/analytics/export</code></td><td>Streams an <code>.xlsx</code> workbook. Mobile-only (User-Agent check; non-mobile gets 403). Two sheets: Tasks and Summary. ExcelJS streaming write to response.</td></tr>
+    <tr><td><code>GET /api/analytics/export</code></td><td>Streams an <code>.xlsx</code> workbook with raw task data. Two sheets: Tasks and Summary. ExcelJS streaming write to response.</td></tr>
+    <tr><td><code>GET /api/analytics/report</code></td><td>Streams an <code>.xlsx</code> analytics report workbook. Accepts the same filter parameters as <code>/history</code> plus <code>mode=session|history</code>. Generates up to 19 sheets — one per chart — containing the underlying data tables that match the graphical output shown in the analytics view. Sheets are conditionally included when the corresponding chart would be visible. ExcelJS streaming write to response.</td></tr>
   </tbody>
 </table>
 
@@ -761,6 +762,34 @@ R²        = 1 - SS_res / SS_tot</code></pre>
 </ul>
 <p>The underlying data is produced by <code>buildSummary</code> fields <code>byDowPersonalByCategory</code> and <code>byDowPersonalBySubcategory</code> respectively (see §18.2).</p>
 
+<h3>18.6 Analytics XLSX Report (v1.9.1)</h3>
+<p>The "Print / Save as PDF" button has been replaced by a <strong>"📊 Download Analytics (.xlsx)"</strong> button. Clicking it calls <code>exportAnalyticsReport()</code> (client-side), which constructs a URL pointing to the new <code>GET /api/analytics/report</code> endpoint, passing the current filter state (<code>mode</code>, <code>from</code>, <code>to</code>, <code>is_duty</code>, <code>category</code>, <code>subcategory</code>, <code>outcome</code>) as query parameters. The endpoint re-runs the same query as the history/session views, invokes <code>buildSummary()</code>, and streams an ExcelJS <code>.xlsx</code> workbook containing up to 19 sheets — one per chart — with the underlying data tables that mirror each graphical output:</p>
+<table>
+  <thead><tr><th>Sheet name</th><th>Corresponding chart</th><th>Condition</th></tr></thead>
+  <tbody>
+    <tr><td>Summary</td><td>Stat cards</td><td>Always</td></tr>
+    <tr><td>Time by Category</td><td>Time by Category doughnut</td><td>Total &gt; 0</td></tr>
+    <tr><td>Duty vs Personal</td><td>My Group vs Personal bar</td><td>Always</td></tr>
+    <tr><td>Outcome Distribution</td><td>Outcome doughnut</td><td>Any outcomes present</td></tr>
+    <tr><td>Outcome by Category</td><td>Outcome Breakdown by Category stacked bar</td><td>&gt;1 category</td></tr>
+    <tr><td>Avg Duration (Category)</td><td>Avg Duration by Category bar</td><td>Total &gt; 0</td></tr>
+    <tr><td>Tasks by Type</td><td>Tasks by Type bar</td><td>Any subcategories</td></tr>
+    <tr><td>Avg Duration (Task Type)</td><td>Avg Duration by Task Type bar</td><td>Any subcategories</td></tr>
+    <tr><td>Task Types by Source Group</td><td>Task Types by Source Group stacked bar</td><td>Meaningful cross-tab data</td></tr>
+    <tr><td>Flag Distribution</td><td>Task Flag Distribution bar</td><td>Any flags</td></tr>
+    <tr><td>Flags by Source Group</td><td>Flags by Source Group stacked bar</td><td>Any flag-category pairs</td></tr>
+    <tr><td>Activity by Hour</td><td>Activity by Hour of Day bar</td><td>Any hour data</td></tr>
+    <tr><td>Activity by Day of Week</td><td>Activity by Day of Week bar</td><td>Any DoW data</td></tr>
+    <tr><td>Task Types by Day Assigned</td><td>Task Type Patterns by Day Assigned stacked bar</td><td>≥2 distinct subcategories</td></tr>
+    <tr><td>Personal by Day (Origin)</td><td>Personal Tasks by Day — by Task Origin</td><td>Any personal assigned tasks</td></tr>
+    <tr><td>Personal by Day (Type)</td><td>Personal Tasks by Day — by Task Type</td><td>Any personal assigned tasks</td></tr>
+    <tr><td>Tasks Over Time</td><td>Tasks &amp; Time Over Time line chart</td><td>≥2 distinct dates</td></tr>
+    <tr><td>Interruptions Over Time</td><td>Interruptions Over Time line chart</td><td>≥2 distinct dates</td></tr>
+    <tr><td>Assignment Lag</td><td>Days from Assignment to Action histogram</td><td>Any tasks with assigned_date</td></tr>
+  </tbody>
+</table>
+<p>Each sheet header row is bold with a light blue fill for legibility. Cross-tab sheets (e.g. Outcome by Category, Task Types by Source Group) use a row-per-label layout with one column per series, matching the stacked-bar chart structure. The filename is <code>Tasker-Analytics-YYYYMMDDHHmm.xlsx</code>.</p>
+
 <hr>
 
 <h2 id="s19">19. Admin Workflows</h2>
@@ -845,7 +874,7 @@ R²        = 1 - SS_res / SS_tot</code></pre>
 
 <hr>
 <p style="text-align:center;font-size:.85rem;color:#9ca3af;margin-top:40px">
-  Tasker Technical Reference Manual &nbsp;·&nbsp; v1.6.0 &nbsp;·&nbsp; April 2026<br>
+  Tasker Technical Reference Manual &nbsp;·&nbsp; v1.9.1 &nbsp;·&nbsp; April 2026<br>
   This document is stored in <code>docs/</code> and is not served by the application.
 </p>
 

@@ -1,6 +1,6 @@
 # Tasker
 
-**v1.9.0** — An anonymous task-logging PWA for healthcare staff. Built with TypeScript, Express 5, SQLite, and vanilla JS.
+**v1.9.1** — An anonymous task-logging PWA for healthcare staff. Built with TypeScript, Express 5, SQLite, and vanilla JS.
 
 ---
 
@@ -10,8 +10,8 @@
 - **PWA** — installable on mobile, works offline for cached assets.
 - **Task tracking** — duty vs personal tasks, categories, subcategories, outcomes, interruption handling.
 - **Task flags** — admin-managed list of structured task annotations (e.g. "Sent to wrong user", "Priority too high"). Users select any that apply; free-text notes removed for data protection. Users can suggest new flags via email.
-- **Analytics** — session and 30-day history with Chart.js charts, filtering, flag distribution chart, and linear regression trendlines.
-- **Excel export** — users can download their own data as `.xlsx` (includes Flags column).
+- **Analytics** — session and 30-day history with Chart.js charts, filtering, flag distribution chart, linear regression trendlines, and XLSX analytics report download.
+- **Excel export** — users can download their raw task data as `.xlsx` (includes Flags column), or download a full analytics report as `.xlsx` with one data sheet per chart.
 - **User groups** — administrators create groups that define which dropdown options users see.
 - **Personal option customisation** — users can tick/untick individual options to build their own personalised dropdown lists.
 - **SMTP email suggestions** — dropdown and flag suggestions are emailed to the administrator instead of being stored on the server, improving data security. Configure via admin panel or environment variables.
@@ -22,7 +22,7 @@
 - **Configurable registration** — administrator controls three levels for self-registration and user invitations.
 - **30-day data retention** — task data is automatically deleted after 30 days.
 - **Health-check endpoint** — `GET /readyz` returns a JSON status response for uptime/heartbeat monitoring.
-- **Asset version endpoint** — `GET /api/version` returns `{"version":"1.9.0"}` for client-side cache-busting.
+- **Asset version endpoint** — `GET /api/version` returns `{"version":"1.9.1"}` for client-side cache-busting.
 
 ---
 
@@ -150,6 +150,11 @@ See [`/policy`](/policy) for the full Data and Use Policy.
 ---
 
 ## Changelog
+
+### v1.9.1 (April 2026)
+
+- **Analytics XLSX report** — Replaced the "Print / Save as PDF" button in the analytics section with a "Download Analytics (.xlsx)" button. Clicking it downloads `Tasker-Analytics-YYYYMMDDHHmm.xlsx` — a multi-sheet workbook with one data table sheet per chart, mirroring all graphical output: Summary, Time by Category, Duty vs Personal, Outcome Distribution, Outcome by Category, Avg Duration (Category), Tasks by Type, Avg Duration (Task Type), Task Types by Source Group, Flag Distribution, Flags by Source Group, Activity by Hour, Activity by Day of Week, Task Types by Day Assigned, Personal by Day (Origin), Personal by Day (Type), Tasks Over Time (with optional regression trend column), Interruptions Over Time, and Assignment Lag. Sheets are only included when the corresponding chart would be visible. Served by a new `GET /api/analytics/report` endpoint that accepts the same filter parameters as the history view.
+- **Version bump** — Version number incremented to 1.9.1; all page footers and documentation updated accordingly.
 
 ### v1.9.0 (April 2026)
 
