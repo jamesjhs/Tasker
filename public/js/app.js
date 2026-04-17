@@ -766,11 +766,6 @@ async function renderLanding() {
   app().innerHTML = `
   <div class="landing">
 
-    <!-- Privacy notice bar -->
-    <div class="privacy-notice-bar">
-      🔒 Zero patient data, ever — anonymous by design. <a href="/dpia">Read our DPIA</a>
-    </div>
-
     <!-- Hero -->
     <div class="landing-hero">
       <div style="font-size:3.2rem;margin-bottom:2px">🔒</div>
@@ -789,10 +784,6 @@ async function renderLanding() {
         <div class="hero-stat">
           <div class="hero-stat-num">${Number(stats.taskCount).toLocaleString()}</div>
           <div class="hero-stat-label">Tasks logged</div>
-        </div>
-        <div class="hero-stat">
-          <div class="hero-stat-num">0</div>
-          <div class="hero-stat-label">Patient records stored</div>
         </div>
       </div>` : ''}
     </div>
