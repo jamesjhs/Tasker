@@ -176,12 +176,12 @@ router.get('/common-fields', (req: Request, res: Response) => {
   const db = getDb();
   const topN = (field: string, limit: number): string[] =>
     (db.prepare(
-      `SELECT ${field}, COUNT(*) as cnt FROM tasks WHERE user_id=? AND ${field} IS NOT NULL AND status='completed' GROUP BY ${field} ORDER BY cnt DESC LIMIT ?`
+      `SELECT ${field}, COUNT(*) as cnt FROM tasks WHERE user_id=? AND ${field} IS NOT NULL AND status='completed' AND start_time >= datetime('now', '-30 days') GROUP BY ${field} ORDER BY cnt DESC LIMIT ?`
     ).all(s.userId, limit) as any[]).map(r => r[field]);
   res.json({
-    category:    topN('category', 4),
-    subcategory: topN('subcategory', 4),
-    outcome:     topN('outcome', 6),
+    category:    topN('category', 6),
+    subcategory: topN('subcategory', 6),
+    outcome:     topN('outcome', 9),
   });
 });
 

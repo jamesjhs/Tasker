@@ -2018,9 +2018,9 @@ function renderTaskStart() {
       </div>
     </div>
     ${buildDropdownGroup('category','Task From', state.dropdowns.category, 'ts-cat')}
-    ${buildQuickPickRow('category', 'ts-cat', state.commonFields.category, 2)}
+    ${buildQuickPickRow('category', 'ts-cat', state.commonFields.category, 3)}
     ${buildDropdownGroup('subcategory','Task Type', state.dropdowns.subcategory, 'ts-sub')}
-    ${buildQuickPickRow('subcategory', 'ts-sub', state.commonFields.subcategory, 2)}
+    ${buildQuickPickRow('subcategory', 'ts-sub', state.commonFields.subcategory, 3)}
     <div class="form-group">
       <label for="ts-assigned">Date assigned</label>
       <input id="ts-assigned" class="input" type="date" value="${new Date().toISOString().split('T')[0]}">
@@ -2056,7 +2056,7 @@ function handleQuickPick(el) {
 function buildRunningOutcomeGroup(options, current) {
   const sid = 'tr-outcome';
   const displayValue = current || '';
-  const picks = (state.commonFields.outcome || []).slice(0, 6);
+  const picks = (state.commonFields.outcome || []).slice(0, 9);
   const picksHtml = picks.length ? `
   <div id="tr-outcome-picks" class="quick-pick-grid quick-pick-grid--3col" style="margin-bottom:8px">
     ${picks.map(v => `<button type="button" class="quick-pick-btn${displayValue === v ? ' qp-selected' : ''}" data-value="${esc(v)}" onclick="handleRunningOutcomePick(this)">${esc(v)}</button>`).join('')}
@@ -2086,6 +2086,7 @@ function buildRunningOutcomeGroup(options, current) {
 
 function handleRunningOutcomePick(el) {
   selectRunningOutcome(el.dataset.value);
+  renderTaskEnd();
 }
 
 function selectRunningOutcome(value) {
