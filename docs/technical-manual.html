@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Tasker — Technical Reference Manual v1.9.1</title>
+  <title>Tasker — Technical Reference Manual v1.9.2</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; }
     body {
@@ -107,7 +107,7 @@
 <div class="page">
 
 <h1>Tasker — Technical Reference Manual</h1>
-<p class="subtitle">Version 1.9.1 &nbsp;·&nbsp; April 2026 &nbsp;·&nbsp; <em>Prepared in the role of Professor of Digital Engineering Product Design</em></p>
+<p class="subtitle">Version 1.9.2 &nbsp;·&nbsp; April 2026 &nbsp;·&nbsp; <em>Prepared in the role of Professor of Digital Engineering Product Design</em></p>
 
 <div class="toc">
   <h2>Table of Contents</h2>
@@ -762,7 +762,7 @@ R²        = 1 - SS_res / SS_tot</code></pre>
 </ul>
 <p>The underlying data is produced by <code>buildSummary</code> fields <code>byDowPersonalByCategory</code> and <code>byDowPersonalBySubcategory</code> respectively (see §18.2).</p>
 
-<h3>18.6 Analytics XLSX Report (v1.9.1)</h3>
+<h3>18.6 Analytics XLSX Report (v1.9.2)</h3>
 <p>The "Print / Save as PDF" button has been replaced by a <strong>"📊 Download Analytics (.xlsx)"</strong> button. Clicking it calls <code>exportAnalyticsReport()</code> (client-side), which constructs a URL pointing to the new <code>GET /api/analytics/report</code> endpoint, passing the current filter state (<code>mode</code>, <code>from</code>, <code>to</code>, <code>is_duty</code>, <code>category</code>, <code>subcategory</code>, <code>outcome</code>) as query parameters. The endpoint re-runs the same query as the history/session views, invokes <code>buildSummary()</code>, and streams an ExcelJS <code>.xlsx</code> workbook containing up to 19 sheets — one per chart — with the underlying data tables that mirror each graphical output:</p>
 <table>
   <thead><tr><th>Sheet name</th><th>Corresponding chart</th><th>Condition</th></tr></thead>
@@ -874,7 +874,7 @@ R²        = 1 - SS_res / SS_tot</code></pre>
 
 <hr>
 <p style="text-align:center;font-size:.85rem;color:#9ca3af;margin-top:40px">
-  Tasker Technical Reference Manual &nbsp;·&nbsp; v1.9.1 &nbsp;·&nbsp; April 2026<br>
+  Tasker Technical Reference Manual &nbsp;·&nbsp; v1.9.2 &nbsp;·&nbsp; April 2026<br>
   This document is stored in <code>docs/</code> and is not served by the application.
 </p>
 

@@ -1,6 +1,6 @@
 # Tasker
 
-**v1.9.1** — An anonymous task-logging PWA for healthcare staff. Built with TypeScript, Express 5, SQLite, and vanilla JS.
+**v1.9.2** — An anonymous task-logging PWA for healthcare staff. Built with TypeScript, Express 5, SQLite, and vanilla JS.
 
 ---
 
@@ -22,7 +22,7 @@
 - **Configurable registration** — administrator controls three levels for self-registration and user invitations.
 - **30-day data retention** — task data is automatically deleted after 30 days.
 - **Health-check endpoint** — `GET /readyz` returns a JSON status response for uptime/heartbeat monitoring.
-- **Asset version endpoint** — `GET /api/version` returns `{"version":"1.9.1"}` for client-side cache-busting.
+- **Asset version endpoint** — `GET /api/version` returns `{"version":"1.9.2"}` for client-side cache-busting.
 
 ---
 
