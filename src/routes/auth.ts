@@ -190,10 +190,13 @@ router.post('/verify-2fa', validateCsrf, async (req: Request, res: Response) => 
   }
   const { code } = req.body as { code: string };
   s.mfaAttempts = (s.mfaAttempts || 0) + 1;
-  // Use timing-safe comparison to prevent timing attacks on the 6-digit code
-  const submittedCode = (code || '').trim().padEnd(6, '\0');
-  const expectedCode = (s.mfaCode as string).padEnd(6, '\0');
-  const codeMatch = submittedCode.length === expectedCode.length &&
+  // Use timing-safe comparison to prevent timing attacks on the 6-digit code.
+  // The submitted code must be exactly 6 digits; any other length is immediately invalid.
+  const submittedCode = (code || '').trim();
+  const expectedCode = s.mfaCode as string;
+  const EXPECTED_CODE_LENGTH = 6;
+  const codeMatch = submittedCode.length === EXPECTED_CODE_LENGTH &&
+    expectedCode.length === EXPECTED_CODE_LENGTH &&
     crypto.timingSafeEqual(Buffer.from(submittedCode), Buffer.from(expectedCode));
   if (!code || !codeMatch) {
     if (s.mfaAttempts >= 5) {

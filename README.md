@@ -101,7 +101,7 @@ src/
     admin.ts              /api/admin/* — stats, users, pending-users, approve, settings, backup, restore, user-groups, pending-groups
 
   __tests__/
-    security.test.ts      146-test negative security suite (CSRF, IDOR, SQLi, XSS, input validation, resource exhaustion, error handling, session fixation, information leakage)
+    security.test.ts      146-test security test suite (CSRF, IDOR, SQLi, XSS, input validation, resource exhaustion, error handling, session fixation, information leakage) — 239 total across all suites
     helpers/testApp.ts    Isolated Express app + test-user helpers for jest/supertest
 
 public/
@@ -143,7 +143,7 @@ docs/
 - Timing-safe 2FA code comparison (`crypto.timingSafeEqual`)
 - SQL column allowlist in `common-fields` endpoint
 - SMTP error messages sanitised — no internal details leaked in responses
-- 146-test negative security suite covering CSRF, IDOR, SQL injection, XSS, input validation, resource exhaustion, error handling, session fixation, and information leakage (`npm test`)
+- 146-test security test suite in `src/__tests__/security.test.ts` (239 tests total across all suites) covering CSRF, IDOR, SQL injection, XSS, input validation, resource exhaustion, error handling, session fixation, and information leakage (`npm test`)
 
 ---
 
