@@ -118,12 +118,6 @@ router.post('/login', validateCsrf, async (req: Request, res: Response) => {
   if (user.is_admin === 1 && user.mfa_enabled === 1) {
     const code = String(crypto.randomInt(100000, 999999));
     const expiry = Date.now() + 10 * 60 * 1000; // 10 minutes
-    const s = req.session as any;
-    s.mfaPendingUserId = user.id;
-    s.mfaCode = code;
-    s.mfaCodeExpiry = expiry;
-    s.mfaAttempts = 0;
-    s.csrfToken = crypto.randomBytes(32).toString('hex');
 
     const adminEmail = getSetting('smtp_to') || '';
     const backupEmail = user.mfa_backup_email || '';
@@ -139,33 +133,47 @@ router.post('/login', validateCsrf, async (req: Request, res: Response) => {
         'Tasker Admin Login — Verification Code',
         `Your Tasker admin login verification code is:\n\n  ${code}\n\nThis code expires in 10 minutes. Do not share it with anyone.`,
       );
-    } catch (e: any) {
-      res.status(503).json({ error: `Could not send 2FA code: ${e?.message || 'SMTP error'}` });
+    } catch {
+      res.status(503).json({ error: 'Could not send 2FA code. Please check SMTP settings.' });
       return;
     }
-    res.json({ requires2fa: true });
+    // Regenerate the session before storing the pending 2FA state to prevent session fixation
+    req.session.regenerate((err) => {
+      if (err) { res.status(500).json({ error: 'Session error. Please try again.' }); return; }
+      const s = req.session as any;
+      s.mfaPendingUserId = user.id;
+      s.mfaCode = code;
+      s.mfaCodeExpiry = expiry;
+      s.mfaAttempts = 0;
+      s.csrfToken = crypto.randomBytes(32).toString('hex');
+      res.json({ requires2fa: true });
+    });
     return;
   }
 
-  const s = req.session as any;
-  s.userId = user.id;
-  s.isAdmin = user.is_admin === 1;
-  s.mustChangePassword = user.must_change_password === 1;
-  s.pendingActivation = user.must_change_password === 0 && user.pending_activation === 1;
-  s.lastActivity = Date.now();
-  s.sessionDate = new Date().toISOString().split('T')[0];
-  s.csrfToken = crypto.randomBytes(32).toString('hex');
-  logEvent('user_login');
-  const groupInfo = db.prepare(
-    'SELECT u.user_group_id, ug.name as user_group_name FROM users u LEFT JOIN user_groups ug ON ug.id=u.user_group_id WHERE u.id=?'
-  ).get(user.id) as { user_group_id: number | null; user_group_name: string | null } | undefined;
-  res.json({
-    success: true,
-    isAdmin: user.is_admin === 1,
-    mustChangePassword: user.must_change_password === 1,
-    pendingActivation: user.must_change_password === 0 && user.pending_activation === 1,
-    userGroupId: groupInfo?.user_group_id ?? null,
-    userGroupName: groupInfo?.user_group_name ?? null,
+  // Regenerate the session after successful login to prevent session fixation
+  req.session.regenerate((err) => {
+    if (err) { res.status(500).json({ error: 'Session error. Please try again.' }); return; }
+    const s = req.session as any;
+    s.userId = user.id;
+    s.isAdmin = user.is_admin === 1;
+    s.mustChangePassword = user.must_change_password === 1;
+    s.pendingActivation = user.must_change_password === 0 && user.pending_activation === 1;
+    s.lastActivity = Date.now();
+    s.sessionDate = new Date().toISOString().split('T')[0];
+    s.csrfToken = crypto.randomBytes(32).toString('hex');
+    logEvent('user_login');
+    const groupInfo = db.prepare(
+      'SELECT u.user_group_id, ug.name as user_group_name FROM users u LEFT JOIN user_groups ug ON ug.id=u.user_group_id WHERE u.id=?'
+    ).get(user.id) as { user_group_id: number | null; user_group_name: string | null } | undefined;
+    res.json({
+      success: true,
+      isAdmin: user.is_admin === 1,
+      mustChangePassword: user.must_change_password === 1,
+      pendingActivation: user.must_change_password === 0 && user.pending_activation === 1,
+      userGroupId: groupInfo?.user_group_id ?? null,
+      userGroupName: groupInfo?.user_group_name ?? null,
+    });
   });
 });
 
@@ -182,7 +190,12 @@ router.post('/verify-2fa', validateCsrf, async (req: Request, res: Response) => 
   }
   const { code } = req.body as { code: string };
   s.mfaAttempts = (s.mfaAttempts || 0) + 1;
-  if (!code || code.trim() !== s.mfaCode) {
+  // Use timing-safe comparison to prevent timing attacks on the 6-digit code
+  const submittedCode = (code || '').trim().padEnd(6, '\0');
+  const expectedCode = (s.mfaCode as string).padEnd(6, '\0');
+  const codeMatch = submittedCode.length === expectedCode.length &&
+    crypto.timingSafeEqual(Buffer.from(submittedCode), Buffer.from(expectedCode));
+  if (!code || !codeMatch) {
     if (s.mfaAttempts >= 5) {
       delete s.mfaPendingUserId; delete s.mfaCode; delete s.mfaCodeExpiry; delete s.mfaAttempts;
       res.status(401).json({ error: 'Too many incorrect attempts. Please log in again.' });
@@ -194,28 +207,35 @@ router.post('/verify-2fa', validateCsrf, async (req: Request, res: Response) => 
   }
 
   const db = getDb();
-  const user = db.prepare('SELECT * FROM users WHERE id=?').get(s.mfaPendingUserId) as any;
+  const pendingUserId = s.mfaPendingUserId;
+  // Clear 2FA pending state before regenerating session
   delete s.mfaPendingUserId; delete s.mfaCode; delete s.mfaCodeExpiry; delete s.mfaAttempts;
+  const user = db.prepare('SELECT * FROM users WHERE id=?').get(pendingUserId) as any;
   if (!user) { res.status(404).json({ error: 'User not found.' }); return; }
 
-  s.userId = user.id;
-  s.isAdmin = user.is_admin === 1;
-  s.mustChangePassword = user.must_change_password === 1;
-  s.pendingActivation = user.must_change_password === 0 && user.pending_activation === 1;
-  s.lastActivity = Date.now();
-  s.sessionDate = new Date().toISOString().split('T')[0];
-  s.csrfToken = crypto.randomBytes(32).toString('hex');
-  logEvent('user_login');
-  const groupInfo = db.prepare(
-    'SELECT u.user_group_id, ug.name as user_group_name FROM users u LEFT JOIN user_groups ug ON ug.id=u.user_group_id WHERE u.id=?'
-  ).get(user.id) as { user_group_id: number | null; user_group_name: string | null } | undefined;
-  res.json({
-    success: true,
-    isAdmin: user.is_admin === 1,
-    mustChangePassword: user.must_change_password === 1,
-    pendingActivation: user.must_change_password === 0 && user.pending_activation === 1,
-    userGroupId: groupInfo?.user_group_id ?? null,
-    userGroupName: groupInfo?.user_group_name ?? null,
+  // Regenerate session after successful 2FA to prevent session fixation
+  req.session.regenerate((err) => {
+    if (err) { res.status(500).json({ error: 'Session error. Please try again.' }); return; }
+    const s2 = req.session as any;
+    s2.userId = user.id;
+    s2.isAdmin = user.is_admin === 1;
+    s2.mustChangePassword = user.must_change_password === 1;
+    s2.pendingActivation = user.must_change_password === 0 && user.pending_activation === 1;
+    s2.lastActivity = Date.now();
+    s2.sessionDate = new Date().toISOString().split('T')[0];
+    s2.csrfToken = crypto.randomBytes(32).toString('hex');
+    logEvent('user_login');
+    const groupInfo = db.prepare(
+      'SELECT u.user_group_id, ug.name as user_group_name FROM users u LEFT JOIN user_groups ug ON ug.id=u.user_group_id WHERE u.id=?'
+    ).get(user.id) as { user_group_id: number | null; user_group_name: string | null } | undefined;
+    res.json({
+      success: true,
+      isAdmin: user.is_admin === 1,
+      mustChangePassword: user.must_change_password === 1,
+      pendingActivation: user.must_change_password === 0 && user.pending_activation === 1,
+      userGroupId: groupInfo?.user_group_id ?? null,
+      userGroupName: groupInfo?.user_group_name ?? null,
+    });
   });
 });
 
@@ -249,8 +269,8 @@ router.post('/resend-2fa', validateCsrf, async (req: Request, res: Response) => 
       `Your Tasker admin login verification code is:\n\n  ${code}\n\nThis code expires in 10 minutes. Do not share it with anyone.`,
     );
     res.json({ success: true });
-  } catch (e: any) {
-    res.status(503).json({ error: `Could not resend code: ${e?.message || 'SMTP error'}` });
+  } catch {
+    res.status(503).json({ error: 'Could not resend code. Please check SMTP settings.' });
   }
 });
 
@@ -412,8 +432,8 @@ router.post('/feedback', requireAuth, requirePasswordChange, requireActivation, 
       `A user has submitted a suggestion or piece of feedback:\n\n"${clean}"\n\n(No identifying information is attached to this message.)`,
     );
     res.json({ message: 'Your feedback has been sent. Thank you!' });
-  } catch (e: any) {
-    res.status(503).json({ error: `Could not send feedback: ${e?.message || 'SMTP error'}` });
+  } catch {
+    res.status(503).json({ error: 'Could not send feedback. Please check SMTP settings or try again later.' });
   }
 });
 

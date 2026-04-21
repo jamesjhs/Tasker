@@ -10,11 +10,15 @@
  *  - Resource exhaustion guards (oversized payloads)
  *  - Error handling (no stack-trace leakage)
  *  - Secrets / sensitive data not returned in responses
+ *  - Session fixation prevention (session regeneration after login)
+ *  - SMTP error information leakage prevention
+ *  - SQL column allowlist in common-fields endpoint
  */
 
 import os from 'os';
 import path from 'path';
 import fs from 'fs';
+import crypto from 'crypto';
 import request from 'supertest';
 import { buildTestApp, createAdminSession, createUserSession } from './helpers/testApp';
 import { getDb, closeDb } from '../db';
@@ -1580,7 +1584,118 @@ describe('User feedback endpoint', () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 23. ANONYMOUS PROPOSALS — no username exposed
+// 23. SESSION FIXATION PREVENTION
+// ─────────────────────────────────────────────────────────────────────────────
+describe('Session fixation prevention', () => {
+  test('Login: session ID changes after successful authentication', async () => {
+    const a = agent();
+    // Capture the pre-auth session ID by getting a CSRF token (which creates a session)
+    const csrfRes = await a.get('/api/auth/csrf-token');
+    const preAuthCookie = csrfRes.headers['set-cookie']?.[0] || '';
+    const preAuthSid = preAuthCookie.split(';')[0]; // e.g. "connect.sid=<value>"
+
+    const db = getDb();
+    const bcrypt = require('bcryptjs');
+    const pw = 'FixationP@ss1!';
+    const hash = await bcrypt.hash(pw, 4);
+    const username = 'fixation_' + crypto.randomBytes(4).toString('hex');
+    db.prepare(
+      'INSERT INTO users (username,password_hash,is_admin,is_approved,pending_activation) VALUES (?,?,0,1,0)',
+    ).run(username, hash);
+
+    // Log in with the pre-auth session
+    const loginRes = await a
+      .post('/api/auth/login')
+      .set('X-CSRF-Token', csrfRes.body.token)
+      .send({ username, password: pw });
+    expect(loginRes.status).toBe(200);
+    expect(loginRes.body.success).toBe(true);
+
+    // After login, the session cookie should have changed (new session ID)
+    const postAuthCookie = loginRes.headers['set-cookie']?.[0] || '';
+    const postAuthSid = postAuthCookie.split(';')[0];
+    // The session ID must be different (regenerated)
+    expect(postAuthSid).not.toBe('');
+    expect(postAuthSid).not.toBe(preAuthSid);
+  });
+
+  test('Login: authenticated endpoint works with new session after login', async () => {
+    const a = agent();
+    const { csrf } = await createUserSession(a);
+    const res = await a.get('/api/tasks').set('X-CSRF-Token', csrf);
+    expect(res.status).toBe(200);
+  });
+
+  test('Login: old pre-auth session cannot be replayed after successful login', async () => {
+    // Create a fresh agent; get a CSRF token (this seeds a session)
+    const a1 = agent();
+    const a2 = agent(); // simulates attacker who fixed the session
+
+    const csrfRes = await a1.get('/api/auth/csrf-token');
+    const preAuthToken = csrfRes.body.token;
+
+    // Attacker copies the pre-auth cookie into their own agent
+    // (In a real attack they would force the victim to use this session)
+    const preAuthCookies = csrfRes.headers['set-cookie'];
+    if (preAuthCookies) {
+      a2.set('Cookie', preAuthCookies[0]);
+    }
+
+    // Victim logs in — session is regenerated
+    const db = getDb();
+    const bcrypt = require('bcryptjs');
+    const pw = 'FixationP@ss2!';
+    const hash = await bcrypt.hash(pw, 4);
+    const username = 'fixation2_' + crypto.randomBytes(4).toString('hex');
+    db.prepare(
+      'INSERT INTO users (username,password_hash,is_admin,is_approved,pending_activation) VALUES (?,?,0,1,0)',
+    ).run(username, hash);
+
+    await a1.post('/api/auth/login').set('X-CSRF-Token', preAuthToken).send({ username, password: pw });
+
+    // Attacker's agent (still using the old pre-auth session) should NOT be authenticated
+    const attackerRes = await a2.get('/api/tasks');
+    expect(attackerRes.status).toBe(401);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 24. SMTP ERROR INFORMATION LEAKAGE
+// ─────────────────────────────────────────────────────────────────────────────
+describe('SMTP error information leakage', () => {
+  test('Feedback SMTP error: no internal error details in response', async () => {
+    const a = agent();
+    const { csrf } = await createUserSession(a);
+    // Ensure SMTP is not configured
+    getDb().prepare("DELETE FROM settings WHERE key IN ('smtp_host','smtp_to')").run();
+    const res = await a.post('/api/auth/feedback').set('X-CSRF-Token', csrf).send({ message: 'Test message' });
+    expect(res.status).toBe(503);
+    // Error message must not include raw system error details
+    expect(res.body.error).not.toMatch(/ECONNREFUSED|ENOTFOUND|getaddrinfo|nodemailer/i);
+    expect(res.body.error).toMatch(/smtp/i);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 25. SQL COLUMN ALLOWLIST IN COMMON-FIELDS
+// ─────────────────────────────────────────────────────────────────────────────
+describe('common-fields column allowlist', () => {
+  test('GET /api/tasks/common-fields — returns expected fields', async () => {
+    const a = agent();
+    const { csrf } = await createUserSession(a);
+    const res = await a.get('/api/tasks/common-fields').set('X-CSRF-Token', csrf);
+    expect(res.status).toBe(200);
+    expect(res.body).toHaveProperty('category');
+    expect(res.body).toHaveProperty('subcategory');
+    expect(res.body).toHaveProperty('outcome');
+    expect(Array.isArray(res.body.category)).toBe(true);
+    expect(Array.isArray(res.body.subcategory)).toBe(true);
+    expect(Array.isArray(res.body.outcome)).toBe(true);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 26. ANONYMOUS PROPOSALS — no username exposed
 // ─────────────────────────────────────────────────────────────────────────────
 describe('Anonymous proposals', () => {
   test('Admin GET /api/admin/dropdown-proposals — no username field returned', async () => {

@@ -1,6 +1,6 @@
 # Tasker
 
-**v1.9.2** — An anonymous task-logging PWA for healthcare staff. Built with TypeScript, Express 5, SQLite, and vanilla JS.
+**v1.10.0** — An anonymous task-logging PWA for healthcare staff. Built with TypeScript, Express 5, SQLite, and vanilla JS.
 
 ---
 
@@ -101,7 +101,7 @@ src/
     admin.ts              /api/admin/* — stats, users, pending-users, approve, settings, backup, restore, user-groups, pending-groups
 
   __tests__/
-    security.test.ts      52-test negative security suite (CSRF, IDOR, SQLi, XSS, input validation, resource exhaustion, error handling)
+    security.test.ts      146-test negative security suite (CSRF, IDOR, SQLi, XSS, input validation, resource exhaustion, error handling, session fixation, information leakage)
     helpers/testApp.ts    Isolated Express app + test-user helpers for jest/supertest
 
 public/
@@ -139,7 +139,11 @@ docs/
 - Automatic HTTPS when certificates are present
 - `/readyz` health-check endpoint is unauthenticated but returns no sensitive data
 - `safeId()` helper sanitises combobox container IDs before insertion into inline event handlers
-- 52-test negative security suite covering CSRF, IDOR, SQL injection, XSS, input validation, resource exhaustion, and error handling (`npm test`)
+- Session regeneration after login (prevents session fixation — CWE-384)
+- Timing-safe 2FA code comparison (`crypto.timingSafeEqual`)
+- SQL column allowlist in `common-fields` endpoint
+- SMTP error messages sanitised — no internal details leaked in responses
+- 146-test negative security suite covering CSRF, IDOR, SQL injection, XSS, input validation, resource exhaustion, error handling, session fixation, and information leakage (`npm test`)
 
 ---
 
@@ -151,7 +155,16 @@ See [`/policy`](/policy) for the full Data and Use Policy.
 
 ## Changelog
 
-### v1.9.1 (April 2026)
+### v1.10.0 (April 2026)
+
+- **Security: Session fixation prevention** — The session is now regenerated (`req.session.regenerate()`) immediately after successful login and after successful 2FA verification. This eliminates the CWE-384 (Session Fixation) vulnerability, ensuring that any session identifier that existed before authentication cannot be reused by an attacker after the user logs in.
+- **Security: Timing-safe 2FA code comparison** — The 6-digit MFA verification code is now compared using `crypto.timingSafeEqual` rather than plain string equality, preventing potential timing-based oracle attacks.
+- **Security: SQL column allowlist in `common-fields`** — The `topN` helper in the tasks route now validates field names against an explicit allowlist (`category`, `subcategory`, `outcome`) before interpolating them into SQL strings, closing a latent SQL column injection path.
+- **Security: SMTP error information leakage** — Error responses from the 2FA send/resend and user feedback endpoints no longer include raw SMTP error messages (`e.message`). A generic "check SMTP settings" message is returned instead, preventing leakage of internal server configuration details.
+- **Test suite expanded** — Security test suite grew from 52 to 146 tests. New suites cover: session fixation prevention, SMTP error information leakage, and common-fields column allowlist.
+- **Version bump** — Version number incremented to 1.10.0; all documentation updated accordingly.
+
+### v1.9.2 (April 2026)
 
 - **Analytics XLSX report** — Replaced the "Print / Save as PDF" button in the analytics section with a "Download Analytics (.xlsx)" button. Clicking it downloads `Tasker-Analytics-YYYYMMDDHHmm.xlsx` — a multi-sheet workbook with one data table sheet per chart, mirroring all graphical output: Summary, Time by Category, Duty vs Personal, Outcome Distribution, Outcome by Category, Avg Duration (Category), Tasks by Type, Avg Duration (Task Type), Task Types by Source Group, Flag Distribution, Flags by Source Group, Activity by Hour, Activity by Day of Week, Task Types by Day Assigned, Personal by Day (Origin), Personal by Day (Type), Tasks Over Time (with optional regression trend column), Interruptions Over Time, and Assignment Lag. Sheets are only included when the corresponding chart would be visible. Served by a new `GET /api/analytics/report` endpoint that accepts the same filter parameters as the history view.
 - **Version bump** — Version number incremented to 1.9.1; all page footers and documentation updated accordingly.

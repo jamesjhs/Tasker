@@ -1,6 +1,6 @@
 # Tasker — Maintenance and Troubleshooting Manual
 
-**Version 1.9.2 — April 2026**
+**Version 1.10.0 — April 2026**
 
 ---
 
@@ -260,7 +260,7 @@ Tasker exposes `GET /readyz` for uptime monitoring and heartbeat polling. No aut
 {
   "ok": true,
   "service": "Tasker",
-  "version": "1.9.2",
+  "version": "1.10.0",
   "timestamp": "2026-04-04T12:09:26.477Z"
 }
 ```
@@ -404,6 +404,12 @@ The application applies migrations automatically on startup via the `initSchema`
 ---
 
 ## Security considerations
+
+### Session fixation and regeneration
+
+From v1.10.0, the server calls `req.session.regenerate()` immediately after successful login (and after successful 2FA verification), issuing a fresh session identifier. This prevents session fixation attacks (CWE-384), where an attacker could pre-set a known session cookie and reuse it after the victim authenticates.
+
+No operator action is required; this is automatic. If you observe any unexpected login failures after upgrading, check that your reverse proxy correctly propagates the `Set-Cookie` header from the login response.
 
 ### Session secret rotation
 
