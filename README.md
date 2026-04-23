@@ -1,6 +1,6 @@
 # Tasker
 
-**v1.9.2** — An anonymous task-logging PWA for healthcare staff. Built with TypeScript, Express 5, SQLite, and vanilla JS.
+**v1.11.0** — An anonymous task-logging PWA for healthcare staff. Built with TypeScript, Express 5, SQLite, and vanilla JS.
 
 ---
 
@@ -22,7 +22,7 @@
 - **Configurable registration** — administrator controls three levels for self-registration and user invitations.
 - **30-day data retention** — task data is automatically deleted after 30 days.
 - **Health-check endpoint** — `GET /readyz` returns a JSON status response for uptime/heartbeat monitoring.
-- **Asset version endpoint** — `GET /api/version` returns `{"version":"1.9.2"}` for client-side cache-busting.
+- **Asset version endpoint** — `GET /api/version` returns `{"version":"1.11.0"}` for client-side cache-busting.
 
 ---
 
@@ -101,7 +101,7 @@ src/
     admin.ts              /api/admin/* — stats, users, pending-users, approve, settings, backup, restore, user-groups, pending-groups
 
   __tests__/
-    security.test.ts      52-test negative security suite (CSRF, IDOR, SQLi, XSS, input validation, resource exhaustion, error handling)
+    security.test.ts      241-test negative security suite (CSRF, IDOR, SQLi, XSS, input validation, resource exhaustion, error handling, session fixation, SMTP sanitisation, option allowlist)
     helpers/testApp.ts    Isolated Express app + test-user helpers for jest/supertest
 
 public/
@@ -127,19 +127,24 @@ docs/
 ## Security
 
 - CSRF tokens on all mutating requests (`X-CSRF-Token` header)
-- Rate limiting: auth 20/15 min, API 200/min
+- Rate limiting: auth 20/15 min, API 200/min (including `/readyz` health-check)
 - bcrypt cost factor 12 for passwords
 - Account lockout after repeated failed login attempts
 - Friendly error messages on failed login (username/password invalid)
 - HTTP-only, SameSite=strict session cookies
 - 30-minute idle session timeout + midnight session expiry
+- **Session ID regeneration** on successful login and after 2FA verification (prevents session fixation)
 - Helmet.js security headers
-- Parameterised SQL queries throughout
+- Parameterised SQL queries throughout; explicit allowlist for any dynamic column names
 - Path validation on DB restore endpoint
 - Automatic HTTPS when certificates are present
-- `/readyz` health-check endpoint is unauthenticated but returns no sensitive data
+- `/readyz` health-check endpoint is unauthenticated but rate-limited and returns no sensitive data
 - `safeId()` helper sanitises combobox container IDs before insertion into inline event handlers
-- 52-test negative security suite covering CSRF, IDOR, SQL injection, XSS, input validation, resource exhaustion, and error handling (`npm test`)
+- SMTP error details logged server-side only; clients receive generic safe messages
+- **Constant-time comparison** for MFA code verification (prevents timing attacks)
+- Unapproved dropdown options are rejected when users update their personal option list
+- Global error handler prevents accidental stack-trace leakage on unexpected errors
+- 241-test negative security suite covering CSRF, IDOR, SQL injection, XSS, input validation, resource exhaustion, error handling, session fixation, SMTP sanitisation, and option validation (`npm test`)
 
 ---
 
@@ -150,6 +155,23 @@ See [`/policy`](/policy) for the full Data and Use Policy.
 ---
 
 ## Changelog
+
+### v1.11.0 (April 2026) — Final UI & functional verification
+
+- **Full UI and functional check** — all routes, middleware, SPA views, and user flows reviewed end-to-end. No functional regressions found. All 241 tests pass; TypeScript compiles with zero errors.
+- **Version bump** — Version number incremented to 1.11.0; all page footers and documentation updated accordingly.
+
+### v1.10.0 (April 2026) — Security hardening
+
+- **Session fixation prevention** — The session ID is now regenerated (`req.session.regenerate()`) immediately after successful credential validation on both the standard login path and after 2FA code verification. This eliminates the session fixation attack vector.
+- **SMTP error sanitisation** — Raw `nodemailer` error messages (which can contain SMTP host names, port numbers, and authentication failure details) are no longer forwarded to clients. All email-delivery failures now return a generic "SMTP error" message. The full error is logged server-side only.
+- **Global error handler** — An Express error-handling middleware has been added as the last registered middleware in `server.ts`. Any unexpected synchronous or asynchronous error is caught, logged, and returned as a generic 500 JSON response, preventing accidental stack-trace or path leakage.
+- **MFA constant-time comparison** — The 6-digit 2FA code is now compared using `crypto.timingSafeEqual()` instead of a plain string equality check, eliminating a theoretical timing side-channel.
+- **User option allowlist enforcement** — `PUT /api/auth/my-options` now validates that every submitted option ID corresponds to an `approved=1` dropdown option. Unapproved IDs are silently discarded. Previously a user could pin an unapproved (pending) option to their account.
+- **`/readyz` rate-limited** — The health-check endpoint now sits behind the same `apiLimiter` (200 req/min per IP) as all other public endpoints, preventing it from being used as an open amplification target.
+- **Column-name allowlist in `common-fields`** — The `topN` helper in `GET /api/tasks/common-fields` now includes an explicit `ALLOWED_FIELDS` Set guard before interpolating column names into SQL, providing defence-in-depth against any future refactoring that might pass user input to the function.
+- **Security test suite expanded** — 7 additional tests added (session fixation, SMTP sanitisation ×3, option allowlist ×2) bringing the total to 241 negative security tests.
+- **Version bump** — Version number incremented to 1.10.0.
 
 ### v1.9.1 (April 2026)
 
