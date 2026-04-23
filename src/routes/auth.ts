@@ -118,6 +118,9 @@ router.post('/login', validateCsrf, async (req: Request, res: Response) => {
   if (user.is_admin === 1 && user.mfa_enabled === 1) {
     const code = String(crypto.randomInt(100000, 999999));
     const expiry = Date.now() + 10 * 60 * 1000; // 10 minutes
+
+    // Regenerate session to prevent session fixation before storing MFA state
+    await new Promise<void>((resolve, reject) => req.session.regenerate(err => err ? reject(err) : resolve()));
     const s = req.session as any;
     s.mfaPendingUserId = user.id;
     s.mfaCode = code;
@@ -140,13 +143,16 @@ router.post('/login', validateCsrf, async (req: Request, res: Response) => {
         `Your Tasker admin login verification code is:\n\n  ${code}\n\nThis code expires in 10 minutes. Do not share it with anyone.`,
       );
     } catch (e: any) {
-      res.status(503).json({ error: `Could not send 2FA code: ${e?.message || 'SMTP error'}` });
+      console.error('[Tasker] 2FA email error:', e);
+      res.status(503).json({ error: 'Could not send 2FA code (SMTP error). Please contact the administrator.' });
       return;
     }
     res.json({ requires2fa: true });
     return;
   }
 
+  // Regenerate session to prevent session fixation
+  await new Promise<void>((resolve, reject) => req.session.regenerate(err => err ? reject(err) : resolve()));
   const s = req.session as any;
   s.userId = user.id;
   s.isAdmin = user.is_admin === 1;
@@ -182,7 +188,15 @@ router.post('/verify-2fa', validateCsrf, async (req: Request, res: Response) => 
   }
   const { code } = req.body as { code: string };
   s.mfaAttempts = (s.mfaAttempts || 0) + 1;
-  if (!code || code.trim() !== s.mfaCode) {
+
+  // Constant-time comparison to prevent timing attacks on the 6-digit code
+  const inputCode = Buffer.from((code || '').trim().padEnd(6));
+  const expectedCode = Buffer.from(s.mfaCode.padEnd(6));
+  const codeMatch = inputCode.length === expectedCode.length &&
+    crypto.timingSafeEqual(inputCode, expectedCode) &&
+    (code || '').trim().length > 0;
+
+  if (!codeMatch) {
     if (s.mfaAttempts >= 5) {
       delete s.mfaPendingUserId; delete s.mfaCode; delete s.mfaCodeExpiry; delete s.mfaAttempts;
       res.status(401).json({ error: 'Too many incorrect attempts. Please log in again.' });
@@ -194,17 +208,23 @@ router.post('/verify-2fa', validateCsrf, async (req: Request, res: Response) => 
   }
 
   const db = getDb();
-  const user = db.prepare('SELECT * FROM users WHERE id=?').get(s.mfaPendingUserId) as any;
-  delete s.mfaPendingUserId; delete s.mfaCode; delete s.mfaCodeExpiry; delete s.mfaAttempts;
-  if (!user) { res.status(404).json({ error: 'User not found.' }); return; }
+  const pendingUserId = s.mfaPendingUserId;
+  const user = db.prepare('SELECT * FROM users WHERE id=?').get(pendingUserId) as any;
+  if (!user) {
+    delete s.mfaPendingUserId; delete s.mfaCode; delete s.mfaCodeExpiry; delete s.mfaAttempts;
+    res.status(404).json({ error: 'User not found.' }); return;
+  }
 
-  s.userId = user.id;
-  s.isAdmin = user.is_admin === 1;
-  s.mustChangePassword = user.must_change_password === 1;
-  s.pendingActivation = user.must_change_password === 0 && user.pending_activation === 1;
-  s.lastActivity = Date.now();
-  s.sessionDate = new Date().toISOString().split('T')[0];
-  s.csrfToken = crypto.randomBytes(32).toString('hex');
+  // Regenerate session to prevent session fixation after successful 2FA
+  await new Promise<void>((resolve, reject) => req.session.regenerate(err => err ? reject(err) : resolve()));
+  const newS = req.session as any;
+  newS.userId = user.id;
+  newS.isAdmin = user.is_admin === 1;
+  newS.mustChangePassword = user.must_change_password === 1;
+  newS.pendingActivation = user.must_change_password === 0 && user.pending_activation === 1;
+  newS.lastActivity = Date.now();
+  newS.sessionDate = new Date().toISOString().split('T')[0];
+  newS.csrfToken = crypto.randomBytes(32).toString('hex');
   logEvent('user_login');
   const groupInfo = db.prepare(
     'SELECT u.user_group_id, ug.name as user_group_name FROM users u LEFT JOIN user_groups ug ON ug.id=u.user_group_id WHERE u.id=?'
@@ -250,7 +270,8 @@ router.post('/resend-2fa', validateCsrf, async (req: Request, res: Response) => 
     );
     res.json({ success: true });
   } catch (e: any) {
-    res.status(503).json({ error: `Could not resend code: ${e?.message || 'SMTP error'}` });
+    console.error('[Tasker] Resend 2FA email error:', e);
+    res.status(503).json({ error: 'Could not resend code (SMTP error). Please contact the administrator.' });
   }
 });
 
@@ -363,10 +384,22 @@ router.put('/my-options', requireAuth, requirePasswordChange, requireActivation,
   const { option_ids } = req.body as { option_ids: number[] };
   if (!Array.isArray(option_ids)) { res.status(400).json({ error: 'option_ids must be an array.' }); return; }
   const db = getDb();
+  const numericIds = option_ids.map(Number).filter(n => Number.isInteger(n) && n > 0);
+  // Validate all IDs are approved dropdown options; silently discard any that are not
+  let approvedIds: Set<number> = new Set();
+  if (numericIds.length > 0) {
+    const placeholders = numericIds.map(() => '?').join(',');
+    approvedIds = new Set(
+      (db.prepare(`SELECT id FROM dropdown_options WHERE id IN (${placeholders}) AND approved=1`).all(...numericIds) as { id: number }[])
+        .map(r => r.id)
+    );
+  }
   db.transaction(() => {
     db.prepare('DELETE FROM user_dropdown_options WHERE user_id=?').run(s.userId);
     const ins = db.prepare('INSERT OR IGNORE INTO user_dropdown_options (user_id, dropdown_option_id) VALUES (?,?)');
-    for (const optId of option_ids) ins.run(s.userId, Number(optId));
+    for (const optId of numericIds) {
+      if (approvedIds.has(optId)) ins.run(s.userId, optId);
+    }
   })();
   logEvent('user_options_updated');
   res.json({ success: true });
@@ -413,7 +446,8 @@ router.post('/feedback', requireAuth, requirePasswordChange, requireActivation, 
     );
     res.json({ message: 'Your feedback has been sent. Thank you!' });
   } catch (e: any) {
-    res.status(503).json({ error: `Could not send feedback: ${e?.message || 'SMTP error'}` });
+    console.error('[Tasker] Feedback email error:', e);
+    res.status(503).json({ error: 'Could not send feedback (SMTP error). Please contact the administrator.' });
   }
 });
 

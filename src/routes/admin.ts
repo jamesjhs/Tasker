@@ -300,7 +300,8 @@ router.post('/smtp/test', validateCsrf, async (_req: Request, res: Response) => 
     await sendEmail('Tasker SMTP test', 'This is a test email from Tasker confirming your SMTP settings are working correctly.');
     res.json({ success: true });
   } catch (e: any) {
-    res.status(503).json({ error: e?.message || 'SMTP test failed.' });
+    console.error('[Tasker] SMTP test error:', e);
+    res.status(503).json({ error: 'SMTP test failed. Check server logs and verify your SMTP settings.' });
   }
 });
 

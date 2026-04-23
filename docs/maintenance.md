@@ -1,6 +1,6 @@
 # Tasker — Maintenance and Troubleshooting Manual
 
-**Version 1.9.2 — April 2026**
+**Version 1.10.0 — April 2026**
 
 ---
 
@@ -450,6 +450,10 @@ sudo systemctl restart tasker
 ```
 
 For major version updates, test in a non-production environment first.
+
+### Known dependency advisory
+
+The `uuid` package (used transitively by `exceljs`) has a moderate advisory (GHSA-w5hq-g745-h8pq) affecting the `v3`/`v5`/`v6` UUID generation functions when a caller-supplied `buf` parameter is provided. `exceljs` uses only `uuidv4()` without a `buf` parameter, so this code path is never reached and the practical risk is zero. The advisory is tracked and will be resolved when `exceljs` releases an update that pins a safe version of `uuid`.
 
 ### Rate limiting
 

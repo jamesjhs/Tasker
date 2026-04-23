@@ -20,6 +20,7 @@ import messagesRouter from './routes/messages';
 import reviewRouter from './routes/review';
 
 import { version as APP_VERSION } from '../package.json';
+import type { NextFunction } from 'express';
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const SqliteStoreFactory = require('better-sqlite3-session-store');
@@ -74,7 +75,7 @@ const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 20, skipSuccessfu
 const apiLimiter = rateLimit({ windowMs: 60 * 1000, max: 200, standardHeaders: true, legacyHeaders: false });
 
 // ─── Health-check endpoint (exempt from auth) ─────────────────────────────────
-app.get('/readyz', (_req, res) => {
+app.get('/readyz', apiLimiter, (_req, res) => {
   res.json({ ok: true, service: 'Tasker', version: APP_VERSION, timestamp: new Date().toISOString() });
 });
 
@@ -128,6 +129,16 @@ app.use('/suggest/review', apiLimiter, reviewRouter);
 app.get('/{*path}', apiLimiter, (_req, res) => {
   res.setHeader('Cache-Control', 'no-cache');
   res.sendFile(path.join(__dirname, '..', 'public', 'index.html'));
+});
+
+// ─── Global error handler (must be after all routes) ─────────────────────────
+// Catches any unhandled sync/async errors and prevents stack-trace leakage.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+app.use((err: unknown, _req: express.Request, res: express.Response, _next: NextFunction) => {
+  console.error('[Tasker] Unhandled error:', err);
+  if (!res.headersSent) {
+    res.status(500).json({ error: 'An internal error occurred.' });
+  }
 });
 
 // ─── 30-day data retention job ────────────────────────────────────────────────

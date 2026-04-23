@@ -174,10 +174,13 @@ router.get('/', (req: Request, res: Response) => {
 router.get('/common-fields', (req: Request, res: Response) => {
   const s = req.session as any;
   const db = getDb();
-  const topN = (field: string, limit: number): string[] =>
-    (db.prepare(
+  const ALLOWED_FIELDS = new Set(['category', 'subcategory', 'outcome']);
+  const topN = (field: string, limit: number): string[] => {
+    if (!ALLOWED_FIELDS.has(field)) return [];
+    return (db.prepare(
       `SELECT ${field}, COUNT(*) as cnt FROM tasks WHERE user_id=? AND ${field} IS NOT NULL AND status='completed' AND start_time >= datetime('now', '-30 days') GROUP BY ${field} ORDER BY cnt DESC LIMIT ?`
     ).all(s.userId, limit) as any[]).map(r => r[field]);
+  };
   res.json({
     category:    topN('category', 6),
     subcategory: topN('subcategory', 6),
