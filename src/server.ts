@@ -30,10 +30,9 @@ const PORT = process.env['PORT'] || 3020;
 const SESSION_SECRET = process.env['SESSION_SECRET'] || crypto.randomBytes(64).toString('hex');
 
 // ─── SSL configuration ────────────────────────────────────────────────────────
-const SSL_CERT_DIR = process.env['SSL_CERT_DIR'] || '/etc/letsencrypt/live/jahosi.co.uk';
-const SSL_CERT = process.env['SSL_CERT'] || path.join(SSL_CERT_DIR, 'fullchain.pem');
-const SSL_KEY  = process.env['SSL_KEY']  || path.join(SSL_CERT_DIR, 'privkey.pem');
-const useHttps = fs.existsSync(SSL_CERT) && fs.existsSync(SSL_KEY);
+const useHttps = process.env['USE_HTTPS'] === 'true';
+const SSL_CERT = process.env['SSL_CERT'] || '';
+const SSL_KEY  = process.env['SSL_KEY']  || '';
 
 // ─── Security headers ─────────────────────────────────────────────────────────
 app.use(helmet({
@@ -144,6 +143,14 @@ setInterval(runRetention, 24 * 60 * 60 * 1000);
 // ─── Start ────────────────────────────────────────────────────────────────────
 getDb();
 if (useHttps) {
+  if (!SSL_CERT || !SSL_KEY) {
+    console.error('USE_HTTPS=true but SSL_CERT or SSL_KEY are not set. Aborting.');
+    process.exit(1);
+  }
+  if (!fs.existsSync(SSL_CERT) || !fs.existsSync(SSL_KEY)) {
+    console.error(`USE_HTTPS=true but certificate file(s) not found (SSL_CERT=${SSL_CERT}, SSL_KEY=${SSL_KEY}). Aborting.`);
+    process.exit(1);
+  }
   const tlsOptions = {
     cert: fs.readFileSync(SSL_CERT),
     key:  fs.readFileSync(SSL_KEY),
@@ -153,7 +160,7 @@ if (useHttps) {
   );
 } else {
   http.createServer(app).listen(PORT, () =>
-    console.log(`Tasker running on port ${PORT} (HTTP – no SSL certs found)`),
+    console.log(`Tasker running on port ${PORT} (HTTP)`),
   );
 }
 export default app;
