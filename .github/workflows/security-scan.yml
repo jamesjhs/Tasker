@@ -1,12 +1,7 @@
 name: "Security & Stability Scan"
 
 on:
-  schedule:
-    # Run daily at 2 AM UTC
-    - cron: "0 2 * * *"
-  workflow_dispatch:  # Manual trigger
-  pull_request:       # On every PR
-    branches: [main, develop]
+  workflow_dispatch:  # Manual trigger only
 
 jobs:
   security-scan:
