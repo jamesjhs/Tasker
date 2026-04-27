@@ -5,6 +5,7 @@
 
 // ── State ───────────────────────────────────────────────────────────────────
 const INACTIVITY_MS = 30 * 60 * 1000; // 30 minutes
+const WARN_MS       =  5 * 60 * 1000; // 5 minutes — inactivity warning overlay
 const VERSION_CHECK_DEBOUNCE_MS = 60 * 1000; // 60 seconds — min gap between version checks
 const VERSION_POLL_INTERVAL_MS  = 5 * 60 * 1000; // 5 minutes — background version poll
 
@@ -51,6 +52,7 @@ const state = {
 let _popstateActive = false;
 let _groupSelectionCb = null; // callback after group selection completes
 let _myOptionsCb = null;      // callback after personal options step completes
+let _inactivityWarnEl = null; // DOM element for the inactivity warning overlay
 
 function pushHistory(view) {
   if (_popstateActive || window.history.state?.view === view) return;
@@ -326,7 +328,32 @@ function stopTimer() {
 }
 
 // ── Inactivity / activity tracking ──────────────────────────────────────────
+function showInactivityWarning(lastActiveMs) {
+  if (_inactivityWarnEl) return; // already visible
+  const d = new Date(lastActiveMs);
+  const hh = String(d.getHours()).padStart(2, '0');
+  const mm = String(d.getMinutes()).padStart(2, '0');
+  const el = document.createElement('div');
+  el.id = 'inactivity-warn';
+  el.className = 'inactivity-warn';
+  el.textContent = `App last used: ${hh}:${mm}`;
+  document.body.appendChild(el);
+  _inactivityWarnEl = el;
+}
+
+function dismissInactivityWarning() {
+  if (_inactivityWarnEl) { _inactivityWarnEl.remove(); _inactivityWarnEl = null; }
+}
+
 function updateLastActive() {
+  if (state.user) {
+    const last = getLastActive();
+    // If the user interacts after the session has already expired, treat this
+    // interaction as the trigger to run the expiry flow rather than silently
+    // resetting the clock.
+    if (last && Date.now() - last >= INACTIVITY_MS) { forceSessionExpiry(); return; }
+  }
+  dismissInactivityWarning();
   try { localStorage.setItem('tasker_last_active', Date.now().toString()); } catch(e) {}
 }
 
@@ -347,6 +374,7 @@ function startActivityTracking() {
 }
 
 function stopActivityTracking() {
+  dismissInactivityWarning();
   if (state.activityInterval) { clearInterval(state.activityInterval); state.activityInterval = null; }
   if (state.inactivityCheckInterval) { clearInterval(state.inactivityCheckInterval); state.inactivityCheckInterval = null; }
   if (state.versionPollInterval) { clearInterval(state.versionPollInterval); state.versionPollInterval = null; }
@@ -387,16 +415,19 @@ function renderInactivityLogout() {
   </div>`;
 }
 
-async function returnToLogin() {
-  try { await refreshCsrf(); } catch(e) {}
-  await renderLogin();
+function returnToLogin() {
+  location.reload();
 }
 
 function checkClientInactivity() {
   if (!state.user) return;
   const last = getLastActive();
-  if (last && Date.now() - last > INACTIVITY_MS) {
+  if (!last) return;
+  const elapsed = Date.now() - last;
+  if (elapsed >= INACTIVITY_MS) {
     forceSessionExpiry();
+  } else if (elapsed >= WARN_MS) {
+    showInactivityWarning(last);
   }
 }
 
@@ -999,6 +1030,9 @@ async function renderLanding() {
 async function renderLogin() {
   stopTimer(); stopActivityTracking(); clearCharts(); state.currentView = 'login';
   replaceHistory('login');
+  // Always fetch a fresh CSRF token so the login form works on the first attempt
+  // regardless of how renderLogin() was reached (inactivity expiry, 401, etc.).
+  try { await refreshCsrf(); } catch(e) {}
   // Force a refresh of the local SW cache so stale assets can't cause CSRF token mismatches
   if ('caches' in window) {
     try { await Promise.all((await caches.keys()).map(k => caches.delete(k))); } catch(e) {}

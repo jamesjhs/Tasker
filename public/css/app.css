@@ -576,6 +576,23 @@ a:hover { text-decoration: underline; }
   font-weight: 600;
 }
 
+/* ── Inactivity warning overlay ───────────────────────────────────── */
+.inactivity-warn {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 400;
+  background: rgba(254, 243, 199, 0.97);
+  border-top: 2px solid #f59e0b;
+  color: #78350f;
+  font-size: 0.9rem;
+  font-weight: 600;
+  text-align: center;
+  padding: 10px 16px;
+  pointer-events: none;
+}
+
 /* ── App update banner ────────────────────────────────────────────── */
 #update-banner {
   position: fixed;
