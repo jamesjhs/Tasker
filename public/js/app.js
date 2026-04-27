@@ -4156,6 +4156,14 @@ document.addEventListener('DOMContentLoaded', () => {
 // ── Inactivity event hooks ────────────────────────────────────────────────────
 window.addEventListener('beforeunload', () => { updateLastActive(); });
 
+// Belt-and-suspenders catch-all: visibilitychange covers tab switches and most
+// mobile foreground/background transitions, but window focus covers the case
+// where the browser window regains focus from another application (or after a
+// screen-lock / wake cycle on some platforms) without the tab visibility
+// changing.  Both ultimately call the same checkClientInactivity() so there is
+// no double-expiry risk — forceSessionExpiry() is guarded by _sessionExpiryInProgress.
+window.addEventListener('focus', () => { checkClientInactivity(); });
+
 document.addEventListener('visibilitychange', async () => {
   if (document.hidden) {
     updateLastActive();
