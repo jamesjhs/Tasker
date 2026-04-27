@@ -1,6 +1,6 @@
 # Tasker
 
-**v1.11.1** — An anonymous task-logging PWA for healthcare staff. Built with TypeScript, Express 5, SQLite, and vanilla JS.
+**v1.12.0** — An anonymous task-logging PWA for healthcare staff. Built with TypeScript, Express 5, SQLite, and vanilla JS.
 
 ---
 
@@ -22,7 +22,7 @@
 - **Configurable registration** — administrator controls three levels for self-registration and user invitations.
 - **30-day data retention** — task data is automatically deleted after 30 days.
 - **Health-check endpoint** — `GET /readyz` returns a JSON status response for uptime/heartbeat monitoring.
-- **Asset version endpoint** — `GET /api/version` returns `{"version":"1.11.1"}` for client-side cache-busting.
+- **Asset version endpoint** — `GET /api/version` returns `{"version":"1.12.0"}` for client-side cache-busting.
 
 ---
 
@@ -132,7 +132,7 @@ docs/
 - Account lockout after repeated failed login attempts
 - Friendly error messages on failed login (username/password invalid)
 - HTTP-only, SameSite=strict session cookies
-- 30-minute idle session timeout + midnight session expiry
+- 30-minute idle session timeout with a **5-minute inactivity warning** + midnight session expiry
 - **Session ID regeneration** on successful login and after 2FA verification (prevents session fixation)
 - Helmet.js security headers
 - Parameterised SQL queries throughout; explicit allowlist for any dynamic column names
@@ -155,6 +155,16 @@ See [`/policy`](/policy) for the full Data and Use Policy.
 ---
 
 ## Changelog
+
+### v1.12.0 (April 2026) — Session inactivity warning overlay
+
+- **Inactivity warning overlay** — After 5 minutes of no interaction a slim amber strip appears at the bottom of the screen showing "App last used: HH:MM". Any interaction (tap, key press, scroll) immediately dismisses it and resets the inactivity clock. The overlay has no interactive controls of its own (`pointer-events: none`) so the underlying app remains fully usable without a separate dismiss step. Correct iOS safe-area padding is applied so the strip never covers the home-indicator gesture bar.
+- **Interaction-triggered expiry** — If a user interacts with the app after the full 30-minute idle timeout has already elapsed (e.g. returning from a long background tab that missed the periodic check), the interaction itself immediately triggers the session-expiry flow instead of silently extending the clock.
+- **Stale-token fix** — "Log in again" after an inactivity logout now performs a full `location.reload()` rather than an in-place re-render. This guarantees a fresh CSRF token and clean client state, eliminating the *second attempt needed* bug on return-to-login.
+- **`renderLogin()` CSRF refresh** — `renderLogin()` now unconditionally fetches a fresh CSRF token before rendering, covering the 401-redirect code path that bypasses `returnToLogin()`.
+- **Bug fix: immediate re-expiry on fresh login** — `startActivityTracking()` previously called `updateLastActive()` at startup, which (with the new expiry-trigger guard) would immediately call `forceSessionExpiry()` if a stale `tasker_last_active` timestamp from a prior session was still in localStorage. Fixed: the session baseline is now stamped directly without running the expiry check.
+- **Bug fix: double forceSessionExpiry invocation** — Added a `_sessionExpiryInProgress` guard flag to prevent `forceSessionExpiry()` from being entered a second time from a `visibilitychange` event that fires between `stopActivityTracking()` and `state.user = null`.
+- **Version bump** — Version number incremented to 1.12.0; all page footers and documentation updated accordingly.
 
 ### v1.11.1 (April 2026) — Final UI & functional verification
 

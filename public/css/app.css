@@ -590,6 +590,8 @@ a:hover { text-decoration: underline; }
   font-weight: 600;
   text-align: center;
   padding: 10px 16px;
+  /* Ensure the strip clears the iOS home-indicator / gesture bar in PWA mode */
+  padding-bottom: max(10px, env(safe-area-inset-bottom));
   pointer-events: none;
 }
 

@@ -52,7 +52,8 @@ const state = {
 let _popstateActive = false;
 let _groupSelectionCb = null; // callback after group selection completes
 let _myOptionsCb = null;      // callback after personal options step completes
-let _inactivityWarnEl = null; // DOM element for the inactivity warning overlay
+let _inactivityWarnEl = null;       // DOM element for the inactivity warning overlay
+let _sessionExpiryInProgress = false; // guard against double-invocation of forceSessionExpiry
 
 function pushHistory(view) {
   if (_popstateActive || window.history.state?.view === view) return;
@@ -365,7 +366,10 @@ const ACTIVITY_EVENTS = ['click', 'touchstart', 'keydown', 'scroll'];
 
 function startActivityTracking() {
   stopActivityTracking();
-  updateLastActive();
+  // Stamp the current time as the baseline for this session without running
+  // the expiry check — prevents a stale localStorage value from a previous
+  // session triggering an immediate re-expiry right after a fresh login.
+  try { localStorage.setItem('tasker_last_active', Date.now().toString()); } catch(e) {}
   state.activityInterval = setInterval(updateLastActive, 60000);
   ACTIVITY_EVENTS.forEach(evt => document.addEventListener(evt, updateLastActive, { passive: true }));
   state.inactivityCheckInterval = setInterval(checkClientInactivity, 60000);
@@ -382,6 +386,8 @@ function stopActivityTracking() {
 }
 
 async function forceSessionExpiry() {
+  if (_sessionExpiryInProgress) return;
+  _sessionExpiryInProgress = true;
   stopActivityTracking();
   try {
     await fetch('/api/auth/logout', {
