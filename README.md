@@ -1,6 +1,6 @@
 # Tasker
 
-**v1.12.0** — An anonymous task-logging PWA for healthcare staff. Built with TypeScript, Express 5, SQLite, and vanilla JS.
+**v1.12.1** — An anonymous task-logging PWA for healthcare staff. Built with TypeScript, Express 5, SQLite, and vanilla JS.
 
 ---
 
@@ -22,7 +22,7 @@
 - **Configurable registration** — administrator controls three levels for self-registration and user invitations.
 - **30-day data retention** — task data is automatically deleted after 30 days.
 - **Health-check endpoint** — `GET /readyz` returns a JSON status response for uptime/heartbeat monitoring.
-- **Asset version endpoint** — `GET /api/version` returns `{"version":"1.12.0"}` for client-side cache-busting.
+- **Asset version endpoint** — `GET /api/version` returns `{"version":"1.12.1"}` for client-side cache-busting.
 
 ---
 
@@ -155,6 +155,11 @@ See [`/policy`](/policy) for the full Data and Use Policy.
 ---
 
 ## Changelog
+
+### v1.12.1 (April 2026) — Window-focus session-expiry catch-all
+
+- **Refocus expiry check** — Added a `window.focus` event listener as a belt-and-suspenders complement to the existing `visibilitychange` listener. When the browser window regains focus from another application (or after a screen-lock/wake cycle on platforms where `visibilitychange` does not fire), the session-expiry check now runs immediately, redirecting users to the login screen if the 30-minute inactivity timeout has elapsed.
+- **Version bump** — Version number incremented to 1.12.1; all page footers and documentation updated accordingly.
 
 ### v1.12.0 (April 2026) — Session inactivity warning overlay
 
