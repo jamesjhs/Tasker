@@ -434,6 +434,8 @@ function checkClientInactivity() {
     forceSessionExpiry();
   } else if (elapsed >= WARN_MS) {
     showInactivityWarning(last);
+  } else {
+    dismissInactivityWarning();
   }
 }
 
