@@ -1,6 +1,6 @@
 # Tasker
 
-**v1.12.2** — An anonymous task-logging PWA for healthcare staff. Built with TypeScript, Express 5, SQLite, and vanilla JS.
+**v1.12.3** — An anonymous task-logging PWA for healthcare staff. Built with TypeScript, Express 5, SQLite, and vanilla JS.
 
 ---
 
@@ -22,7 +22,7 @@
 - **Configurable registration** — administrator controls three levels for self-registration and user invitations.
 - **30-day data retention** — task data is automatically deleted after 30 days.
 - **Health-check endpoint** — `GET /readyz` returns a JSON status response for uptime/heartbeat monitoring.
-- **Asset version endpoint** — `GET /api/version` returns `{"version":"1.12.2"}` for client-side cache-busting.
+- **Asset version endpoint** — `GET /api/version` returns `{"version":"1.12.3"}` for client-side cache-busting.
 
 ---
 
@@ -155,6 +155,15 @@ See [`/policy`](/policy) for the full Data and Use Policy.
 ---
 
 ## Changelog
+
+### v1.12.3 (April 2026) — Inactivity system deep-fix
+
+- **Bug fix: `activityInterval` silently reset the inactivity clock every 60 s** — `startActivityTracking()` was calling `setInterval(updateLastActive, 60000)`. `updateLastActive()` writes `Date.now()` to localStorage, so the "last active" timestamp was unconditionally refreshed every minute regardless of user activity. This meant the 5-minute warning and 30-minute logout thresholds could almost never accumulate; whether they fired at all was a timing race between the interval and `inactivityCheckInterval`, explaining the intermittent/non-deterministic behaviour. Removed the `activityInterval` entirely. The clock is now only advanced by real user interaction (the `ACTIVITY_EVENTS` listeners) and `inactivityCheckInterval` (every 60 s) reliably reads the true elapsed idle time.
+- **Bug fix: tab-hide path reset the inactivity clock** — The async `visibilitychange` handler called `updateLastActive()` when `document.hidden` became `true` (i.e. the user switched away from the tab). This stamped "the moment you left" as the last-active time. Consequence: idle 20 min, switch tab — clock reset; return 5 min later — system sees 5 min idle, not 25 min; warning/logout never fires. Removed the `updateLastActive()` call from the hidden path entirely; the clock only moves on user interaction.
+- **Bug fix: two competing `visibilitychange` handlers** — A simple synchronous handler (line 443) and a complex async handler (line 4169) both responded to the same event. The simple handler correctly called `checkClientInactivity()` to show the banner; the async handler then called `updateLastActive()` which immediately dismissed it. Merged into a single canonical async handler: the duplicate simple handler has been removed and `checkClientInactivity()` (plus a `_sessionExpiryInProgress` guard) is now called at the top of the async handler.
+- **Bug fix: `updateLastActive()` dismissed the banner it had just shown** — Inside the interruption-check block for non-admin active-task users, `updateLastActive()` was called after `checkInactivityInterruption()`. `updateLastActive()` calls `dismissInactivityWarning()`, so any banner shown by `checkClientInactivity()` a few lines earlier was immediately removed. Removed `updateLastActive()` from this return-to-app path; the clock is reset naturally when the user next interacts via `ACTIVITY_EVENTS`.
+- **Net behaviour** — 30 min of uninterrupted idleness now reliably auto-redirects to the login screen; 5 min of idleness reliably shows the "App last used" ticker; any interaction dismisses the ticker and resets the clock; returning to the tab without interacting leaves the ticker visible until the user touches something.
+- **Version bump** — Version number incremented to 1.12.3; all page footers and documentation updated accordingly.
 
 ### v1.12.2 (April 2026) — Fix inactivity warning banner not dismissing on refocus
 

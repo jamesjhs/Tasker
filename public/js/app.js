@@ -16,7 +16,6 @@ const state = {
   appStats: null,       // { userCount, taskCount }
   activeTask: null,     // current in_progress task
   timerInterval: null,
-  activityInterval: null,
   inactivityCheckInterval: null,
   versionPollInterval: null,
   interruptStart: null, // ISO string set when interrupt modal opens
@@ -370,7 +369,6 @@ function startActivityTracking() {
   // the expiry check — prevents a stale localStorage value from a previous
   // session triggering an immediate re-expiry right after a fresh login.
   try { localStorage.setItem('tasker_last_active', Date.now().toString()); } catch(e) {}
-  state.activityInterval = setInterval(updateLastActive, 60000);
   ACTIVITY_EVENTS.forEach(evt => document.addEventListener(evt, updateLastActive, { passive: true }));
   state.inactivityCheckInterval = setInterval(checkClientInactivity, 60000);
   // Poll for new app versions every 5 minutes while the user is logged in.
@@ -379,7 +377,6 @@ function startActivityTracking() {
 
 function stopActivityTracking() {
   dismissInactivityWarning();
-  if (state.activityInterval) { clearInterval(state.activityInterval); state.activityInterval = null; }
   if (state.inactivityCheckInterval) { clearInterval(state.inactivityCheckInterval); state.inactivityCheckInterval = null; }
   if (state.versionPollInterval) { clearInterval(state.versionPollInterval); state.versionPollInterval = null; }
   ACTIVITY_EVENTS.forEach(evt => document.removeEventListener(evt, updateLastActive));
@@ -438,11 +435,6 @@ function checkClientInactivity() {
     dismissInactivityWarning();
   }
 }
-
-// When the page becomes visible again, immediately check if the session has expired
-document.addEventListener('visibilitychange', () => {
-  if (!document.hidden) checkClientInactivity();
-});
 
 async function checkInactivityInterruption() {
   if (!state.activeTask) return false;
@@ -4167,30 +4159,28 @@ window.addEventListener('beforeunload', () => { updateLastActive(); });
 window.addEventListener('focus', () => { checkClientInactivity(); });
 
 document.addEventListener('visibilitychange', async () => {
-  if (document.hidden) {
-    updateLastActive();
-  } else {
-    // On every foreground resume, check whether a new app version has been deployed.
-    // Throttled to once per 60 s to avoid redundant fetches when the user rapidly
-    // switches apps.  checkAssetVersion() itself records the timestamp, so the
-    // periodic poll (Option 2) and this path share the same cooldown.
-    if (Date.now() - _lastVersionCheckAt > VERSION_CHECK_DEBOUNCE_MS) {
-      if (await checkAssetVersion()) return; // new version detected — update banner shown
-    }
-    if (state.user && !state.user.isAdmin && state.activeTask) {
-      try {
-        const interrupted = await checkInactivityInterruption();
-        updateLastActive();
-        if (interrupted) {
-          if (state.currentView === 'home') {
-            app().innerHTML = renderHomeHTML();
-          } else if (state.currentView === 'task-active') {
-            renderTaskActive();
-          }
+  if (document.hidden) return;
+  // Tab/app just became visible — check version then inactivity.
+  // Do NOT stamp the clock here; only user interaction (ACTIVITY_EVENTS → updateLastActive)
+  // should reset it.  That way the banner shown below persists until the user actually
+  // touches something, and the inactivity intervals accumulate real idle time.
+  if (Date.now() - _lastVersionCheckAt > VERSION_CHECK_DEBOUNCE_MS) {
+    if (await checkAssetVersion()) return; // new version detected — update banner shown
+  }
+  checkClientInactivity();
+  if (_sessionExpiryInProgress) return;
+  if (state.user && !state.user.isAdmin && state.activeTask) {
+    try {
+      const interrupted = await checkInactivityInterruption();
+      if (interrupted) {
+        if (state.currentView === 'home') {
+          app().innerHTML = renderHomeHTML();
+        } else if (state.currentView === 'task-active') {
+          renderTaskActive();
         }
-      } catch(e) {
-        console.error('[Tasker] Visibility change error:', e);
       }
+    } catch(e) {
+      console.error('[Tasker] Visibility change error:', e);
     }
   }
 });
