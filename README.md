@@ -1,6 +1,6 @@
 # Tasker
 
-**v1.12.3** — An anonymous task-logging PWA for healthcare staff. Built with TypeScript, Express 5, SQLite, and vanilla JS.
+**v1.12.4** — An anonymous task-logging PWA for healthcare staff. Built with TypeScript, Express 5, SQLite, and vanilla JS.
 
 ---
 
@@ -22,7 +22,7 @@
 - **Configurable registration** — administrator controls three levels for self-registration and user invitations.
 - **30-day data retention** — task data is automatically deleted after 30 days.
 - **Health-check endpoint** — `GET /readyz` returns a JSON status response for uptime/heartbeat monitoring.
-- **Asset version endpoint** — `GET /api/version` returns `{"version":"1.12.3"}` for client-side cache-busting.
+- **Asset version endpoint** — `GET /api/version` returns `{"version":"1.12.4"}` for client-side cache-busting.
 
 ---
 
@@ -155,6 +155,11 @@ See [`/policy`](/policy) for the full Data and Use Policy.
 ---
 
 ## Changelog
+
+### v1.12.4 (April 2026) — Version bump and technical manual update
+
+- **Technical manual (§12.6)** — Section 12.6 "Session Inactivity Tracking" rewritten to accurately describe the inactivity system as overhauled in v1.12.3: documents that the clock advances only on real user interaction (no passive background `activityInterval`), the single consolidated `visibilitychange` async handler (hide path no longer stamps the clock; show path calls `checkClientInactivity()` immediately before proceeding to interruption checks), and the `window.focus` belt-and-suspenders listener.
+- **Version bump** — Version number incremented to 1.12.4; all page footers and documentation updated accordingly.
 
 ### v1.12.3 (April 2026) — Inactivity system deep-fix
 
