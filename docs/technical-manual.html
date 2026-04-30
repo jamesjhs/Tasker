@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Tasker — Technical Reference Manual v1.12.0</title>
+  <title>Tasker — Technical Reference Manual v1.12.4</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; }
     body {
@@ -107,7 +107,7 @@
 <div class="page">
 
 <h1>Tasker — Technical Reference Manual</h1>
-<p class="subtitle">Version 1.12.0 &nbsp;·&nbsp; April 2026 &nbsp;·&nbsp; <em>Prepared in the role of Professor of Digital Engineering Product Design</em></p>
+<p class="subtitle">Version 1.12.4 &nbsp;·&nbsp; April 2026 &nbsp;·&nbsp; <em>Prepared in the role of Professor of Digital Engineering Product Design</em></p>
 
 <div class="toc">
   <h2>Table of Contents</h2>
@@ -529,14 +529,14 @@
 <p>Every view function calls <code>pushHistory(viewName)</code> or <code>replaceHistory(viewName)</code>, storing the view name in <code>window.history.state</code>. A <code>popstate</code> listener maps state names to render functions via <code>HISTORY_RENDER_MAP</code>, with auth guards preventing access to protected views when logged out.</p>
 
 <h3>12.6 Session Inactivity Tracking</h3>
-<p>Activity events (<code>click</code>, <code>touchstart</code>, <code>keydown</code>, <code>scroll</code>) update a <code>localStorage.tasker_last_active</code> timestamp via <code>updateLastActive()</code>. A 60-second interval also calls <code>updateLastActive()</code> to keep the timestamp current while the user is passively reading. A separate 60-second interval calls <code>checkClientInactivity()</code>, which implements a two-stage response:</p>
+<p>Activity events (<code>click</code>, <code>touchstart</code>, <code>keydown</code>, <code>scroll</code>) update a <code>localStorage.tasker_last_active</code> timestamp via <code>updateLastActive()</code>. The clock is advanced <strong>only</strong> by these real user interactions — there is no passive background timer resetting the timestamp. A 60-second interval (<code>state.inactivityCheckInterval</code>) calls <code>checkClientInactivity()</code>, which implements a two-stage response:</p>
 <ul>
   <li><strong>Warning stage (5–30 min idle).</strong> A slim amber strip (<code>.inactivity-warn</code>) is appended to <code>document.body</code> showing "App last used: HH:MM". It has <code>pointer-events: none</code> so the app remains fully interactive underneath. Any qualifying user event calls <code>updateLastActive()</code>, which dismisses the strip and resets the timestamp.</li>
   <li><strong>Expiry stage (≥30 min idle).</strong> <code>forceSessionExpiry()</code> is called: activity tracking is stopped, the server logout endpoint is called, client state is cleared, SW caches are deleted, and the inactivity screen is rendered. "Log in again" performs <code>location.reload()</code>, guaranteeing a fresh CSRF token and clean client state.</li>
   <li><strong>Interaction-triggered expiry.</strong> <code>updateLastActive()</code> also checks the elapsed time; if an event fires after the 30-minute deadline has passed, it calls <code>forceSessionExpiry()</code> immediately rather than silently resetting the clock.</li>
-  <li><strong>Guard flag.</strong> A <code>_sessionExpiryInProgress</code> boolean prevents <code>forceSessionExpiry()</code> from being entered a second time if a <code>visibilitychange</code> event fires between <code>stopActivityTracking()</code> and <code>state.user = null</code>.</li>
+  <li><strong>Guard flag.</strong> A <code>_sessionExpiryInProgress</code> boolean prevents <code>forceSessionExpiry()</code> from being entered a second time if a <code>visibilitychange</code> or <code>focus</code> event fires between <code>stopActivityTracking()</code> and <code>state.user = null</code>.</li>
 </ul>
-<p>The <code>visibilitychange</code> event triggers an immediate <code>checkClientInactivity()</code> call when the tab becomes visible, and also calls <code>checkAssetVersion()</code> (throttled to once per 60 s) so that users returning to a backgrounded PWA always receive the latest code. If a task was active during inactivity, the gap is automatically recorded as an interruption via <code>checkInactivityInterruption()</code>.</p>
+<p>A single consolidated async <code>visibilitychange</code> handler covers both tab-hide and tab-show transitions. On <strong>hide</strong>: no action is taken — the clock is left at the time of the last real user interaction so that the true idle duration continues to accumulate. On <strong>show</strong>: <code>checkAssetVersion()</code> is called first (throttled to once per 60 s); then <code>checkClientInactivity()</code> is called immediately so that the warning strip appears or the session expires as soon as the user returns, without waiting for the next 60-second interval tick; then, if expiry is not in progress and the user has an active task, any gap since the last interaction is recorded as an interruption via <code>checkInactivityInterruption()</code> and the UI is updated to reflect it. A <code>window.focus</code> listener provides belt-and-suspenders coverage for platform wake cycles where <code>visibilitychange</code> does not fire (e.g. screen-lock/wake on some mobile OSes, or switching from another native application on desktop).</p>
 
 <h3>12.7 Combobox Component</h3>
 <p>A custom searchable dropdown with: trigger button, search input, options list, and "Add new" row. Keyboard-navigable (arrow keys, Enter, Escape). Only one open at a time. The <code>filterCombo</code> function re-renders the options list on each keystroke.</p>
@@ -881,7 +881,7 @@ R²        = 1 - SS_res / SS_tot</code></pre>
 
 <hr>
 <p style="text-align:center;font-size:.85rem;color:#9ca3af;margin-top:40px">
-  Tasker Technical Reference Manual &nbsp;·&nbsp; v1.12.0 &nbsp;·&nbsp; April 2026<br>
+  Tasker Technical Reference Manual &nbsp;·&nbsp; v1.12.4 &nbsp;·&nbsp; April 2026<br>
   This document is stored in <code>docs/</code> and is not served by the application.
 </p>
 
