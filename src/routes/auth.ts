@@ -5,6 +5,7 @@ import { getDb, getSetting } from '../db';
 import { generateUsername } from '../words';
 import { requireAuth, validateCsrf, logEvent, requirePasswordChange, requireActivation } from '../middleware/index';
 import { sendEmail } from '../email';
+import { verifyTurnstileToken } from '../turnstile';
 
 const router = Router();
 const PASSWORD_RE = /^(?=.*[!@#$%^&*()\-_=+\[\]{};:'",.<>/?\\|`~]).{8,}$/;
@@ -13,6 +14,11 @@ router.get('/csrf-token', (req: Request, res: Response) => {
   const s = req.session as any;
   if (!s.csrfToken) s.csrfToken = crypto.randomBytes(32).toString('hex');
   res.json({ token: s.csrfToken });
+});
+
+router.get('/turnstile-config', (_req: Request, res: Response) => {
+  const siteKey = process.env['TURNSTILE_SITE_KEY'] || null;
+  res.json({ siteKey });
 });
 
 router.get('/registration-config', (_req: Request, res: Response) => {
@@ -34,7 +40,17 @@ router.post('/register', validateCsrf, async (req: Request, res: Response) => {
     res.status(403).json({ error: 'Self-registration is not enabled.' });
     return;
   }
-  const { password } = req.body as { password: string };
+  const { password, turnstileToken } = req.body as { password: string; turnstileToken: string };
+  
+  // Verify Turnstile token if configured
+  if (process.env['TURNSTILE_SECRET_KEY']) {
+    const turnstileResult = await verifyTurnstileToken(turnstileToken);
+    if (!turnstileResult.success) {
+      res.status(400).json({ error: 'CAPTCHA verification failed. Please try again.' });
+      return;
+    }
+  }
+  
   if (!password || !PASSWORD_RE.test(password)) {
     res.status(400).json({ error: 'Password must be at least 8 characters and include at least one special character.' });
     return;
@@ -80,7 +96,17 @@ router.post('/invite', requireAuth, validateCsrf, async (req: Request, res: Resp
 });
 
 router.post('/login', validateCsrf, async (req: Request, res: Response) => {
-  const { username, password } = req.body as { username: string; password: string };
+  const { username, password, turnstileToken } = req.body as { username: string; password: string; turnstileToken: string };
+  
+  // Verify Turnstile token if configured
+  if (process.env['TURNSTILE_SECRET_KEY']) {
+    const turnstileResult = await verifyTurnstileToken(turnstileToken);
+    if (!turnstileResult.success) {
+      res.status(400).json({ error: 'CAPTCHA verification failed. Please try again.' });
+      return;
+    }
+  }
+  
   if (!username || !password) { res.status(400).json({ error: 'Username and password required.' }); return; }
   const db = getDb();
   const user = db.prepare('SELECT * FROM users WHERE LOWER(username)=LOWER(?)').get(username) as any;

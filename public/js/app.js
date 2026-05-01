@@ -3,6 +3,9 @@
    ===================================================================== */
 'use strict';
 
+// ── Cloudflare Turnstile ────────────────────────────────────────────
+let TURNSTILE_SITE_KEY = 'TURNSTILE_SITE_KEY_PLACEHOLDER';
+
 // ── State ───────────────────────────────────────────────────────────────────
 const INACTIVITY_MS = 30 * 60 * 1000; // 30 minutes
 const WARN_MS       =  5 * 60 * 1000; // 5 minutes — inactivity warning overlay
@@ -518,6 +521,15 @@ async function init() {
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('/sw.js').catch(() => {});
   }
+
+  // Fetch Turnstile site key
+  try {
+    const cfgRes = await fetch('/api/auth/turnstile-config', { credentials: 'same-origin' });
+    if (cfgRes.ok) {
+      const cfg = await cfgRes.json();
+      if (cfg.siteKey) TURNSTILE_SITE_KEY = cfg.siteKey;
+    }
+  } catch(e) { /* non-critical */ }
 
   setLoadingStatus('Checking for updates…');
   if (await checkAssetVersion()) {
@@ -1068,6 +1080,10 @@ async function renderLogin() {
           <button class="pw-toggle" type="button" onclick="togglePw('l-pass',this)">👁️</button>
         </div>
       </div>
+      ${TURNSTILE_SITE_KEY && TURNSTILE_SITE_KEY !== 'TURNSTILE_SITE_KEY_PLACEHOLDER' ? `
+      <div class="form-group">
+        <div id="l-turnstile" style="display:flex;justify-content:center;margin:16px 0"></div>
+      </div>` : ''}
       <button class="btn btn-primary btn-full" id="l-btn" onclick="doLogin()">Log in</button>
     </div>
     <div style="text-align:center;margin-top:16px;display:flex;flex-direction:column;gap:10px">
@@ -1080,6 +1096,14 @@ async function renderLogin() {
   </div>`;
   document.getElementById('l-user').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
   document.getElementById('l-pass').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
+  
+  // Initialize Turnstile widget if configured
+  if (TURNSTILE_SITE_KEY && TURNSTILE_SITE_KEY !== 'TURNSTILE_SITE_KEY_PLACEHOLDER' && window.turnstile) {
+    window.turnstile.render('#l-turnstile', {
+      sitekey: TURNSTILE_SITE_KEY,
+      theme: 'light',
+    });
+  }
 }
 
 function togglePw(id, btn) {
@@ -1095,7 +1119,8 @@ async function doLogin() {
   if (!username || !password) { showAlert('Enter username and password.', 'error', 'login-alerts'); return; }
   btn.disabled = true; btn.textContent = 'Logging in…';
   try {
-    const d = await api('POST', '/api/auth/login', { username, password });
+    const turnstileToken = window.turnstile ? window.turnstile.getResponse() : '';
+    const d = await api('POST', '/api/auth/login', { username, password, turnstileToken });
     if (!d) return;
     if (d.requires2fa) {
       state._pending2faUsername = username;
@@ -1483,10 +1508,22 @@ function renderRegister() {
           I understand I must <strong>never enter patient or identifiable information</strong>.
         </label>
       </div>
+      ${TURNSTILE_SITE_KEY && TURNSTILE_SITE_KEY !== 'TURNSTILE_SITE_KEY_PLACEHOLDER' ? `
+      <div class="form-group">
+        <div id="r-turnstile" style="display:flex;justify-content:center;margin:16px 0"></div>
+      </div>` : ''}
       <button class="btn btn-primary btn-full" id="r-btn" onclick="doRegister()">Register</button>
     </div>
     ${renderFooter()}
   </div>`;
+  
+  // Initialize Turnstile widget if configured
+  if (TURNSTILE_SITE_KEY && TURNSTILE_SITE_KEY !== 'TURNSTILE_SITE_KEY_PLACEHOLDER' && window.turnstile) {
+    window.turnstile.render('#r-turnstile', {
+      sitekey: TURNSTILE_SITE_KEY,
+      theme: 'light',
+    });
+  }
 }
 
 async function doRegister() {
@@ -1498,7 +1535,8 @@ async function doRegister() {
   if (pass !== pass2) { showAlert('Passwords do not match.', 'error', 'reg-alerts'); return; }
   btn.disabled = true; btn.textContent = 'Registering…';
   try {
-    const d = await api('POST', '/api/auth/register', { password: pass });
+    const turnstileToken = window.turnstile ? window.turnstile.getResponse() : '';
+    const d = await api('POST', '/api/auth/register', { password: pass, turnstileToken });
     if (!d) return;
     if (d.pending) {
       showRegisterPending(d.username);
