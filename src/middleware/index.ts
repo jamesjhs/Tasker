@@ -16,6 +16,8 @@ export function requireAuth(req: Request, res: Response, next: NextFunction): vo
     return;
   }
   s.lastActivity = now;
+  // Touch session to extend cookie expiration (sliding window)
+  req.session.touch();
   next();
 }
 
