@@ -1,6 +1,6 @@
 # Tasker
 
-**v1.8.5** — An anonymous task-logging PWA for healthcare staff. Built with TypeScript, Express 5, SQLite, and vanilla JS.
+**v1.12.4** — An anonymous task-logging PWA for healthcare staff. Built with TypeScript, Express 5, SQLite, and vanilla JS.
 
 ---
 
@@ -10,8 +10,8 @@
 - **PWA** — installable on mobile, works offline for cached assets.
 - **Task tracking** — duty vs personal tasks, categories, subcategories, outcomes, interruption handling.
 - **Task flags** — admin-managed list of structured task annotations (e.g. "Sent to wrong user", "Priority too high"). Users select any that apply; free-text notes removed for data protection. Users can suggest new flags via email.
-- **Analytics** — session and 30-day history with Chart.js charts, filtering, flag distribution chart, and linear regression trendlines.
-- **Excel export** — users can download their own data as `.xlsx` (includes Flags column).
+- **Analytics** — session and 30-day history with Chart.js charts, filtering, flag distribution chart, linear regression trendlines, and XLSX analytics report download.
+- **Excel export** — users can download their raw task data as `.xlsx` (includes Flags column), or download a full analytics report as `.xlsx` with one data sheet per chart.
 - **User groups** — administrators create groups that define which dropdown options users see.
 - **Personal option customisation** — users can tick/untick individual options to build their own personalised dropdown lists.
 - **SMTP email suggestions** — dropdown and flag suggestions are emailed to the administrator instead of being stored on the server, improving data security. Configure via admin panel or environment variables.
@@ -22,7 +22,7 @@
 - **Configurable registration** — administrator controls three levels for self-registration and user invitations.
 - **30-day data retention** — task data is automatically deleted after 30 days.
 - **Health-check endpoint** — `GET /readyz` returns a JSON status response for uptime/heartbeat monitoring.
-- **Asset version endpoint** — `GET /api/version` returns `{"version":"1.8.5"}` for client-side cache-busting.
+- **Asset version endpoint** — `GET /api/version` returns `{"version":"1.12.4"}` for client-side cache-busting.
 
 ---
 
@@ -101,7 +101,7 @@ src/
     admin.ts              /api/admin/* — stats, users, pending-users, approve, settings, backup, restore, user-groups, pending-groups
 
   __tests__/
-    security.test.ts      52-test negative security suite (CSRF, IDOR, SQLi, XSS, input validation, resource exhaustion, error handling)
+    security.test.ts      241-test negative security suite (CSRF, IDOR, SQLi, XSS, input validation, resource exhaustion, error handling, session fixation, SMTP sanitisation, option allowlist)
     helpers/testApp.ts    Isolated Express app + test-user helpers for jest/supertest
 
 public/
@@ -127,19 +127,24 @@ docs/
 ## Security
 
 - CSRF tokens on all mutating requests (`X-CSRF-Token` header)
-- Rate limiting: auth 20/15 min, API 200/min
+- Rate limiting: auth 20/15 min, API 200/min (including `/readyz` health-check)
 - bcrypt cost factor 12 for passwords
 - Account lockout after repeated failed login attempts
 - Friendly error messages on failed login (username/password invalid)
 - HTTP-only, SameSite=strict session cookies
-- 30-minute idle session timeout + midnight session expiry
+- 30-minute idle session timeout with a **5-minute inactivity warning** + midnight session expiry
+- **Session ID regeneration** on successful login and after 2FA verification (prevents session fixation)
 - Helmet.js security headers
-- Parameterised SQL queries throughout
+- Parameterised SQL queries throughout; explicit allowlist for any dynamic column names
 - Path validation on DB restore endpoint
 - Automatic HTTPS when certificates are present
-- `/readyz` health-check endpoint is unauthenticated but returns no sensitive data
+- `/readyz` health-check endpoint is unauthenticated but rate-limited and returns no sensitive data
 - `safeId()` helper sanitises combobox container IDs before insertion into inline event handlers
-- 52-test negative security suite covering CSRF, IDOR, SQL injection, XSS, input validation, resource exhaustion, and error handling (`npm test`)
+- SMTP error details logged server-side only; clients receive generic safe messages
+- **Constant-time comparison** for MFA code verification (prevents timing attacks)
+- Unapproved dropdown options are rejected when users update their personal option list
+- Global error handler prevents accidental stack-trace leakage on unexpected errors
+- 241-test negative security suite covering CSRF, IDOR, SQL injection, XSS, input validation, resource exhaustion, error handling, session fixation, SMTP sanitisation, and option validation (`npm test`)
 
 ---
 
@@ -151,7 +156,67 @@ See [`/policy`](/policy) for the full Data and Use Policy.
 
 ## Changelog
 
-### v1.8.5 (April 2026)
+### v1.12.4 (April 2026) — Version bump and technical manual update
+
+- **Technical manual (§12.6)** — Section 12.6 "Session Inactivity Tracking" rewritten to accurately describe the inactivity system as overhauled in v1.12.3: documents that the clock advances only on real user interaction (no passive background `activityInterval`), the single consolidated `visibilitychange` async handler (hide path no longer stamps the clock; show path calls `checkClientInactivity()` immediately before proceeding to interruption checks), and the `window.focus` belt-and-suspenders listener.
+- **Version bump** — Version number incremented to 1.12.4; all page footers and documentation updated accordingly.
+
+### v1.12.3 (April 2026) — Inactivity system deep-fix
+
+- **Bug fix: `activityInterval` silently reset the inactivity clock every 60 s** — `startActivityTracking()` was calling `setInterval(updateLastActive, 60000)`. `updateLastActive()` writes `Date.now()` to localStorage, so the "last active" timestamp was unconditionally refreshed every minute regardless of user activity. This meant the 5-minute warning and 30-minute logout thresholds could almost never accumulate; whether they fired at all was a timing race between the interval and `inactivityCheckInterval`, explaining the intermittent/non-deterministic behaviour. Removed the `activityInterval` entirely. The clock is now only advanced by real user interaction (the `ACTIVITY_EVENTS` listeners) and `inactivityCheckInterval` (every 60 s) reliably reads the true elapsed idle time.
+- **Bug fix: tab-hide path reset the inactivity clock** — The async `visibilitychange` handler called `updateLastActive()` when `document.hidden` became `true` (i.e. the user switched away from the tab). This stamped "the moment you left" as the last-active time. Consequence: idle 20 min, switch tab — clock reset; return 5 min later — system sees 5 min idle, not 25 min; warning/logout never fires. Removed the `updateLastActive()` call from the hidden path entirely; the clock only moves on user interaction.
+- **Bug fix: two competing `visibilitychange` handlers** — A simple synchronous handler (line 443) and a complex async handler (line 4169) both responded to the same event. The simple handler correctly called `checkClientInactivity()` to show the banner; the async handler then called `updateLastActive()` which immediately dismissed it. Merged into a single canonical async handler: the duplicate simple handler has been removed and `checkClientInactivity()` (plus a `_sessionExpiryInProgress` guard) is now called at the top of the async handler.
+- **Bug fix: `updateLastActive()` dismissed the banner it had just shown** — Inside the interruption-check block for non-admin active-task users, `updateLastActive()` was called after `checkInactivityInterruption()`. `updateLastActive()` calls `dismissInactivityWarning()`, so any banner shown by `checkClientInactivity()` a few lines earlier was immediately removed. Removed `updateLastActive()` from this return-to-app path; the clock is reset naturally when the user next interacts via `ACTIVITY_EVENTS`.
+- **Net behaviour** — 30 min of uninterrupted idleness now reliably auto-redirects to the login screen; 5 min of idleness reliably shows the "App last used" ticker; any interaction dismisses the ticker and resets the clock; returning to the tab without interacting leaves the ticker visible until the user touches something.
+- **Version bump** — Version number incremented to 1.12.3; all page footers and documentation updated accordingly.
+
+### v1.12.2 (April 2026) — Fix inactivity warning banner not dismissing on refocus
+
+- **Bug fix: banner persists on refocus** — `checkClientInactivity()` had no `else` branch, so when the user refocused the app (via `window.focus` or `visibilitychange`) and the elapsed time had fallen back below the 5-minute warning threshold, the "App last used" strip was never removed. Added an `else { dismissInactivityWarning(); }` branch so that refocusing always dismisses the banner when the session is still within the warning window.
+- **Version bump** — Version number incremented to 1.12.2; all page footers and documentation updated accordingly.
+
+### v1.12.1 (April 2026) — Window-focus session-expiry catch-all
+
+- **Refocus expiry check** — Added a `window.focus` event listener as a belt-and-suspenders complement to the existing `visibilitychange` listener. When the browser window regains focus from another application (or after a screen-lock/wake cycle on platforms where `visibilitychange` does not fire), the session-expiry check now runs immediately, redirecting users to the login screen if the 30-minute inactivity timeout has elapsed.
+- **Version bump** — Version number incremented to 1.12.1; all page footers and documentation updated accordingly.
+
+### v1.12.0 (April 2026) — Session inactivity warning overlay
+
+- **Inactivity warning overlay** — After 5 minutes of no interaction a slim amber strip appears at the bottom of the screen showing "App last used: HH:MM". Any interaction (tap, key press, scroll) immediately dismisses it and resets the inactivity clock. The overlay has no interactive controls of its own (`pointer-events: none`) so the underlying app remains fully usable without a separate dismiss step. Correct iOS safe-area padding is applied so the strip never covers the home-indicator gesture bar.
+- **Interaction-triggered expiry** — If a user interacts with the app after the full 30-minute idle timeout has already elapsed (e.g. returning from a long background tab that missed the periodic check), the interaction itself immediately triggers the session-expiry flow instead of silently extending the clock.
+- **Stale-token fix** — "Log in again" after an inactivity logout now performs a full `location.reload()` rather than an in-place re-render. This guarantees a fresh CSRF token and clean client state, eliminating the *second attempt needed* bug on return-to-login.
+- **`renderLogin()` CSRF refresh** — `renderLogin()` now unconditionally fetches a fresh CSRF token before rendering, covering the 401-redirect code path that bypasses `returnToLogin()`.
+- **Bug fix: immediate re-expiry on fresh login** — `startActivityTracking()` previously called `updateLastActive()` at startup, which (with the new expiry-trigger guard) would immediately call `forceSessionExpiry()` if a stale `tasker_last_active` timestamp from a prior session was still in localStorage. Fixed: the session baseline is now stamped directly without running the expiry check.
+- **Bug fix: double forceSessionExpiry invocation** — Added a `_sessionExpiryInProgress` guard flag to prevent `forceSessionExpiry()` from being entered a second time from a `visibilitychange` event that fires between `stopActivityTracking()` and `state.user = null`.
+- **Version bump** — Version number incremented to 1.12.0; all page footers and documentation updated accordingly.
+
+### v1.11.1 (April 2026) — Final UI & functional verification
+
+- **Full UI and functional check** — all routes, middleware, SPA views, and user flows reviewed end-to-end. No functional regressions found. All 241 tests pass; TypeScript compiles with zero errors.
+- **Version bump** — Version number incremented to 1.11.1; all page footers and documentation updated accordingly.
+
+### v1.10.0 (April 2026) — Security hardening
+
+- **Session fixation prevention** — The session ID is now regenerated (`req.session.regenerate()`) immediately after successful credential validation on both the standard login path and after 2FA code verification. This eliminates the session fixation attack vector.
+- **SMTP error sanitisation** — Raw `nodemailer` error messages (which can contain SMTP host names, port numbers, and authentication failure details) are no longer forwarded to clients. All email-delivery failures now return a generic "SMTP error" message. The full error is logged server-side only.
+- **Global error handler** — An Express error-handling middleware has been added as the last registered middleware in `server.ts`. Any unexpected synchronous or asynchronous error is caught, logged, and returned as a generic 500 JSON response, preventing accidental stack-trace or path leakage.
+- **MFA constant-time comparison** — The 6-digit 2FA code is now compared using `crypto.timingSafeEqual()` instead of a plain string equality check, eliminating a theoretical timing side-channel.
+- **User option allowlist enforcement** — `PUT /api/auth/my-options` now validates that every submitted option ID corresponds to an `approved=1` dropdown option. Unapproved IDs are silently discarded. Previously a user could pin an unapproved (pending) option to their account.
+- **`/readyz` rate-limited** — The health-check endpoint now sits behind the same `apiLimiter` (200 req/min per IP) as all other public endpoints, preventing it from being used as an open amplification target.
+- **Column-name allowlist in `common-fields`** — The `topN` helper in `GET /api/tasks/common-fields` now includes an explicit `ALLOWED_FIELDS` Set guard before interpolating column names into SQL, providing defence-in-depth against any future refactoring that might pass user input to the function.
+- **Security test suite expanded** — 7 additional tests added (session fixation, SMTP sanitisation ×3, option allowlist ×2) bringing the total to 241 negative security tests.
+- **Version bump** — Version number incremented to 1.10.0.
+
+### v1.9.1 (April 2026)
+
+- **Analytics XLSX report** — Replaced the "Print / Save as PDF" button in the analytics section with a "Download Analytics (.xlsx)" button. Clicking it downloads `Tasker-Analytics-YYYYMMDDHHmm.xlsx` — a multi-sheet workbook with one data table sheet per chart, mirroring all graphical output: Summary, Time by Category, Duty vs Personal, Outcome Distribution, Outcome by Category, Avg Duration (Category), Tasks by Type, Avg Duration (Task Type), Task Types by Source Group, Flag Distribution, Flags by Source Group, Activity by Hour, Activity by Day of Week, Task Types by Day Assigned, Personal by Day (Origin), Personal by Day (Type), Tasks Over Time (with optional regression trend column), Interruptions Over Time, and Assignment Lag. Sheets are only included when the corresponding chart would be visible. Served by a new `GET /api/analytics/report` endpoint that accepts the same filter parameters as the history view.
+- **Version bump** — Version number incremented to 1.9.1; all page footers and documentation updated accordingly.
+
+### v1.9.0 (April 2026)
+
+- **Version bump** — Version number incremented to 1.9.0; all page footers and documentation updated accordingly.
+
+### v1.8.6 (April 2026)
 
 - **Suggestion safety notice** — The "Send suggestion to developers" input now displays a prominent warning instructing users not to submit any patient, location, or staff-identifiable information. The notice also clarifies that submitted freetext is sent to an NHS.net email address and invites users to include their own email address if they wish to receive a reply.
 - **Documentation updates** — help.html, guide.html, dpia.html, technical-manual.html, installation.md, and maintenance.md updated to document the suggestion feature data flow and acceptable-use requirements.

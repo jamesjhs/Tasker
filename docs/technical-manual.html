@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Tasker — Technical Reference Manual v1.6.0</title>
+  <title>Tasker — Technical Reference Manual v1.12.4</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; }
     body {
@@ -107,7 +107,7 @@
 <div class="page">
 
 <h1>Tasker — Technical Reference Manual</h1>
-<p class="subtitle">Version 1.8.5 &nbsp;·&nbsp; April 2026 &nbsp;·&nbsp; <em>Prepared in the role of Professor of Digital Engineering Product Design</em></p>
+<p class="subtitle">Version 1.12.4 &nbsp;·&nbsp; April 2026 &nbsp;·&nbsp; <em>Prepared in the role of Professor of Digital Engineering Product Design</em></p>
 
 <div class="toc">
   <h2>Table of Contents</h2>
@@ -462,14 +462,24 @@
 <p><code>mins(start, end, interruptions)</code> and <code>secs(start, end, interruptions)</code> compute net task duration by subtracting total interruption duration from gross elapsed time. Results are clamped to zero.</p>
 
 <h4><code>buildSummary(tasks)</code></h4>
-<p>Core analytics computation given an array of task objects. Produces: total tasks/minutes/interruptions, averages, breakdowns by category/outcome/date/hour-of-day/day-of-week/subcategory/interruptions-by-category, and a <strong>linear regression</strong> on daily task counts (slope, intercept, R² — computed when ≥ 3 date points exist).</p>
+<p>Core analytics computation given an array of task objects. Produces the following aggregations:</p>
+<ul>
+  <li>Total tasks/minutes/interruptions, duty vs personal counts and minutes, averages (duration, interruptions per task)</li>
+  <li>Breakdowns by category, outcome, date, hour-of-day, day-of-week, subcategory, and interruptions-by-category</li>
+  <li>Cross-tab aggregations (v1.8.7): <code>byCategoryBySubcategory</code>, <code>byDowBySubcategory</code>, <code>byFlagByCategory</code>, <code>byOutcomeByCategory</code></li>
+  <li>Personal-task assignment-day aggregations (v1.8.8): <code>byDowPersonalByCategory</code>, <code>byDowPersonalBySubcategory</code> — same structure as <code>byDowBySubcategory</code> but restricted to tasks where <code>is_duty = 0</code> and <code>assigned_date</code> is set</li>
+  <li>Average duration per subcategory (<code>avgDurBySubcategory</code>)</li>
+  <li>Assignment lag statistics (<code>lagStats</code>): count, avg, median, p75, min/max, and a day-bucket histogram for tasks that have an <code>assigned_date</code></li>
+  <li>Linear regression on daily task counts (slope, intercept, R² — computed when ≥ 3 date points exist)</li>
+</ul>
 
 <table>
   <thead><tr><th>Endpoint</th><th>Description</th></tr></thead>
   <tbody>
     <tr><td><code>GET /api/analytics/session</code></td><td>Tasks for the current session date with summary. Session date is frozen at login time.</td></tr>
     <tr><td><code>GET /api/analytics/history</code></td><td>Completed tasks from the past 30 days with optional date/category/duty/outcome filtering. Includes summary.</td></tr>
-    <tr><td><code>GET /api/analytics/export</code></td><td>Streams an <code>.xlsx</code> workbook. Mobile-only (User-Agent check; non-mobile gets 403). Two sheets: Tasks and Summary. ExcelJS streaming write to response.</td></tr>
+    <tr><td><code>GET /api/analytics/export</code></td><td>Streams an <code>.xlsx</code> workbook with raw task data. Two sheets: Tasks and Summary. ExcelJS streaming write to response.</td></tr>
+    <tr><td><code>GET /api/analytics/report</code></td><td>Streams an <code>.xlsx</code> analytics report workbook. Accepts the same filter parameters as <code>/history</code> plus <code>mode=session|history</code>. Generates up to 19 sheets — one per chart — containing the underlying data tables that match the graphical output shown in the analytics view. Sheets are conditionally included when the corresponding chart would be visible. ExcelJS streaming write to response.</td></tr>
   </tbody>
 </table>
 
@@ -519,13 +529,20 @@
 <p>Every view function calls <code>pushHistory(viewName)</code> or <code>replaceHistory(viewName)</code>, storing the view name in <code>window.history.state</code>. A <code>popstate</code> listener maps state names to render functions via <code>HISTORY_RENDER_MAP</code>, with auth guards preventing access to protected views when logged out.</p>
 
 <h3>12.6 Session Inactivity Tracking</h3>
-<p>Activity events (<code>click</code>, <code>touchstart</code>, <code>keydown</code>, <code>scroll</code>) update a <code>localStorage.tasker_last_active</code> timestamp. An interval checks this every 60 seconds. After 30 minutes of inactivity: server logout is called, client state is cleared, and an inactivity screen is shown. The <code>visibilitychange</code> event triggers an immediate inactivity check when the tab becomes visible, and also calls <code>checkAssetVersion()</code> (throttled to once per 60 s) so that users returning to a backgrounded PWA always receive the latest code. If a task was active during inactivity, the gap is automatically recorded as an interruption.</p>
+<p>Activity events (<code>click</code>, <code>touchstart</code>, <code>keydown</code>, <code>scroll</code>) update a <code>localStorage.tasker_last_active</code> timestamp via <code>updateLastActive()</code>. The clock is advanced <strong>only</strong> by these real user interactions — there is no passive background timer resetting the timestamp. A 60-second interval (<code>state.inactivityCheckInterval</code>) calls <code>checkClientInactivity()</code>, which implements a two-stage response:</p>
+<ul>
+  <li><strong>Warning stage (5–30 min idle).</strong> A slim amber strip (<code>.inactivity-warn</code>) is appended to <code>document.body</code> showing "App last used: HH:MM". It has <code>pointer-events: none</code> so the app remains fully interactive underneath. Any qualifying user event calls <code>updateLastActive()</code>, which dismisses the strip and resets the timestamp.</li>
+  <li><strong>Expiry stage (≥30 min idle).</strong> <code>forceSessionExpiry()</code> is called: activity tracking is stopped, the server logout endpoint is called, client state is cleared, SW caches are deleted, and the inactivity screen is rendered. "Log in again" performs <code>location.reload()</code>, guaranteeing a fresh CSRF token and clean client state.</li>
+  <li><strong>Interaction-triggered expiry.</strong> <code>updateLastActive()</code> also checks the elapsed time; if an event fires after the 30-minute deadline has passed, it calls <code>forceSessionExpiry()</code> immediately rather than silently resetting the clock.</li>
+  <li><strong>Guard flag.</strong> A <code>_sessionExpiryInProgress</code> boolean prevents <code>forceSessionExpiry()</code> from being entered a second time if a <code>visibilitychange</code> or <code>focus</code> event fires between <code>stopActivityTracking()</code> and <code>state.user = null</code>.</li>
+</ul>
+<p>A single consolidated async <code>visibilitychange</code> handler covers both tab-hide and tab-show transitions. On <strong>hide</strong>: no action is taken — the clock is left at the time of the last real user interaction so that the true idle duration continues to accumulate. On <strong>show</strong>: <code>checkAssetVersion()</code> is called first (throttled to once per 60 s); then <code>checkClientInactivity()</code> is called immediately so that the warning strip appears or the session expires as soon as the user returns, without waiting for the next 60-second interval tick; then, if expiry is not in progress and the user has an active task, any gap since the last interaction is recorded as an interruption via <code>checkInactivityInterruption()</code> and the UI is updated to reflect it. A <code>window.focus</code> listener provides belt-and-suspenders coverage for platform wake cycles where <code>visibilitychange</code> does not fire (e.g. screen-lock/wake on some mobile OSes, or switching from another native application on desktop).</p>
 
 <h3>12.7 Combobox Component</h3>
 <p>A custom searchable dropdown with: trigger button, search input, options list, and "Add new" row. Keyboard-navigable (arrow keys, Enter, Escape). Only one open at a time. The <code>filterCombo</code> function re-renders the options list on each keystroke.</p>
 
 <h3>12.8 Chart Rendering</h3>
-<p><code>renderChart(canvasId, type, labels, datasets, options)</code> wraps <code>new Chart(ctx, {...})</code>. Instances stored in <code>state.charts</code> and destroyed by <code>clearCharts()</code> before any view transition. Charts include: category time (doughnut), outcome distribution (doughnut), avg duration by category (horizontal bar), duty/personal split (grouped bar), subcategory counts (horizontal bar), hour-of-day activity (bar), day-of-week activity (bar), task/time trend with regression overlay (line), interruptions trend (line).</p>
+<p><code>renderChart(canvasId, type, labels, datasets, options)</code> wraps <code>new Chart(ctx, {...})</code>. Instances stored in <code>state.charts</code> and destroyed by <code>clearCharts()</code> before any view transition. Charts are grouped into four logical sections: <strong>overview</strong> (category time doughnut, My Group vs Personal bar, outcome distribution doughnut, outcome breakdown by category stacked bar), <strong>task-type &amp; duration</strong> (avg duration by category, tasks by type, avg duration by task type, task types by source group stacked bar), <strong>flags</strong> (flag distribution, flags by source group stacked bar), and <strong>temporal patterns</strong> (hour-of-day, day-of-week, task type patterns by DOW stacked bar, tasks/time/regression trend line, interruptions trend line, assignment-to-action lag histogram). New charts are only rendered when sufficient cross-tab data exists.</p>
 
 <h3>12.9 XSS Prevention</h3>
 <p>All user-supplied data rendered into HTML is passed through <code>esc()</code> (HTML-entity encoding of <code>&amp;</code>, <code>&lt;</code>, <code>&gt;</code>, <code>"</code>, <code>'</code>). A secondary helper <code>safeId()</code> strips all non-alphanumeric/hyphen/underscore characters from strings used as DOM element ID suffixes.</p>
@@ -563,7 +580,7 @@
 <ul>
   <li>Passwords hashed with bcrypt cost factor 12 (~250ms/hash).</li>
   <li>Sessions use a server-side SQLite store; the client holds only a signed opaque cookie.</li>
-  <li>Sessions expire after 30 minutes of inactivity (server-side and client-side).</li>
+  <li>Sessions expire after 30 minutes of inactivity (server-side and client-side). A 5-minute inactivity warning overlay is shown client-side before the timeout fires.</li>
   <li>Sessions are terminated at midnight (server-side <code>sessionDate</code> check).</li>
 </ul>
 
@@ -731,7 +748,54 @@ R²        = 1 - SS_res / SS_tot</code></pre>
 <p>Calculated when ≥ 3 distinct dates exist. Displayed as e.g. <em>+0.3 tasks/day (R²=0.85, increasing)</em>.</p>
 
 <h3>18.3 Client-Side Insight Generation</h3>
-<p><code>buildInsights(summary)</code> produces human-readable insight strings: busiest hour, busiest day of week, most time-consuming category, most interrupted category, average task duration classification, interruption rate (% of tasks with ≥1 interruption).</p>
+<p><code>buildInsights(summary)</code> produces human-readable insight strings: busiest hour, busiest day of week, most time-consuming category, most interrupted category, average task duration classification, interruption rate (% of tasks with ≥1 interruption), average assignment-to-action lag, longest task type by average duration, and top flag–source-group combination.</p>
+
+<h3>18.4 Cross-Tab Charts (v1.8.7)</h3>
+<p>Six additional charts appear when sufficient data is present, grouped logically with their related base charts:</p>
+<ul>
+  <li><strong>Outcome Breakdown by Category</strong> — stacked bar; outcome distribution per source group (shown when &gt;1 category)</li>
+  <li><strong>Avg Duration by Task Type</strong> — horizontal bar; average minutes per subcategory</li>
+  <li><strong>Task Types by Source Group</strong> — stacked bar; task-type composition per category (shown when &gt;1 category or any category has &gt;1 type)</li>
+  <li><strong>Flags by Source Group</strong> — horizontal stacked bar; which source groups generate which flags</li>
+  <li><strong>Task Type Patterns by Day of Week</strong> — stacked bar; temporal pattern of task types (shown when ≥2 distinct types present)</li>
+  <li><strong>Days from Assignment to Action</strong> — histogram of lag in days between <code>assigned_date</code> and <code>start_time</code>, with avg/median/range displayed above the chart</li>
+</ul>
+
+<h3>18.5 Personal Assignment-Day Charts (v1.8.8)</h3>
+<p>Two further stacked column charts show the day-of-week distribution of Personal task assignments only (tasks with <code>is_duty = 0</code> and a populated <code>assigned_date</code>). Each is displayed when at least one Personal task with an assigned date is present in the current data set:</p>
+<ul>
+  <li><strong>Personal Tasks by Day Assigned — by Task Origin</strong> — stacked column; each column represents a day of the week; each stack segment represents a task origin (category), drawn using the same <code>COLORS</code> palette and <code>renderChart</code> helper as all other charts</li>
+  <li><strong>Personal Tasks by Day Assigned — by Task Type</strong> — stacked column; same axes but stack segments represent task types (subcategory)</li>
+</ul>
+<p>The underlying data is produced by <code>buildSummary</code> fields <code>byDowPersonalByCategory</code> and <code>byDowPersonalBySubcategory</code> respectively (see §18.2).</p>
+
+<h3>18.6 Analytics XLSX Report (v1.9.2)</h3>
+<p>The "Print / Save as PDF" button has been replaced by a <strong>"📊 Download Analytics (.xlsx)"</strong> button. Clicking it calls <code>exportAnalyticsReport()</code> (client-side), which constructs a URL pointing to the new <code>GET /api/analytics/report</code> endpoint, passing the current filter state (<code>mode</code>, <code>from</code>, <code>to</code>, <code>is_duty</code>, <code>category</code>, <code>subcategory</code>, <code>outcome</code>) as query parameters. The endpoint re-runs the same query as the history/session views, invokes <code>buildSummary()</code>, and streams an ExcelJS <code>.xlsx</code> workbook containing up to 19 sheets — one per chart — with the underlying data tables that mirror each graphical output:</p>
+<table>
+  <thead><tr><th>Sheet name</th><th>Corresponding chart</th><th>Condition</th></tr></thead>
+  <tbody>
+    <tr><td>Summary</td><td>Stat cards</td><td>Always</td></tr>
+    <tr><td>Time by Category</td><td>Time by Category doughnut</td><td>Total &gt; 0</td></tr>
+    <tr><td>Duty vs Personal</td><td>My Group vs Personal bar</td><td>Always</td></tr>
+    <tr><td>Outcome Distribution</td><td>Outcome doughnut</td><td>Any outcomes present</td></tr>
+    <tr><td>Outcome by Category</td><td>Outcome Breakdown by Category stacked bar</td><td>&gt;1 category</td></tr>
+    <tr><td>Avg Duration (Category)</td><td>Avg Duration by Category bar</td><td>Total &gt; 0</td></tr>
+    <tr><td>Tasks by Type</td><td>Tasks by Type bar</td><td>Any subcategories</td></tr>
+    <tr><td>Avg Duration (Task Type)</td><td>Avg Duration by Task Type bar</td><td>Any subcategories</td></tr>
+    <tr><td>Task Types by Source Group</td><td>Task Types by Source Group stacked bar</td><td>Meaningful cross-tab data</td></tr>
+    <tr><td>Flag Distribution</td><td>Task Flag Distribution bar</td><td>Any flags</td></tr>
+    <tr><td>Flags by Source Group</td><td>Flags by Source Group stacked bar</td><td>Any flag-category pairs</td></tr>
+    <tr><td>Activity by Hour</td><td>Activity by Hour of Day bar</td><td>Any hour data</td></tr>
+    <tr><td>Activity by Day of Week</td><td>Activity by Day of Week bar</td><td>Any DoW data</td></tr>
+    <tr><td>Task Types by Day Assigned</td><td>Task Type Patterns by Day Assigned stacked bar</td><td>≥2 distinct subcategories</td></tr>
+    <tr><td>Personal by Day (Origin)</td><td>Personal Tasks by Day — by Task Origin</td><td>Any personal assigned tasks</td></tr>
+    <tr><td>Personal by Day (Type)</td><td>Personal Tasks by Day — by Task Type</td><td>Any personal assigned tasks</td></tr>
+    <tr><td>Tasks Over Time</td><td>Tasks &amp; Time Over Time line chart</td><td>≥2 distinct dates</td></tr>
+    <tr><td>Interruptions Over Time</td><td>Interruptions Over Time line chart</td><td>≥2 distinct dates</td></tr>
+    <tr><td>Assignment Lag</td><td>Days from Assignment to Action histogram</td><td>Any tasks with assigned_date</td></tr>
+  </tbody>
+</table>
+<p>Each sheet header row is bold with a light blue fill for legibility. Cross-tab sheets (e.g. Outcome by Category, Task Types by Source Group) use a row-per-label layout with one column per series, matching the stacked-bar chart structure. The filename is <code>Tasker-Analytics-YYYYMMDDHHmm.xlsx</code>.</p>
 
 <hr>
 
@@ -817,7 +881,7 @@ R²        = 1 - SS_res / SS_tot</code></pre>
 
 <hr>
 <p style="text-align:center;font-size:.85rem;color:#9ca3af;margin-top:40px">
-  Tasker Technical Reference Manual &nbsp;·&nbsp; v1.6.0 &nbsp;·&nbsp; April 2026<br>
+  Tasker Technical Reference Manual &nbsp;·&nbsp; v1.12.4 &nbsp;·&nbsp; April 2026<br>
   This document is stored in <code>docs/</code> and is not served by the application.
 </p>
 

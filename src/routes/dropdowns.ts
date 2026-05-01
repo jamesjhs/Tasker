@@ -88,7 +88,8 @@ router.post('/propose', requireAuth, requirePasswordChange, requireActivation, v
   } catch (e: any) {
     // Remove the proposal record if email failed
     getDb().prepare('DELETE FROM dropdown_proposals WHERE id=?').run(proposalId);
-    res.status(503).json({ error: `Could not send suggestion: ${e?.message || 'SMTP error'}` });
+    console.error('[Tasker] Dropdown proposal email error:', e);
+    res.status(503).json({ error: 'Could not send suggestion (SMTP error). Please contact the administrator.' });
   }
 });
 

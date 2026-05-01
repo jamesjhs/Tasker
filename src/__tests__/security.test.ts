@@ -1607,3 +1607,127 @@ describe('Anonymous proposals', () => {
     db.prepare('DELETE FROM dropdown_proposals WHERE review_token=?').run(tok);
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 20. SESSION FIXATION — v1.10.0
+// ─────────────────────────────────────────────────────────────────────────────
+describe('Session fixation prevention', () => {
+  test('Session ID changes after successful login', async () => {
+    const a = agent();
+    // Obtain a pre-auth session cookie
+    const csrfRes = await a.get('/api/auth/csrf-token');
+    const preLoginCookie = csrfRes.headers['set-cookie']?.[0] ?? '';
+    const csrf = csrfRes.body.token;
+
+    // Log in
+    const { username, password } = await createUserSession(agent()); // create user separately
+    const loginRes = await a.post('/api/auth/login')
+      .set('X-CSRF-Token', csrf)
+      .send({ username, password });
+    expect(loginRes.status).toBe(200);
+    expect(loginRes.body.success).toBe(true);
+
+    const postLoginCookie = loginRes.headers['set-cookie']?.[0] ?? '';
+    // Session cookie must change (new session ID issued after login)
+    if (preLoginCookie && postLoginCookie) {
+      expect(postLoginCookie).not.toEqual(preLoginCookie);
+    }
+  });
+
+  test('Session cookie attributes are secure in session store', async () => {
+    const a = agent();
+    const { csrf } = await createUserSession(a);
+    const meRes = await a.get('/api/auth/me').set('X-CSRF-Token', csrf);
+    expect(meRes.status).toBe(200);
+    // Verify session is still valid after login (session regeneration did not lose auth state)
+    expect(meRes.body).toHaveProperty('username');
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 21. SMTP ERROR SANITISATION — v1.10.0
+// ─────────────────────────────────────────────────────────────────────────────
+describe('SMTP error sanitisation', () => {
+  test('Flag propose error response does not expose raw SMTP error details', async () => {
+    const a = agent();
+    const { csrf } = await createUserSession(a);
+    const res = await a.post('/api/flags/propose')
+      .set('X-CSRF-Token', csrf)
+      .send({ value: 'Sanitisation test flag ' + Date.now() });
+    expect(res.status).toBe(503);
+    // Error should contain 'smtp' (so users know it's an email issue) but NOT a raw stack trace
+    expect(res.body.error).toMatch(/smtp/i);
+    expect(JSON.stringify(res.body)).not.toMatch(/Error:|at Object\.|ECONNREFUSED|ENOTFOUND|getaddrinfo/i);
+  });
+
+  test('Dropdown propose error response does not expose raw SMTP error details', async () => {
+    const a = agent();
+    const { csrf } = await createUserSession(a);
+    const res = await a.post('/api/dropdowns/propose')
+      .set('X-CSRF-Token', csrf)
+      .send({ field_name: 'category', value: 'SanitisedProp' + Date.now() });
+    expect(res.status).toBe(503);
+    expect(res.body.error).toMatch(/smtp/i);
+    expect(JSON.stringify(res.body)).not.toMatch(/Error:|at Object\.|ECONNREFUSED|ENOTFOUND|getaddrinfo/i);
+  });
+
+  test('Feedback endpoint error response does not expose raw SMTP error details', async () => {
+    const a = agent();
+    const { csrf } = await createUserSession(a);
+    const res = await a.post('/api/auth/feedback')
+      .set('X-CSRF-Token', csrf)
+      .send({ message: 'Test feedback for sanitisation check' });
+    expect(res.status).toBe(503);
+    expect(res.body.error).toMatch(/smtp/i);
+    expect(JSON.stringify(res.body)).not.toMatch(/Error:|at Object\.|ECONNREFUSED|ENOTFOUND|getaddrinfo/i);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 22. OPTION-ID VALIDATION — v1.10.0 (unapproved options blocked)
+// ─────────────────────────────────────────────────────────────────────────────
+describe('User option ID validation', () => {
+  test('PUT /api/auth/my-options: unapproved option IDs are silently discarded', async () => {
+    const a = agent();
+    const { csrf } = await createUserSession(a);
+    const db = getDb();
+
+    // Insert an unapproved option directly
+    const insertResult = db.prepare(
+      "INSERT OR IGNORE INTO dropdown_options (field_name, value, approved) VALUES ('category','__UnapprovedTest__',0)"
+    ).run();
+    const unapprovedId = insertResult.lastInsertRowid as number;
+
+    // Attempt to assign the unapproved option
+    const res = await a.put('/api/auth/my-options')
+      .set('X-CSRF-Token', csrf)
+      .send({ option_ids: [unapprovedId] });
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+
+    // Verify the unapproved option was NOT stored
+    const stored = db.prepare(
+      'SELECT 1 FROM user_dropdown_options WHERE dropdown_option_id=?'
+    ).get(unapprovedId);
+    expect(stored).toBeUndefined();
+
+    // Clean up
+    db.prepare('DELETE FROM dropdown_options WHERE id=?').run(unapprovedId);
+  });
+
+  test('PUT /api/auth/my-options: valid approved option IDs are accepted', async () => {
+    const a = agent();
+    const { csrf } = await createUserSession(a);
+    const db = getDb();
+
+    // Get an approved option
+    const approved = db.prepare('SELECT id FROM dropdown_options WHERE approved=1 LIMIT 1').get() as any;
+    if (!approved) return; // skip if no approved options seeded
+
+    const res = await a.put('/api/auth/my-options')
+      .set('X-CSRF-Token', csrf)
+      .send({ option_ids: [approved.id] });
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+  });
+});

@@ -1,6 +1,6 @@
 {
   "name": "tasker",
-  "version": "1.8.5",
+  "version": "1.12.4",
   "description": "Anonymous task logger for healthcare staff",
   "main": "dist/server.js",
   "scripts": {
@@ -51,11 +51,15 @@
           "tsconfig": "src/__tests__/tsconfig.json"
         }
       ]
+    },
+    "moduleNameMapper": {
+      "^uuid$": "<rootDir>/src/__tests__/helpers/uuid-cjs.js"
     }
   },
   "overrides": {
     "archiver": "^7.0.1",
     "unzipper": "^0.12.3",
-    "fast-csv": "^5.0.5"
+    "fast-csv": "^5.0.5",
+    "uuid": "^14.0.0"
   }
 }

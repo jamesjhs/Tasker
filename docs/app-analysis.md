@@ -1,6 +1,6 @@
 # Tasker — Detailed Application Analysis
 
-> Generated April 2026. Covers repository state at v1.7.1.
+> Generated April 2026. Covers repository state at v1.11.1.
 > Intended for non-developer stakeholders and external analysis engines.
 
 ---
@@ -111,7 +111,8 @@ All calls are **same-origin only** (browser → same server). No external APIs a
 | GET | `/api/tasks/recent-count` | Logged in | Count of completed tasks in last 7 days |
 | GET | `/api/analytics/session` | Logged in | Today's tasks + summary statistics |
 | GET | `/api/analytics/history` | Logged in | Up-to-30-day history with filters |
-| GET | `/api/analytics/export` | Logged in | Download `.xlsx` file |
+| GET | `/api/analytics/export` | Logged in | Download raw task log as `.xlsx` |
+| GET | `/api/analytics/report` | Logged in | Download analytics report as `.xlsx` (one sheet per chart) |
 | GET | `/api/dropdowns/:field` | Logged in | List dropdown values for a field |
 | POST | `/api/dropdowns/propose` | Logged in | Propose a new dropdown value |
 | GET/POST/PUT/DELETE | `/api/dropdowns/admin/*` | Admin only | Manage dropdown options |
@@ -360,9 +361,15 @@ The server does **not** technically scan for or block PII text in free-text fiel
 
 1. Tap **"📊 Analytics"** in the bottom nav → Today's session view
 2. Tap **"📅 Long-term History"** → Up to 30 days; filter by date/type/category/outcome; linear regression trendline appears with ≥3 days of data
-3. Tap **"⬇️ Download Excel"** → Downloads `Tasker-YYYYMMDDHHmm.xlsx` with two sheets:
-   - **Tasks** sheet: Type, Task From, Task Type, Outcome, Date Assigned, Start Time, End Time, Duration (secs), Interruptions count, Notes
+3. The analytics section presents charts grouped into four logical sections:
+   - **Overview**: time by category (doughnut), My Group vs Personal split, outcome distribution, outcome breakdown by category (stacked bar, when >1 category)
+   - **Task types & durations**: tasks by type, avg duration by category, avg duration by task type, task types by source group (stacked bar, when cross-tab data is meaningful)
+   - **Flags**: flag distribution, flags by source group (stacked bar)
+   - **Temporal patterns**: activity by hour and day of week, task type patterns by day of week (stacked, when ≥2 types), tasks/time over time with regression overlay, interruptions trend, assignment-to-action lag histogram (for tasks with an assigned date)
+4. Tap **"⬇️ Download Log (.xlsx)"** → Downloads `Tasker-YYYYMMDDHHmm.xlsx` with two sheets:
+   - **Tasks** sheet: Type, Task From, Task Type, Outcome, Date Assigned, Start Time, End Time, Duration (secs), Interruptions count, Flags
    - **Summary** sheet: Latest pending task count and when it was logged
+5. Tap **"📊 Download Analytics (.xlsx)"** → Downloads `Tasker-Analytics-YYYYMMDDHHmm.xlsx` with one data-table sheet per chart, matching all graphical output for the current filter period. Sheets included: Summary, Time by Category, Duty vs Personal, Outcome Distribution, Outcome by Category, Avg Duration (Category), Tasks by Type, Avg Duration (Task Type), Task Types by Source Group, Flag Distribution, Flags by Source Group, Activity by Hour, Activity by Day of Week, Task Types by Day Assigned, Personal by Day (Origin), Personal by Day (Type), Tasks Over Time (with optional regression trend column), Interruptions Over Time, Assignment Lag. Only sheets with relevant data are included.
 
 ---
 

@@ -5,6 +5,7 @@
 
 // ── State ───────────────────────────────────────────────────────────────────
 const INACTIVITY_MS = 30 * 60 * 1000; // 30 minutes
+const WARN_MS       =  5 * 60 * 1000; // 5 minutes — inactivity warning overlay
 const VERSION_CHECK_DEBOUNCE_MS = 60 * 1000; // 60 seconds — min gap between version checks
 const VERSION_POLL_INTERVAL_MS  = 5 * 60 * 1000; // 5 minutes — background version poll
 
@@ -15,13 +16,13 @@ const state = {
   appStats: null,       // { userCount, taskCount }
   activeTask: null,     // current in_progress task
   timerInterval: null,
-  activityInterval: null,
   inactivityCheckInterval: null,
   versionPollInterval: null,
   interruptStart: null, // ISO string set when interrupt modal opens
   currentView: null,
   dropdowns: { category: [], subcategory: [], outcome: [] },
   flagOptions: [],       // [{ id, value }]
+  commonFields: { category: [], subcategory: [], outcome: [] },
   taskForm: {},
   lastUsedCombos: {},
   editTask: null,
@@ -32,6 +33,12 @@ const state = {
   analyticsQuickPeriod: 'today', // 'today', '7d', '30d', or null
   analyticsQuickFrom: '',        // date string set by quick filter
   analyticsQuickTo: '',          // date string set by quick filter
+  analyticsFilterFrom: '',       // date string from advanced filter panel
+  analyticsFilterTo: '',         // date string from advanced filter panel
+  analyticsFilterDuty: '',       // duty filter from advanced filter panel
+  analyticsFilterCategory: '',   // category filter from advanced filter panel
+  analyticsFilterSubcategory: '', // subcategory filter from advanced filter panel
+  analyticsFilterOutcome: '',    // outcome filter from advanced filter panel
   analyticsTasksExpanded: false, // whether task list is expanded in analytics
   analyticsFiltersExpanded: false, // whether advanced filters are expanded in analytics
   analyticsData: null,           // { data, mode, pendingLog } for re-rendering on toggle
@@ -44,6 +51,8 @@ const state = {
 let _popstateActive = false;
 let _groupSelectionCb = null; // callback after group selection completes
 let _myOptionsCb = null;      // callback after personal options step completes
+let _inactivityWarnEl = null;       // DOM element for the inactivity warning overlay
+let _sessionExpiryInProgress = false; // guard against double-invocation of forceSessionExpiry
 
 function pushHistory(view) {
   if (_popstateActive || window.history.state?.view === view) return;
@@ -319,7 +328,32 @@ function stopTimer() {
 }
 
 // ── Inactivity / activity tracking ──────────────────────────────────────────
+function showInactivityWarning(lastActiveMs) {
+  if (_inactivityWarnEl) return; // already visible
+  const d = new Date(lastActiveMs);
+  const hh = String(d.getHours()).padStart(2, '0');
+  const mm = String(d.getMinutes()).padStart(2, '0');
+  const el = document.createElement('div');
+  el.id = 'inactivity-warn';
+  el.className = 'inactivity-warn';
+  el.textContent = `App last used: ${hh}:${mm}`;
+  document.body.appendChild(el);
+  _inactivityWarnEl = el;
+}
+
+function dismissInactivityWarning() {
+  if (_inactivityWarnEl) { _inactivityWarnEl.remove(); _inactivityWarnEl = null; }
+}
+
 function updateLastActive() {
+  if (state.user) {
+    const last = getLastActive();
+    // If the user interacts after the session has already expired, treat this
+    // interaction as the trigger to run the expiry flow rather than silently
+    // resetting the clock.
+    if (last && Date.now() - last >= INACTIVITY_MS) { forceSessionExpiry(); return; }
+  }
+  dismissInactivityWarning();
   try { localStorage.setItem('tasker_last_active', Date.now().toString()); } catch(e) {}
 }
 
@@ -331,8 +365,10 @@ const ACTIVITY_EVENTS = ['click', 'touchstart', 'keydown', 'scroll'];
 
 function startActivityTracking() {
   stopActivityTracking();
-  updateLastActive();
-  state.activityInterval = setInterval(updateLastActive, 60000);
+  // Stamp the current time as the baseline for this session without running
+  // the expiry check — prevents a stale localStorage value from a previous
+  // session triggering an immediate re-expiry right after a fresh login.
+  try { localStorage.setItem('tasker_last_active', Date.now().toString()); } catch(e) {}
   ACTIVITY_EVENTS.forEach(evt => document.addEventListener(evt, updateLastActive, { passive: true }));
   state.inactivityCheckInterval = setInterval(checkClientInactivity, 60000);
   // Poll for new app versions every 5 minutes while the user is logged in.
@@ -340,13 +376,15 @@ function startActivityTracking() {
 }
 
 function stopActivityTracking() {
-  if (state.activityInterval) { clearInterval(state.activityInterval); state.activityInterval = null; }
+  dismissInactivityWarning();
   if (state.inactivityCheckInterval) { clearInterval(state.inactivityCheckInterval); state.inactivityCheckInterval = null; }
   if (state.versionPollInterval) { clearInterval(state.versionPollInterval); state.versionPollInterval = null; }
   ACTIVITY_EVENTS.forEach(evt => document.removeEventListener(evt, updateLastActive));
 }
 
 async function forceSessionExpiry() {
+  if (_sessionExpiryInProgress) return;
+  _sessionExpiryInProgress = true;
   stopActivityTracking();
   try {
     await fetch('/api/auth/logout', {
@@ -380,23 +418,23 @@ function renderInactivityLogout() {
   </div>`;
 }
 
-async function returnToLogin() {
-  try { await refreshCsrf(); } catch(e) {}
-  await renderLogin();
+function returnToLogin() {
+  location.reload();
 }
 
 function checkClientInactivity() {
   if (!state.user) return;
   const last = getLastActive();
-  if (last && Date.now() - last > INACTIVITY_MS) {
+  if (!last) return;
+  const elapsed = Date.now() - last;
+  if (elapsed >= INACTIVITY_MS) {
     forceSessionExpiry();
+  } else if (elapsed >= WARN_MS) {
+    showInactivityWarning(last);
+  } else {
+    dismissInactivityWarning();
   }
 }
-
-// When the page becomes visible again, immediately check if the session has expired
-document.addEventListener('visibilitychange', () => {
-  if (!document.hidden) checkClientInactivity();
-});
 
 async function checkInactivityInterruption() {
   if (!state.activeTask) return false;
@@ -510,7 +548,7 @@ async function init() {
       setLoadingStatus('Rendering…');
       await (state.user.isAdmin ? renderAdmin() : renderHome());
     } else {
-      await renderLogin();
+      await renderLanding();
     }
   } catch(e) {
     showLoadingError(`Initialization failed: ${e.message || e}`);
@@ -519,16 +557,18 @@ async function init() {
 
 async function loadDropdowns() {
   try {
-    const [cats, subs, outs, flagOpts] = await Promise.all([
+    const [cats, subs, outs, flagOpts, common] = await Promise.all([
       api('GET','/api/dropdowns/category'),
       api('GET','/api/dropdowns/subcategory'),
       api('GET','/api/dropdowns/outcome'),
       api('GET','/api/flags'),
+      api('GET','/api/tasks/common-fields'),
     ]);
     if (cats) state.dropdowns.category = cats.options;
     if (subs) state.dropdowns.subcategory = subs.options;
     if (outs) state.dropdowns.outcome = outs.options;
     if (flagOpts) state.flagOptions = flagOpts.options || [];
+    if (common) state.commonFields = common;
   } catch(e) {}
 }
 
@@ -575,10 +615,424 @@ function renderStatsCards(stats, marginTop = '20px') {
     </div>`;
 }
 
+// ── LANDING PAGE ─────────────────────────────────────────────────────────────
+
+/** Phone frame wrapper for mockup screenshots */
+function phoneFrame(label, labelSub, screenHTML) {
+  return `
+  <div class="phone-wrap">
+    <div class="phone-frame">
+      <div class="phone-top-bar"><div class="phone-notch-pill"></div></div>
+      <div class="phone-screen">${screenHTML}</div>
+    </div>
+    <div class="phone-label">${label}</div>
+    ${labelSub ? `<div class="phone-label-sub">${labelSub}</div>` : ''}
+  </div>`;
+}
+
+function mockupHomeScreen() {
+  return phoneFrame('Home Dashboard', 'Your daily hub', `
+    <div class="example-badge">Example</div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:7px">
+      <span style="font-weight:800;font-size:10.5px;color:#1a1a2e">👋 Tasker</span>
+      <span style="font-size:8px;color:#1a56db;font-weight:600">📖 Guide</span>
+    </div>
+    <button style="width:100%;padding:9px;background:#1a56db;color:#fff;border:none;border-radius:7px;font-size:9.5px;font-weight:800;margin-bottom:7px;letter-spacing:.01em">▶ Log Task</button>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-bottom:7px">
+      <div style="background:#fff;border-radius:7px;padding:7px;text-align:center;box-shadow:0 1px 5px rgba(0,0,0,.09)">
+        <div style="font-size:15px;font-weight:800;color:#1a56db">14</div>
+        <div style="font-size:7px;color:#6b7280;margin-top:1px">Active users</div>
+      </div>
+      <div style="background:#fff;border-radius:7px;padding:7px;text-align:center;box-shadow:0 1px 5px rgba(0,0,0,.09)">
+        <div style="font-size:15px;font-weight:800;color:#1a56db">1,247</div>
+        <div style="font-size:7px;color:#6b7280;margin-top:1px">Tasks logged</div>
+      </div>
+    </div>
+    <div style="background:#fff;border-radius:7px;padding:7px;box-shadow:0 1px 5px rgba(0,0,0,.09)">
+      <div style="font-weight:700;font-size:8.5px;margin-bottom:4px;color:#1a1a2e">📋 Pending Tasks</div>
+      <div style="font-size:7.5px;color:#6b7280;margin-bottom:4px">Last logged: <strong>23</strong> tasks</div>
+      <div style="font-size:7.5px;color:#6b7280;margin-bottom:5px">Handled (7 days): <strong>47</strong></div>
+      <div style="display:flex;gap:4px">
+        <div style="background:#1a56db;color:#fff;border-radius:4px;padding:2px 5px;font-size:7px;font-weight:700">📈 7 days</div>
+        <div style="background:#e5e7eb;color:#374151;border-radius:4px;padding:2px 5px;font-size:7px">📈 30 days</div>
+      </div>
+    </div>`);
+}
+
+function mockupLogTaskScreen() {
+  return phoneFrame('Log a Task', 'Category-based, no patient data', `
+    <div class="example-badge">Example</div>
+    <div style="font-weight:800;font-size:10.5px;color:#1a1a2e;margin-bottom:7px">← New Task</div>
+    <div style="display:flex;border-radius:7px;overflow:hidden;border:1.5px solid #1a56db;margin-bottom:7px">
+      <div style="flex:1;padding:5px;text-align:center;background:#1a56db;color:#fff;font-size:8px;font-weight:800">My Group</div>
+      <div style="flex:1;padding:5px;text-align:center;background:#fff;color:#1a56db;font-size:8px;font-weight:700">Personal</div>
+    </div>
+    <div style="margin-bottom:6px">
+      <div style="font-size:8px;font-weight:700;color:#333;margin-bottom:3px">Category</div>
+      <div style="border:1.5px solid #d1d5db;border-radius:6px;padding:5px 8px;font-size:8.5px;color:#1a1a2e;background:#fff">Prescription Query ▾</div>
+    </div>
+    <div style="margin-bottom:6px">
+      <div style="font-size:8px;font-weight:700;color:#333;margin-bottom:3px">Sub-type</div>
+      <div style="border:1.5px solid #1a56db;border-radius:6px;padding:5px 8px;font-size:8.5px;color:#1a1a2e;background:#fff">Clarification Needed ▾</div>
+    </div>
+    <div style="margin-bottom:8px">
+      <div style="font-size:8px;font-weight:700;color:#333;margin-bottom:3px">Outcome <span style="font-weight:400;color:#9ca3af">(optional)</span></div>
+      <div style="border:1.5px solid #d1d5db;border-radius:6px;padding:5px 8px;font-size:8.5px;color:#9ca3af;background:#fff">Select outcome… ▾</div>
+    </div>
+    <button style="width:100%;padding:7px;background:#1a56db;color:#fff;border:none;border-radius:6px;font-size:9px;font-weight:800">▶ Start Task</button>`);
+}
+
+function mockupAnalyticsScreen() {
+  const bars = [
+    { label: 'Prescr.', w: 64, count: 34 },
+    { label: 'Calls',   w: 42, count: 22 },
+    { label: 'Letters', w: 36, count: 19 },
+    { label: 'Results', w: 24, count: 12 },
+  ];
+  const chartHTML = bars.map(b => `
+    <div style="display:flex;align-items:center;gap:4px;margin-bottom:3px">
+      <span style="font-size:7px;color:#374151;width:30px;text-align:right;flex-shrink:0">${b.label}</span>
+      <div style="height:10px;background:#1a56db;border-radius:3px;width:${b.w}px;flex-shrink:0"></div>
+      <span style="font-size:7px;color:#6b7280">${b.count}</span>
+    </div>`).join('');
+  return phoneFrame('Analytics', 'Understand your workload', `
+    <div class="example-badge">Example</div>
+    <div style="font-weight:800;font-size:10.5px;color:#1a1a2e;margin-bottom:5px">📊 Analytics</div>
+    <div style="display:flex;gap:3px;margin-bottom:7px">
+      <div style="background:#1a56db;color:#fff;border-radius:4px;padding:3px 5px;font-size:7.5px;font-weight:800">Today</div>
+      <div style="background:#e5e7eb;border-radius:4px;padding:3px 5px;font-size:7.5px;color:#374151">7 days</div>
+      <div style="background:#e5e7eb;border-radius:4px;padding:3px 5px;font-size:7.5px;color:#374151">30 days</div>
+    </div>
+    <div style="background:#fff;border-radius:7px;padding:7px;box-shadow:0 1px 5px rgba(0,0,0,.09);margin-bottom:6px">
+      <div style="font-size:8px;font-weight:700;color:#374151;margin-bottom:5px">Tasks by Category</div>
+      ${chartHTML}
+    </div>
+    <div style="background:#fff;border-radius:7px;padding:7px;box-shadow:0 1px 5px rgba(0,0,0,.09)">
+      <div style="font-size:8px;font-weight:700;margin-bottom:2px">⏱️ Avg task time</div>
+      <div style="font-size:14px;font-weight:800;color:#1a56db">8m 32s</div>
+      <div style="font-size:7px;color:#6b7280">Based on 34 tasks today</div>
+    </div>`);
+}
+
+function mockupTaskActiveScreen() {
+  return phoneFrame('Task in Progress', 'Timer + interruption tracking', `
+    <div class="example-badge">Example</div>
+    <div style="font-weight:800;font-size:10.5px;color:#1a1a2e;margin-bottom:6px">⏸️ Task Active</div>
+    <div style="background:#fff;border-radius:7px;padding:8px;border:1.5px solid #f59e0b;margin-bottom:7px">
+      <div style="background:#dbeafe;color:#1e40af;border-radius:4px;padding:2px 7px;font-size:7.5px;font-weight:800;display:inline-block;margin-bottom:5px">MY GROUP</div>
+      <div style="font-size:9px;font-weight:800;color:#1a1a2e">Prescription Query</div>
+      <div style="font-size:8px;color:#6b7280;margin-top:1px">› Clarification Needed</div>
+      <div style="font-size:7.5px;color:#6b7280;margin-top:2px">Started: 09:34</div>
+    </div>
+    <div style="font-size:22px;font-weight:800;color:#1a56db;text-align:center;font-family:monospace;margin:4px 0 8px;letter-spacing:.04em">00:08:42</div>
+    <div style="display:flex;gap:5px;margin-bottom:5px">
+      <button style="flex:1;padding:6px;background:#16a34a;color:#fff;border:none;border-radius:6px;font-size:8px;font-weight:800">✓ Complete</button>
+      <button style="flex:1;padding:6px;background:#e5e7eb;color:#1a1a2e;border:none;border-radius:6px;font-size:8px;font-weight:700">⏸ Interrupt</button>
+    </div>
+    <div style="font-size:7.5px;color:#6b7280;text-align:center">Interruptions are tracked separately</div>`);
+}
+
+function mockupSettingsScreen() {
+  return phoneFrame('Settings', 'Export & account options', `
+    <div class="example-badge">Example</div>
+    <div style="font-weight:800;font-size:10.5px;color:#1a1a2e;margin-bottom:7px">⚙️ Settings</div>
+    <div style="background:#fff;border-radius:7px;padding:8px;box-shadow:0 1px 5px rgba(0,0,0,.09);margin-bottom:6px">
+      <div style="font-size:8.5px;font-weight:700;margin-bottom:6px">📤 Export My Data</div>
+      <button style="width:100%;padding:5px;background:#1a56db;color:#fff;border:none;border-radius:5px;font-size:7.5px;font-weight:700;margin-bottom:3px">Download Excel Report</button>
+      <div style="font-size:7px;color:#6b7280">Anonymised — no personal data</div>
+    </div>
+    <div style="background:#fff;border-radius:7px;padding:8px;box-shadow:0 1px 5px rgba(0,0,0,.09);margin-bottom:6px">
+      <div style="font-size:8.5px;font-weight:700;margin-bottom:4px">👥 My Group</div>
+      <div style="border:1.5px solid #d1d5db;border-radius:5px;padding:4px 7px;font-size:8px;color:#1a1a2e;background:#fff">Reception Team ▾</div>
+    </div>
+    <div style="background:#fff;border-radius:7px;padding:8px;box-shadow:0 1px 5px rgba(0,0,0,.09)">
+      <div style="font-size:8.5px;font-weight:700;margin-bottom:4px;color:#dc2626">⚠️ Data &amp; Privacy</div>
+      <div style="font-size:7.5px;color:#6b7280">Auto-deleted after 30 days</div>
+      <div style="font-size:7px;color:#9ca3af;margin-top:2px">No patient data ever stored</div>
+    </div>`);
+}
+
+function mockupPendingTasksScreen() {
+  const pts = [12,18,23,15,27,22,19];
+  const maxPt = Math.max(...pts);
+  const sparkHTML = pts.map((v, i) => {
+    const h = Math.round((v / maxPt) * 36);
+    return `<div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:40px">
+      <div style="background:#1a56db;border-radius:2px 2px 0 0;width:80%;height:${h}px"></div>
+      <div style="font-size:6px;color:#6b7280;margin-top:2px">${['M','T','W','T','F','S','S'][i]}</div>
+    </div>`;
+  }).join('');
+  return phoneFrame('Pending Tasks', '7-day workload trend', `
+    <div class="example-badge">Example</div>
+    <div style="font-weight:800;font-size:10.5px;color:#1a1a2e;margin-bottom:6px">📋 Pending Tasks</div>
+    <div style="background:#fff;border-radius:7px;padding:7px;box-shadow:0 1px 5px rgba(0,0,0,.09);margin-bottom:6px">
+      <div style="font-size:8px;color:#6b7280;margin-bottom:3px">Last logged: <strong>23 tasks</strong></div>
+      <div style="font-size:8px;color:#6b7280;margin-bottom:7px">Handled this week: <strong>47</strong></div>
+      <div style="display:flex;align-items:flex-end;gap:2px;height:48px;margin-bottom:4px">
+        ${sparkHTML}
+      </div>
+      <div style="font-size:7px;color:#9ca3af;text-align:center">7-day pending task trend</div>
+    </div>
+    <div style="display:flex;align-items:center;gap:6px">
+      <input style="flex:1;border:1.5px solid #d1d5db;border-radius:5px;padding:4px 6px;font-size:8px;color:#9ca3af" placeholder="Enter today's count…" readonly>
+      <button style="padding:4px 8px;background:#1a56db;color:#fff;border:none;border-radius:5px;font-size:7.5px;font-weight:700">Log</button>
+    </div>`);
+}
+
+async function renderLanding() {
+  stopTimer(); stopActivityTracking(); clearCharts(); state.currentView = 'landing';
+  replaceHistory('landing');
+  // Fetch registration config and public stats in parallel
+  try {
+    const [cfgRes, statsRes] = await Promise.all([
+      fetch('/api/auth/registration-config', { credentials: 'same-origin' }),
+      fetch('/api/auth/stats', { credentials: 'same-origin' }),
+    ]);
+    if (cfgRes.ok) state.registrationConfig = await cfgRes.json();
+    if (statsRes.ok) state.appStats = await statsRes.json();
+  } catch(e) {}
+  const showRegister = state.registrationConfig?.selfRegistration !== 'disabled';
+  const stats = state.appStats;
+
+  app().innerHTML = `
+  <div class="landing">
+
+    <!-- Hero -->
+    <div class="landing-hero">
+      <div style="font-size:3.2rem;margin-bottom:2px">🔒</div>
+      <h1>Tasker</h1>
+      <p class="tagline">Private, anonymous admin-task logging — built for healthcare teams who need real workload insight without risking patient confidentiality.</p>
+      <div class="hero-btns">
+        <button class="btn btn-white" onclick="renderLogin()">Log In</button>
+        ${showRegister ? `<button class="btn btn-outline-white" onclick="renderRegister()">Create Account — Free</button>` : ''}
+      </div>
+      ${stats ? `
+      <div class="hero-stats">
+        <div class="hero-stat">
+          <div class="hero-stat-num">${Number(stats.userCount).toLocaleString()}</div>
+          <div class="hero-stat-label">Active users</div>
+        </div>
+        <div class="hero-stat">
+          <div class="hero-stat-num">${Number(stats.taskCount).toLocaleString()}</div>
+          <div class="hero-stat-label">Tasks logged</div>
+        </div>
+      </div>` : ''}
+    </div>
+
+    <!-- Privacy pillars -->
+    <div class="landing-section landing-section--alt">
+      <div class="section-inner">
+        <p class="section-eyebrow">Built for healthcare, with privacy at its core</p>
+        <h2 class="section-title">Anonymity &amp; Privacy, by Design</h2>
+        <p class="section-sub">Tasker was created specifically for NHS and healthcare admin staff. It lets you track your workload without ever capturing a single piece of patient, staff, or organisation-identifiable information.</p>
+        <div class="privacy-pillars">
+          <div class="privacy-pill">
+            <div class="pp-icon">👤</div>
+            <div class="pp-label">Anonymous usernames — no names, no email required</div>
+          </div>
+          <div class="privacy-pill">
+            <div class="pp-icon">🚫</div>
+            <div class="pp-label">Zero patient data — ever stored or processed</div>
+          </div>
+          <div class="privacy-pill">
+            <div class="pp-icon">⏱️</div>
+            <div class="pp-label">All data auto-deleted after 30 days</div>
+          </div>
+          <div class="privacy-pill">
+            <div class="pp-icon">📋</div>
+            <div class="pp-label">Full DPIA available — GDPR compliant by design</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- App screenshots -->
+    <div class="landing-section" style="background:#fff">
+      <div class="section-inner">
+        <p class="section-eyebrow">See every screen</p>
+        <h2 class="section-title">Purpose-built for safety at every step</h2>
+        <p class="section-sub">
+          All data shown below is <strong>example only</strong> — illustrative healthcare workflows with no real users, no patient information, and no identifiable details of any kind.
+        </p>
+        <div class="mockup-grid">
+          ${mockupHomeScreen()}
+          ${mockupLogTaskScreen()}
+          ${mockupAnalyticsScreen()}
+          ${mockupTaskActiveScreen()}
+        </div>
+        <div class="mockup-grid" style="margin-top:24px">
+          ${mockupPendingTasksScreen()}
+          ${mockupSettingsScreen()}
+          <div class="phone-wrap" style="grid-column:span 2;align-items:center;justify-content:center">
+            <div style="background:#f0f4ff;border-radius:14px;padding:20px 24px;max-width:280px;text-align:center">
+              <div style="font-size:2rem;margin-bottom:8px">📖</div>
+              <div style="font-weight:700;font-size:.95rem;margin-bottom:6px">Quick Start Guide</div>
+              <p style="font-size:.83rem;color:#6b7280;margin-bottom:12px">New to Tasker? Our step-by-step guide walks you through registering, logging your first task, and reading your analytics.</p>
+              <a href="/guide" class="btn btn-primary btn-sm">Read the Guide</a>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- How it works -->
+    <div class="landing-section landing-section--alt">
+      <div class="section-inner">
+        <p class="section-eyebrow">Simple workflow</p>
+        <h2 class="section-title">Up and running in three steps</h2>
+        <div class="steps-grid">
+          <div class="step-card">
+            <div class="step-number">1</div>
+            <div class="step-title">Register Anonymously</div>
+            <div class="step-text">You're assigned a randomly-generated, memorable username — no name, no email, no identifiable information required. Just choose a password and you're in.</div>
+          </div>
+          <div class="step-card">
+            <div class="step-number">2</div>
+            <div class="step-title">Log Tasks as They Happen</div>
+            <div class="step-text">Tap <strong>▶ Log Task</strong> when a work item starts. Select a category (e.g. "Prescription Query") and a sub-type. Tasker records the time — no patient details, no free text.</div>
+          </div>
+          <div class="step-card">
+            <div class="step-number">3</div>
+            <div class="step-title">Review, Export &amp; Act</div>
+            <div class="step-text">Use the Analytics view to see where your time goes. Export an anonymised Excel report to use in team meetings, appraisals, or workforce planning conversations.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Example task categories -->
+    <div class="landing-section" style="background:#fff">
+      <div class="section-inner">
+        <p class="section-eyebrow">Healthcare-ready out of the box</p>
+        <h2 class="section-title">Example task categories</h2>
+        <div class="alert alert-warning" style="max-width:540px;margin:0 auto 28px;font-size:.83rem;text-align:left">
+          ⚠️ <strong>These categories are illustrative examples only.</strong> Tasker never stores patient names, NHS numbers, dates of birth, locations, or any identifying information. Category names describe the <em>type</em> of administrative work — nothing more. Administrators can customise all categories for their team.
+        </div>
+        <div class="task-examples">
+          <div class="task-example-card">
+            <div class="tec-title">💊 Prescription Queries</div>
+            <ul class="tec-items">
+              <li>Dose Query</li>
+              <li>Clarification Request</li>
+              <li>Stock / Availability Issue</li>
+              <li>Repeat Prescription Request</li>
+              <li>Medication Change Query</li>
+            </ul>
+          </div>
+          <div class="task-example-card">
+            <div class="tec-title">📞 Phone Triage</div>
+            <ul class="tec-items">
+              <li>Callback Request</li>
+              <li>Urgent Clinical Query</li>
+              <li>Appointment Query</li>
+              <li>Results / Test Query</li>
+              <li>Third-party Enquiry</li>
+            </ul>
+          </div>
+          <div class="task-example-card">
+            <div class="tec-title">📄 Correspondence</div>
+            <ul class="tec-items">
+              <li>Referral Letter</li>
+              <li>Results / Discharge Letter</li>
+              <li>Appointment Letter</li>
+              <li>Patient Communication</li>
+              <li>Insurance / Legal Request</li>
+            </ul>
+          </div>
+          <div class="task-example-card">
+            <div class="tec-title">🗂️ Administration</div>
+            <ul class="tec-items">
+              <li>Record Scanning / Filing</li>
+              <li>Appointment Booking</li>
+              <li>Form Processing</li>
+              <li>Inbox Management</li>
+              <li>System / Data Entry</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Features -->
+    <div class="landing-section landing-section--dark">
+      <div class="section-inner">
+        <p class="section-eyebrow">Everything you need</p>
+        <h2 class="section-title">Nothing you shouldn't have</h2>
+        <p class="section-sub">Tasker gives you real insight into your workload without creating any data risk for your organisation.</p>
+        <div class="feature-row">
+          <div class="feature-item">
+            <div class="feature-icon">📊</div>
+            <div class="feature-text">
+              <h3>Real-time Analytics</h3>
+              <p>See instantly where your time goes — by category, type, and outcome — filtered by today, this week, or this month.</p>
+            </div>
+          </div>
+          <div class="feature-item">
+            <div class="feature-icon">⏸️</div>
+            <div class="feature-text">
+              <h3>Interruption Tracking</h3>
+              <p>Record mid-task interruptions with a single tap. Understand the true cost of context-switching on your working day.</p>
+            </div>
+          </div>
+          <div class="feature-item">
+            <div class="feature-icon">📋</div>
+            <div class="feature-text">
+              <h3>Pending Workload Log</h3>
+              <p>Log a simple daily pending count and watch the trend over time — a powerful signal for workload conversations with management.</p>
+            </div>
+          </div>
+          <div class="feature-item">
+            <div class="feature-icon">📤</div>
+            <div class="feature-text">
+              <h3>Anonymised Exports</h3>
+              <p>Download Excel reports of your task history — fully anonymised, ready to use in appraisals, team meetings, or audit submissions.</p>
+            </div>
+          </div>
+          <div class="feature-item">
+            <div class="feature-icon">👥</div>
+            <div class="feature-text">
+              <h3>Team Groups</h3>
+              <p>Organise users into role-based groups — reception, nursing, admin — with customised category lists tailored to each team.</p>
+            </div>
+          </div>
+          <div class="feature-item">
+            <div class="feature-icon">🔒</div>
+            <div class="feature-text">
+              <h3>DPIA-Ready &amp; GDPR-Compliant</h3>
+              <p>A full Data Protection Impact Assessment is publicly available, confirming no personal data is processed or stored by design.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- CTA -->
+    <div class="landing-cta">
+      <h2>Ready to understand your workload?</h2>
+      <p>Join healthcare teams already logging tasks anonymously with Tasker — free, private, and no patient data risk.</p>
+      <div class="landing-cta-btns">
+        <button class="btn btn-white" onclick="renderLogin()" style="font-size:1rem">Log In</button>
+        ${showRegister ? `<button class="btn btn-outline-white" onclick="renderRegister()" style="font-size:1rem">Create Account — Free</button>` : ''}
+      </div>
+      <div class="landing-footer-links">
+        <a href="/policy">Privacy Policy</a>
+        <a href="/dpia">Data Protection Impact Assessment</a>
+        <a href="/guide">Quick Start Guide</a>
+        <a href="/help">Help</a>
+      </div>
+    </div>
+
+    ${renderFooter()}
+  </div>`;
+}
+
 // ── LOGIN ────────────────────────────────────────────────────────────────────
 async function renderLogin() {
   stopTimer(); stopActivityTracking(); clearCharts(); state.currentView = 'login';
   replaceHistory('login');
+  // Always fetch a fresh CSRF token so the login form works on the first attempt
+  // regardless of how renderLogin() was reached (inactivity expiry, 401, etc.).
+  try { await refreshCsrf(); } catch(e) {}
   // Force a refresh of the local SW cache so stale assets can't cause CSRF token mismatches
   if ('caches' in window) {
     try { await Promise.all((await caches.keys()).map(k => caches.delete(k))); } catch(e) {}
@@ -1476,7 +1930,7 @@ async function doLogout() {
   state.user = null; state.activeTask = null; state.csrfToken = null;
   state.registrationConfig = null;
   try { await refreshCsrf(); } catch(e){}
-  renderLogin();
+  renderLanding();
 }
 
 async function doInviteUser() {
@@ -1571,7 +2025,7 @@ async function doDeleteAccount() {
     await api('DELETE', '/api/auth/account', { username, password });
     state.user = null; state.activeTask = null; state.csrfToken = null;
     try { await refreshCsrf(); } catch(e){}
-    renderLogin();
+    renderLanding();
   } catch(e) {
     btn.disabled = false; btn.textContent = '🗑️ Permanently Delete My Account';
     showAlert(e.message, 'error', 'da-alerts');
@@ -1598,7 +2052,9 @@ function renderTaskStart() {
       </div>
     </div>
     ${buildDropdownGroup('category','Task From', state.dropdowns.category, 'ts-cat')}
+    ${buildQuickPickRow('category', 'ts-cat', state.commonFields.category, 3)}
     ${buildDropdownGroup('subcategory','Task Type', state.dropdowns.subcategory, 'ts-sub')}
+    ${buildQuickPickRow('subcategory', 'ts-sub', state.commonFields.subcategory, 3)}
     <div class="form-group">
       <label for="ts-assigned">Date assigned</label>
       <input id="ts-assigned" class="input" type="date" value="${new Date().toISOString().split('T')[0]}">
@@ -1615,6 +2071,67 @@ function setDuty(isDuty) {
 
 function buildDropdownGroup(field, label, options, containerId) {
   return buildComboBox(field, label, options, containerId, true, null);
+}
+
+function buildQuickPickRow(field, containerId, values, cols) {
+  if (!values || values.length === 0) return '';
+  const colClass = cols === 3 ? ' quick-pick-grid--3col' : '';
+  const max = cols === 3 ? 6 : 4;
+  const items = values.slice(0, max).map(v =>
+    `<button type="button" class="quick-pick-btn" data-container="${safeId(containerId)}" data-field="${safeId(field)}" data-value="${esc(v)}" onclick="handleQuickPick(this)">${esc(v)}</button>`
+  ).join('');
+  return `<div class="quick-pick-grid${colClass}">${items}</div>`;
+}
+
+function handleQuickPick(el) {
+  selectComboOpt(el.dataset.container, el.dataset.field, el.dataset.value);
+}
+
+function buildRunningOutcomeGroup(options, current) {
+  const sid = 'tr-outcome';
+  const displayValue = current || '';
+  const picks = (state.commonFields.outcome || []).slice(0, 9);
+  const picksHtml = picks.length ? `
+  <div id="tr-outcome-picks" class="quick-pick-grid quick-pick-grid--3col" style="margin-bottom:8px">
+    ${picks.map(v => `<button type="button" class="quick-pick-btn${displayValue === v ? ' qp-selected' : ''}" data-value="${esc(v)}" onclick="handleRunningOutcomePick(this)">${esc(v)}</button>`).join('')}
+  </div>` : '';
+  return `
+  <div class="form-group" style="margin-top:4px">
+    <label>Task Outcome</label>
+    ${picksHtml}
+    <div class="combo-wrap" id="${sid}">
+      <button type="button" id="${sid}-btn"
+              class="combo-btn${displayValue ? '' : ' placeholder'}"
+              onclick="openCombo('${sid}','outcome',false)"
+              aria-haspopup="listbox" aria-expanded="false">
+        ${displayValue ? esc(displayValue) : '— Select Outcome —'}
+      </button>
+      <div class="combo-panel" id="${sid}-panel" role="listbox">
+        <input class="combo-search" id="${sid}-search" type="text" autocomplete="off"
+               placeholder="Search…"
+               oninput="filterCombo('${sid}','outcome',false)"
+               onkeydown="comboKeydown(event,'${sid}','outcome',false)">
+        <div class="combo-opts" id="${sid}-opts"></div>
+      </div>
+      <input type="hidden" id="${sid}-sel" value="${esc(displayValue)}">
+    </div>
+  </div>`;
+}
+
+function handleRunningOutcomePick(el) {
+  selectRunningOutcome(el.dataset.value);
+  renderTaskEnd();
+}
+
+function selectRunningOutcome(value) {
+  const hidden = document.getElementById('tr-outcome-sel');
+  const btn = document.getElementById('tr-outcome-btn');
+  if (hidden) hidden.value = value;
+  if (btn) { btn.textContent = value; btn.classList.remove('placeholder'); }
+  document.querySelectorAll('#tr-outcome-picks .quick-pick-btn').forEach(el => {
+    el.classList.toggle('qp-selected', el.dataset.value === value);
+  });
+  closeCombo('tr-outcome');
 }
 
 function onDropdownChange(containerId, field) {
@@ -1683,12 +2200,14 @@ function renderTaskActive() {
     ${midWarn ? '<div class="midnight-warn">⚠️ Approaching midnight — your session will end at midnight!</div>' : ''}
     ${t.category ? `<p style="text-align:center;font-size:1rem;color:#374151;margin-bottom:4px">${esc(t.category)}${t.subcategory ? ' › ' + esc(t.subcategory) : ''}</p>` : ''}
     <div class="timer-display" id="timer-display">00:00:00</div>
-    <div style="text-align:center;font-size:.85rem;color:#6b7280;margin-bottom:24px">
+    <div style="text-align:center;font-size:.85rem;color:#6b7280;margin-bottom:16px">
       Started: ${formatTimeShort(t.start_time)} 
       ${t.interruptions?.length ? ` · ${t.interruptions.length} interruption(s)` : ''}
     </div>
+    ${buildRunningOutcomeGroup(state.dropdowns.outcome, t.outcome || null)}
     <button class="btn btn-secondary btn-full" style="margin-bottom:10px" onclick="showInterruptModal()">⏸️ Interrupted</button>
-    <button class="btn btn-primary btn-full" onclick="renderTaskEnd()">⏹️ End Task</button>
+    <button class="btn btn-primary btn-full" style="margin-bottom:10px" onclick="renderTaskEnd()">⏹️ End Task</button>
+    <button class="btn btn-danger btn-full" onclick="cancelActiveTask()">✕ Cancel Task</button>
   </div>`;
 
   // Start live timer
@@ -1832,12 +2351,25 @@ async function discardFromModal() {
   } catch(e) { alert(e.message); }
 }
 
+async function cancelActiveTask() {
+  if (!confirm('Cancel this task? It will be discarded and all data deleted.')) return;
+  try {
+    await api('PATCH', `/api/tasks/${state.activeTask.id}`, { status: 'discarded' });
+    state.activeTask = null;
+    stopActivityTracking();
+    renderHome();
+  } catch(e) { alert(e.message); }
+}
+
 // ── TASK END ─────────────────────────────────────────────────────────────────
 function renderTaskEnd() {
   stopTimer();
   const t = state.activeTask;
   if (!t) { renderHome(); return; }
   t.end_time = new Date().toISOString();
+  // Carry over any outcome selected on the Task Running page
+  const runningOutcome = document.getElementById('tr-outcome-sel')?.value;
+  if (runningOutcome) t.outcome = runningOutcome;
   renderTaskReview(t, false);
 }
 
@@ -1861,11 +2393,11 @@ function renderTaskReview(t, isEdit) {
   </div>`).join('') : '<p style="font-size:.85rem;color:#6b7280">No interruptions recorded.</p>';
 
   const taskSummaryHtml = !isEdit ? `
-      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:10px 0;border-bottom:1px solid #e5e7eb;margin-bottom:4px">
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:10px 0;border-bottom:1px solid #e5e7eb;margin-bottom:12px">
         <span class="badge ${t.is_duty ? 'badge-duty' : 'badge-personal'}">${t.is_duty ? '🏥 My Group' : '👤 Personal'}</span>
-        ${t.category ? `<span style="font-weight:600;color:#374151">${esc(t.category)}</span>` : ''}
-        ${t.subcategory ? `<span style="color:#6b7280">›</span><span style="color:#374151">${esc(t.subcategory)}</span>` : ''}
-      </div>` : `
+      </div>
+      ${buildReviewDropdown('category', 'Task From', state.dropdowns.category, t.category)}
+      ${buildReviewDropdown('subcategory', 'Task Type', state.dropdowns.subcategory, t.subcategory)}` : `
       <div class="form-group">
         <label>Task type</label>
         <div class="toggle-group">
@@ -1883,19 +2415,21 @@ function renderTaskReview(t, isEdit) {
   const currentFlagIds = t.flag_ids || [];
   const flagsHtml = state.flagOptions.length ? `
       <div class="form-group">
-        <label style="font-weight:600;color:#374151">Task Flags <span style="font-size:.8rem;color:#6b7280;font-weight:400">(optional — select any that apply)</span></label>
-        <div id="te-flags" style="display:flex;flex-direction:column;gap:6px;margin-top:6px">
-          ${state.flagOptions.map(f => `
-          <label style="display:flex;align-items:center;gap:8px;font-size:.9rem;cursor:pointer">
-            <input type="checkbox" class="flag-check" data-id="${f.id}" ${currentFlagIds.includes(f.id) ? 'checked' : ''}
-                   style="width:16px;height:16px;accent-color:#1a56db">
-            ${esc(f.value)}
-          </label>`).join('')}
-        </div>
-        <div id="te-flag-new" style="margin-top:8px;display:flex;gap:6px">
-          <input id="te-flag-new-input" class="input" type="text" placeholder="Suggest a new flag…" style="flex:1">
-          <button class="btn btn-outline btn-sm" onclick="suggestNewFlag()">Send</button>
-        </div>
+        <details ${currentFlagIds.length ? 'open' : ''}>
+          <summary style="font-weight:600;color:#374151;cursor:pointer;user-select:none">Task Flags <span style="font-size:.8rem;color:#6b7280;font-weight:400">(optional — select any that apply)</span></summary>
+          <div id="te-flags" style="display:flex;flex-direction:column;gap:6px;margin-top:6px">
+            ${state.flagOptions.map(f => `
+            <label style="display:flex;align-items:center;gap:8px;font-size:.9rem;cursor:pointer">
+              <input type="checkbox" class="flag-check" data-id="${f.id}" ${currentFlagIds.includes(f.id) ? 'checked' : ''}
+                     style="width:16px;height:16px;accent-color:#1a56db">
+              ${esc(f.value)}
+            </label>`).join('')}
+          </div>
+          <div id="te-flag-new" style="margin-top:8px;display:flex;gap:6px">
+            <input id="te-flag-new-input" class="input" type="text" placeholder="Suggest a new flag…" style="flex:1">
+            <button class="btn btn-outline btn-sm" onclick="suggestNewFlag()">Send</button>
+          </div>
+        </details>
       </div>` : '';
 
   app().innerHTML = `
@@ -2027,6 +2561,8 @@ async function submitTaskReview(taskId, isEdit, dest) {
   const subcategoryVal = document.getElementById('te-subcategory-sel')?.value || t.subcategory || null;
   if (isEdit && !categoryVal) { showAlert('Please select a Task From.', 'error', 'te-alerts'); return; }
   if (isEdit && !subcategoryVal) { showAlert('Please select a Task Type.', 'error', 'te-alerts'); return; }
+  if (!isEdit && !categoryVal) { showAlert('Please select a Task From.', 'error', 'te-alerts'); return; }
+  if (!isEdit && !subcategoryVal) { showAlert('Please select a Task Type.', 'error', 'te-alerts'); return; }
   // Collect selected flag IDs
   const flagChecks = document.querySelectorAll('#te-flags .flag-check:checked');
   const flag_ids = Array.from(flagChecks).map(el => Number(el.dataset.id));
@@ -2090,6 +2626,12 @@ async function renderAnalyticsSession() {
   stopTimer(); clearCharts(); state.currentView = 'analytics-session';
   state.analyticsQuickPeriod = 'today';
   state.analyticsFiltersExpanded = false;
+  state.analyticsFilterFrom = '';
+  state.analyticsFilterTo = '';
+  state.analyticsFilterDuty = '';
+  state.analyticsFilterCategory = '';
+  state.analyticsFilterSubcategory = '';
+  state.analyticsFilterOutcome = '';
   pushHistory('analytics-session');
   app().innerHTML = `<div class="view"><p class="loading">Loading analytics…</p></div>`;
   try {
@@ -2106,8 +2648,8 @@ async function renderAnalyticsSession() {
 async function renderAnalyticsHistory() {
   stopTimer(); clearCharts(); state.currentView = 'analytics-history';
   pushHistory('analytics-history');
-  app().innerHTML = `<div class="view"><p class="loading">Loading history…</p></div>`;
   const params = buildHistoryParams();
+  app().innerHTML = `<div class="view"><p class="loading">Loading history…</p></div>`;
   try {
     const [d, pendingRes] = await Promise.all([
       api('GET', '/api/analytics/history' + params),
@@ -2120,12 +2662,27 @@ async function renderAnalyticsHistory() {
 }
 
 function buildHistoryParams() {
-  const from = document.getElementById('h-from')?.value || state.analyticsQuickFrom || '';
-  const to = document.getElementById('h-to')?.value || state.analyticsQuickTo || '';
-  const isDuty = document.getElementById('h-duty')?.value || '';
-  const cat = document.getElementById('h-cat')?.value || '';
-  const sub = document.getElementById('h-sub')?.value || '';
-  const out = document.getElementById('h-out')?.value || '';
+  // Snapshot current DOM filter values into state while the filter panel is still rendered
+  const fromEl = document.getElementById('h-from');
+  const toEl = document.getElementById('h-to');
+  const dutyEl = document.getElementById('h-duty');
+  const catEl = document.getElementById('h-cat');
+  const subEl = document.getElementById('h-sub');
+  const outEl = document.getElementById('h-out');
+  if (fromEl !== null) state.analyticsFilterFrom = fromEl.value;
+  if (toEl !== null) state.analyticsFilterTo = toEl.value;
+  if (dutyEl !== null) state.analyticsFilterDuty = dutyEl.value;
+  if (catEl !== null) state.analyticsFilterCategory = catEl.value;
+  if (subEl !== null) state.analyticsFilterSubcategory = subEl.value;
+  if (outEl !== null) state.analyticsFilterOutcome = outEl.value;
+
+  // Build params from persisted state (date inputs override quick-filter dates)
+  const from = state.analyticsFilterFrom || state.analyticsQuickFrom || '';
+  const to = state.analyticsFilterTo || state.analyticsQuickTo || '';
+  const isDuty = state.analyticsFilterDuty;
+  const cat = state.analyticsFilterCategory;
+  const sub = state.analyticsFilterSubcategory;
+  const out = state.analyticsFilterOutcome;
   const parts = [];
   if (from) parts.push('from=' + encodeURIComponent(from));
   if (to) parts.push('to=' + encodeURIComponent(to));
@@ -2137,17 +2694,15 @@ function buildHistoryParams() {
 }
 
 function setDatePreset(days) {
-  state.analyticsQuickPeriod = null;
-  state.analyticsQuickFrom = '';
-  state.analyticsQuickTo = '';
   const to = new Date();
   const from = new Date();
   from.setDate(from.getDate() - days + 1);
   const fmt = d => d.toISOString().split('T')[0];
-  const fromEl = document.getElementById('h-from');
-  const toEl = document.getElementById('h-to');
-  if (fromEl) fromEl.value = fmt(from);
-  if (toEl) toEl.value = fmt(to);
+  state.analyticsQuickPeriod = null;
+  state.analyticsQuickFrom = '';
+  state.analyticsQuickTo = '';
+  state.analyticsFilterFrom = fmt(from);
+  state.analyticsFilterTo = fmt(to);
   renderAnalyticsHistory();
 }
 
@@ -2159,6 +2714,8 @@ function applyHistoryFilters() {
 function setAnalyticsQuickFilter(period) {
   state.analyticsFiltersExpanded = false;
   state.analyticsQuickPeriod = period;
+  state.analyticsFilterFrom = '';
+  state.analyticsFilterTo = '';
   if (period === 'today') {
     const today = new Date().toISOString().split('T')[0];
     state.analyticsQuickFrom = today;
@@ -2209,39 +2766,39 @@ function renderAnalyticsContent(data, mode, pendingLog) {
     <div class="filter-bar" style="margin-bottom:0">
       <div class="form-group" style="margin-bottom:0">
         <label>From date</label>
-        <input id="h-from" class="input" type="date">
+        <input id="h-from" class="input" type="date" value="${state.analyticsFilterFrom}">
       </div>
       <div class="form-group" style="margin-bottom:0">
         <label>To date</label>
-        <input id="h-to" class="input" type="date">
+        <input id="h-to" class="input" type="date" value="${state.analyticsFilterTo}">
       </div>
       <div class="form-group" style="margin-bottom:0">
         <label>Type</label>
         <select id="h-duty" class="select">
-          <option value="">All</option>
-          <option value="duty">My Group only</option>
-          <option value="personal">Personal only</option>
+          <option value="" ${!state.analyticsFilterDuty ? 'selected' : ''}>All</option>
+          <option value="duty" ${state.analyticsFilterDuty === 'duty' ? 'selected' : ''}>My Group only</option>
+          <option value="personal" ${state.analyticsFilterDuty === 'personal' ? 'selected' : ''}>Personal only</option>
         </select>
       </div>
       <div class="form-group" style="margin-bottom:0">
         <label>Category</label>
         <select id="h-cat" class="select">
-          <option value="">All</option>
-          ${state.dropdowns.category.map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join('')}
+          <option value="" ${!state.analyticsFilterCategory ? 'selected' : ''}>All</option>
+          ${state.dropdowns.category.map(c => `<option value="${esc(c)}" ${state.analyticsFilterCategory === c ? 'selected' : ''}>${esc(c)}</option>`).join('')}
         </select>
       </div>
       <div class="form-group" style="margin-bottom:0">
         <label>Task type</label>
         <select id="h-sub" class="select">
-          <option value="">All</option>
-          ${state.dropdowns.subcategory.map(o => `<option value="${esc(o)}">${esc(o)}</option>`).join('')}
+          <option value="" ${!state.analyticsFilterSubcategory ? 'selected' : ''}>All</option>
+          ${state.dropdowns.subcategory.map(o => `<option value="${esc(o)}" ${state.analyticsFilterSubcategory === o ? 'selected' : ''}>${esc(o)}</option>`).join('')}
         </select>
       </div>
       <div class="form-group" style="margin-bottom:0">
         <label>Outcome</label>
         <select id="h-out" class="select">
-          <option value="">All</option>
-          ${state.dropdowns.outcome.map(o => `<option value="${esc(o)}">${esc(o)}</option>`).join('')}
+          <option value="" ${!state.analyticsFilterOutcome ? 'selected' : ''}>All</option>
+          ${state.dropdowns.outcome.map(o => `<option value="${esc(o)}" ${state.analyticsFilterOutcome === o ? 'selected' : ''}>${esc(o)}</option>`).join('')}
         </select>
       </div>
       <button class="btn btn-primary btn-full" onclick="applyHistoryFilters()">Apply Filters</button>
@@ -2301,6 +2858,20 @@ function renderAnalyticsContent(data, mode, pendingLog) {
   const hasDow = Object.keys(s.byDayOfWeek || {}).length > 0;
   const hasOutcome = Object.keys(s.byOutcome || {}).length > 0;
   const hasFlags = Object.keys(s.byFlag || {}).length > 0;
+  const byCatSubCats = Object.keys(s.byCategoryBySubcategory || {});
+  const hasCatSub = hasSubcategory && (
+    byCatSubCats.length > 1 ||
+    byCatSubCats.some(c => Object.keys(s.byCategoryBySubcategory[c] || {}).length > 1)
+  );
+  const dowSubTypes = new Set(Object.values(s.byDowBySubcategory || {}).flatMap(v => Object.keys(v)));
+  const hasDowSub = hasDow && dowSubTypes.size > 1;
+  const hasFlagCat = hasFlags && Object.keys(s.byFlagByCategory || {}).length > 0;
+  const hasOutcomeCat = hasOutcome && Object.keys(s.byCategory || {}).length > 1;
+  const hasLag = !!(s.lagStats && s.lagStats.count > 0);
+  const personalDowCatTypes = new Set(Object.values(s.byDowPersonalByCategory || {}).flatMap(v => Object.keys(v)));
+  const hasPersonalDowCat = personalDowCatTypes.size > 0;
+  const personalDowSubTypes = new Set(Object.values(s.byDowPersonalBySubcategory || {}).flatMap(v => Object.keys(v)));
+  const hasPersonalDowSub = personalDowSubTypes.size > 0;
 
   app().innerHTML = `
   <div class="view">
@@ -2328,28 +2899,47 @@ function renderAnalyticsContent(data, mode, pendingLog) {
       <div class="card-title">Time by Category (mins)</div>
       <div class="chart-container" style="height:240px"><canvas id="chart-cat"></canvas></div>
     </div>
+    <div class="card">
+      <div class="card-title">My Group vs Personal</div>
+      <div class="chart-container" style="height:200px"><canvas id="chart-split"></canvas></div>
+    </div>
     ${hasOutcome ? `
     <div class="card">
       <div class="card-title">Outcome Distribution</div>
       <div class="chart-container" style="height:220px"><canvas id="chart-outcome"></canvas></div>
     </div>` : ''}
+    ${hasOutcomeCat ? `
+    <div class="card">
+      <div class="card-title">Outcome Breakdown by Category</div>
+      <div class="chart-container" style="height:510px"><canvas id="chart-outcome-cat"></canvas></div>
+    </div>` : ''}
     <div class="card">
       <div class="card-title">Avg Duration by Category (mins)</div>
       <div class="chart-container" style="height:${Math.max(180, Object.keys(s.byCategory).length * 44)}px"><canvas id="chart-cat-dur"></canvas></div>
-    </div>
-    <div class="card">
-      <div class="card-title">My Group vs Personal</div>
-      <div class="chart-container" style="height:200px"><canvas id="chart-split"></canvas></div>
     </div>
     ${hasSubcategory ? `
     <div class="card">
       <div class="card-title">Tasks by Type</div>
       <div class="chart-container" style="height:${Math.max(180, subLabels.length * 44)}px"><canvas id="chart-sub"></canvas></div>
+    </div>
+    <div class="card">
+      <div class="card-title">Avg Duration by Task Type (mins)</div>
+      <div class="chart-container" style="height:${Math.max(180, subLabels.length * 44)}px"><canvas id="chart-sub-dur"></canvas></div>
+    </div>` : ''}
+    ${hasCatSub ? `
+    <div class="card">
+      <div class="card-title">Task Types by Source Group</div>
+      <div class="chart-container" style="height:540px"><canvas id="chart-cat-sub"></canvas></div>
     </div>` : ''}
     ${hasFlags ? `
     <div class="card">
       <div class="card-title">Task Flag Distribution</div>
       <div class="chart-container" style="height:${Math.max(180, Object.keys(s.byFlag).length * 44)}px"><canvas id="chart-flags"></canvas></div>
+    </div>` : ''}
+    ${hasFlagCat ? `
+    <div class="card">
+      <div class="card-title">Flags by Source Group</div>
+      <div class="chart-container" style="height:${Math.max(420, Object.keys(s.byFlagByCategory || {}).length * 44)}px"><canvas id="chart-flag-cat"></canvas></div>
     </div>` : ''}
     ${hasHour ? `
     <div class="card">
@@ -2361,6 +2951,21 @@ function renderAnalyticsContent(data, mode, pendingLog) {
       <div class="card-title">Activity by Day of Week</div>
       <div class="chart-container" style="height:200px"><canvas id="chart-dow"></canvas></div>
     </div>` : ''}
+    ${hasDowSub ? `
+    <div class="card">
+      <div class="card-title">Task Type Patterns by Day Assigned</div>
+      <div class="chart-container" style="height:540px"><canvas id="chart-dow-sub"></canvas></div>
+    </div>` : ''}
+    ${hasPersonalDowCat ? `
+    <div class="card">
+      <div class="card-title">Personal Tasks by Day Assigned — by Task Origin</div>
+      <div class="chart-container" style="height:300px"><canvas id="chart-personal-dow-cat"></canvas></div>
+    </div>` : ''}
+    ${hasPersonalDowSub ? `
+    <div class="card">
+      <div class="card-title">Personal Tasks by Day Assigned — by Task Type</div>
+      <div class="chart-container" style="height:300px"><canvas id="chart-personal-dow-sub"></canvas></div>
+    </div>` : ''}
     ${hasMultiDates ? `
     <div class="card">
       <div class="card-title">Tasks &amp; Time Over Time</div>
@@ -2370,9 +2975,17 @@ function renderAnalyticsContent(data, mode, pendingLog) {
       <div class="card-title">Interruptions Over Time</div>
       <div class="chart-container" style="height:200px"><canvas id="chart-intr-trend"></canvas></div>
     </div>` : ''}
+    ${hasLag ? `
+    <div class="card">
+      <div class="card-title">Days from Assignment to Action</div>
+      ${s.lagStatsDuty && s.lagStatsDuty.count > 0 ? `<p style="font-size:.8rem;color:#6b7280;margin:0 0 4px">My Group — Avg: ${s.lagStatsDuty.avg}d &nbsp;·&nbsp; Median: ${s.lagStatsDuty.median}d &nbsp;·&nbsp; Range: ${s.lagStatsDuty.min}–${s.lagStatsDuty.max}d</p>` : ''}
+      ${s.lagStatsPersonal && s.lagStatsPersonal.count > 0 ? `<p style="font-size:.8rem;color:#6b7280;margin:0 0 8px">Personal — Avg: ${s.lagStatsPersonal.avg}d &nbsp;·&nbsp; Median: ${s.lagStatsPersonal.median}d &nbsp;·&nbsp; Range: ${s.lagStatsPersonal.min}–${s.lagStatsPersonal.max}d</p>` : ''}
+      <div class="chart-container" style="height:360px"><canvas id="chart-lag"></canvas></div>
+    </div>` : ''}
     ` : '<div class="card"><p style="color:#6b7280;text-align:center;padding:20px">No completed tasks yet.</p></div>'}
     <div style="display:flex;gap:10px;margin-bottom:12px;flex-wrap:wrap">
       <button class="btn btn-secondary" style="flex:1" onclick="downloadExport()">⬇️ Download Log (.xlsx)</button>
+      <button class="btn btn-secondary" style="flex:1" onclick="exportAnalyticsReport()">📊 Download Analytics (.xlsx)</button>
     </div>
     <div style="display:flex;align-items:center;justify-content:space-between;margin:20px 0 10px">
       <div class="section-heading" style="margin:0">Tasks</div>
@@ -2479,6 +3092,116 @@ function renderAnalyticsContent(data, mode, pendingLog) {
         [{ label: 'Interruptions', data: intrCounts, borderColor: '#d97706', backgroundColor: 'rgba(217,119,6,.1)', tension: 0.3, fill: true }],
         { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } } });
     }
+
+    // Avg duration by task type (subcategory) — horizontal bar
+    if (hasSubcategory) {
+      const subAvgDur = subLabels.map(k => s.bySubcategory[k] && s.bySubcategory[k].count > 0
+        ? Math.round(s.bySubcategory[k].minutes / s.bySubcategory[k].count) : 0);
+      renderChart('chart-sub-dur', 'bar', subLabels,
+        [{ label: 'Avg mins', data: subAvgDur, backgroundColor: COLORS }],
+        { indexAxis: 'y', plugins: { legend: { display: false } }, scales: { x: { beginAtZero: true } } });
+    }
+
+    // Task types by source group — stacked bar (category × subcategory)
+    if (hasCatSub) {
+      const csCategories = Object.keys(s.byCategoryBySubcategory);
+      const allSubTypes = [...new Set(csCategories.flatMap(c => Object.keys(s.byCategoryBySubcategory[c])))];
+      const csDatasets = allSubTypes.map((sub, i) => ({
+        label: sub,
+        data: csCategories.map(c => (s.byCategoryBySubcategory[c][sub] || 0)),
+        backgroundColor: COLORS[i % COLORS.length],
+      }));
+      renderChart('chart-cat-sub', 'bar', csCategories, csDatasets,
+        { plugins: { legend: { position: 'bottom' } }, scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true } } });
+    }
+
+    // Task type patterns by day of week — stacked bar
+    if (hasDowSub) {
+      const dowNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+      const allDowSubs = [...new Set(Object.values(s.byDowBySubcategory).flatMap(v => Object.keys(v)))];
+      const dowSubDatasets = allDowSubs.map((sub, i) => ({
+        label: sub,
+        data: dowNames.map((_, di) => ((s.byDowBySubcategory[di] || {})[sub] || 0)),
+        backgroundColor: COLORS[i % COLORS.length],
+      }));
+      renderChart('chart-dow-sub', 'bar', dowNames, dowSubDatasets,
+        { plugins: { legend: { position: 'bottom' } }, scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true, ticks: { stepSize: 1 } } } });
+    }
+
+    // Personal tasks by day assigned — by task origin (category) — stacked column
+    if (hasPersonalDowCat) {
+      const dowNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+      const allPersonalCats = [...new Set(Object.values(s.byDowPersonalByCategory).flatMap(v => Object.keys(v)))];
+      const personalDowCatDatasets = allPersonalCats.map((cat, i) => ({
+        label: cat,
+        data: dowNames.map((_, di) => ((s.byDowPersonalByCategory[di] || {})[cat] || 0)),
+        backgroundColor: COLORS[i % COLORS.length],
+      }));
+      renderChart('chart-personal-dow-cat', 'bar', dowNames, personalDowCatDatasets,
+        { plugins: { legend: { position: 'bottom' } }, scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true, ticks: { stepSize: 1 } } } });
+    }
+
+    // Personal tasks by day assigned — by task type (subcategory) — stacked column
+    if (hasPersonalDowSub) {
+      const dowNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+      const allPersonalSubs = [...new Set(Object.values(s.byDowPersonalBySubcategory).flatMap(v => Object.keys(v)))];
+      const personalDowSubDatasets = allPersonalSubs.map((sub, i) => ({
+        label: sub,
+        data: dowNames.map((_, di) => ((s.byDowPersonalBySubcategory[di] || {})[sub] || 0)),
+        backgroundColor: COLORS[i % COLORS.length],
+      }));
+      renderChart('chart-personal-dow-sub', 'bar', dowNames, personalDowSubDatasets,
+        { plugins: { legend: { position: 'bottom' } }, scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true, ticks: { stepSize: 1 } } } });
+    }
+
+    // Outcome breakdown by category — stacked bar
+    if (hasOutcomeCat) {
+      const allOutcomes = Object.keys(s.byOutcome);
+      const ocDatasets = allOutcomes.map((out, i) => ({
+        label: out,
+        data: catLabels.map(c => ((s.byOutcomeByCategory[out] || {})[c] || 0)),
+        backgroundColor: COLORS[i % COLORS.length],
+      }));
+      renderChart('chart-outcome-cat', 'bar', catLabels, ocDatasets,
+        { plugins: { legend: { position: 'bottom' } }, scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true, ticks: { stepSize: 1 } } } });
+    }
+
+    // Flags by source group — horizontal stacked bar
+    if (hasFlagCat) {
+      const flagCatFlags = Object.keys(s.byFlagByCategory);
+      const allFlagCats = [...new Set(flagCatFlags.flatMap(f => Object.keys(s.byFlagByCategory[f])))];
+      const fcDatasets = allFlagCats.map((cat, i) => ({
+        label: cat,
+        data: flagCatFlags.map(f => ((s.byFlagByCategory[f] || {})[cat] || 0)),
+        backgroundColor: COLORS[i % COLORS.length],
+      }));
+      renderChart('chart-flag-cat', 'bar', flagCatFlags, fcDatasets,
+        { indexAxis: 'y', plugins: { legend: { position: 'bottom' } }, scales: { x: { stacked: true, beginAtZero: true }, y: { stacked: true } } });
+    }
+
+    // Assignment-to-action lag distribution — stacked bar chart (My Group vs Personal)
+    if (hasLag) {
+      const lagBucketOrder = ['0','1','2','3','4','5','6','7','8–14','15–30','>30'];
+      const lagLabels = lagBucketOrder.filter(k =>
+        (s.lagStatsDuty   && s.lagStatsDuty.buckets[k]   !== undefined) ||
+        (s.lagStatsPersonal && s.lagStatsPersonal.buckets[k] !== undefined)
+      );
+      const lagDatasets = [];
+      if (s.lagStatsDuty && s.lagStatsDuty.count > 0) {
+        lagDatasets.push({ label: 'My Group', data: lagLabels.map(k => s.lagStatsDuty.buckets[k] || 0), backgroundColor: '#1a56db' });
+      }
+      if (s.lagStatsPersonal && s.lagStatsPersonal.count > 0) {
+        lagDatasets.push({ label: 'Personal', data: lagLabels.map(k => s.lagStatsPersonal.buckets[k] || 0), backgroundColor: '#7c3aed' });
+      }
+      if (lagDatasets.length === 0) {
+        lagDatasets.push({ label: 'Tasks', data: lagLabels.map(k => s.lagStats.buckets[k] || 0), backgroundColor: '#0891b2' });
+      }
+      renderChart('chart-lag', 'bar', lagLabels, lagDatasets,
+        { plugins: { legend: { position: 'bottom' } }, scales: {
+          x: { stacked: true, title: { display: true, text: 'Days' } },
+          y: { stacked: true, beginAtZero: true, ticks: { stepSize: 1 } },
+        } });
+    }
   }
 }
 
@@ -2527,6 +3250,31 @@ function buildInsights(s) {
   if (s.total > 0 && s.tasksWithInterruptions > 0) {
     const pct = Math.round((s.tasksWithInterruptions / s.total) * 100);
     items.push(`🔔 <strong>Interruption rate:</strong> ${pct}% of tasks`);
+  }
+
+  // Average assignment-to-action lag
+  if (s.lagStats && s.lagStats.count > 0) {
+    let lagNote;
+    if (s.lagStats.avg === 0) { lagNote = 'same day'; }
+    else if (s.lagStats.avg <= 1) { lagNote = 'next day'; }
+    else { lagNote = `${s.lagStats.avg} days`; }
+    items.push(`⏰ <strong>Avg assignment lag:</strong> ${lagNote} (${s.lagStats.count} dated tasks)`);
+  }
+
+  // Subcategory (task type) with highest average duration
+  const subDurEntries = Object.entries(s.avgDurBySubcategory || {}).filter(([k]) => k !== 'Unspecified');
+  if (subDurEntries.length > 0) {
+    const [topSub, topDur] = subDurEntries.sort((a, b) => b[1] - a[1])[0];
+    if (topDur > 0) items.push(`🔍 <strong>Longest task type:</strong> ${esc(topSub)} (avg ${topDur}m)`);
+  }
+
+  // Most common flag–source-group combination
+  const flagCatPairs = Object.entries(s.byFlagByCategory || {}).flatMap(([f, cats]) =>
+    Object.entries(cats).map(([c, n]) => ({ flag: f, cat: c, n }))
+  );
+  if (flagCatPairs.length > 0) {
+    const top = flagCatPairs.sort((a, b) => b.n - a.n)[0];
+    items.push(`🚩 <strong>Top flag source:</strong> "${esc(top.flag)}" from ${esc(top.cat)}`);
   }
 
   return items;
@@ -2585,6 +3333,29 @@ function toggleAnalyticsFilters() {
 async function downloadExport() {
   window.location.href = '/api/analytics/export';
 }
+
+function exportAnalyticsReport() {
+  if (!state.analyticsData) return;
+  const mode = state.analyticsData.mode;
+  const params = new URLSearchParams({ mode });
+  if (mode !== 'session') {
+    const from   = state.analyticsFilterFrom     || state.analyticsQuickFrom || '';
+    const to     = state.analyticsFilterTo       || state.analyticsQuickTo   || '';
+    const isDuty = state.analyticsFilterDuty;
+    const cat    = state.analyticsFilterCategory;
+    const sub    = state.analyticsFilterSubcategory;
+    const out    = state.analyticsFilterOutcome;
+    if (from)               params.set('from', from);
+    if (to)                 params.set('to', to);
+    if (isDuty === 'duty')  params.set('is_duty', 'true');
+    else if (isDuty === 'personal') params.set('is_duty', 'false');
+    if (cat)  params.set('category', cat);
+    if (sub)  params.set('subcategory', sub);
+    if (out)  params.set('outcome', out);
+  }
+  window.location.href = `/api/analytics/report?${params.toString()}`;
+}
+
 
 // ── ADMIN ────────────────────────────────────────────────────────────────────
 async function renderAdmin() {
@@ -3319,6 +4090,7 @@ async function saveGroupDropdowns(groupId) {
 
 // ── SPA back/forward navigation ───────────────────────────────────────────────
 const HISTORY_RENDER_MAP = {
+  'landing':            () => renderLanding(),
   'home':               () => renderHome(),
   'login':              () => renderLogin(),
   'register':           () => renderRegister(),
@@ -3347,7 +4119,7 @@ window.addEventListener('popstate', async (e) => {
   const view = e.state?.view;
   if (!view) return;
   // Redirect to appropriate landing page if auth state doesn't match the view
-  if ((view === 'login' || view === 'register') && state.user) {
+  if ((view === 'login' || view === 'register' || view === 'landing') && state.user) {
     const targetView = state.user.isAdmin ? 'admin' : 'home';
     replaceHistory(targetView);
     await (state.user.isAdmin ? renderAdmin() : renderHome());
@@ -3371,38 +4143,44 @@ window.addEventListener('popstate', async (e) => {
 // ── Bootstrap ────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('loading-retry-btn')?.addEventListener('click', init);
-  document.getElementById('loading-login-btn')?.addEventListener('click', renderLogin);
+  document.getElementById('loading-login-btn')?.addEventListener('click', renderLanding);
   init();
 });
 
 // ── Inactivity event hooks ────────────────────────────────────────────────────
 window.addEventListener('beforeunload', () => { updateLastActive(); });
 
+// Belt-and-suspenders catch-all: visibilitychange covers tab switches and most
+// mobile foreground/background transitions, but window focus covers the case
+// where the browser window regains focus from another application (or after a
+// screen-lock / wake cycle on some platforms) without the tab visibility
+// changing.  Both ultimately call the same checkClientInactivity() so there is
+// no double-expiry risk — forceSessionExpiry() is guarded by _sessionExpiryInProgress.
+window.addEventListener('focus', () => { checkClientInactivity(); });
+
 document.addEventListener('visibilitychange', async () => {
-  if (document.hidden) {
-    updateLastActive();
-  } else {
-    // On every foreground resume, check whether a new app version has been deployed.
-    // Throttled to once per 60 s to avoid redundant fetches when the user rapidly
-    // switches apps.  checkAssetVersion() itself records the timestamp, so the
-    // periodic poll (Option 2) and this path share the same cooldown.
-    if (Date.now() - _lastVersionCheckAt > VERSION_CHECK_DEBOUNCE_MS) {
-      if (await checkAssetVersion()) return; // new version detected — update banner shown
-    }
-    if (state.user && !state.user.isAdmin && state.activeTask) {
-      try {
-        const interrupted = await checkInactivityInterruption();
-        updateLastActive();
-        if (interrupted) {
-          if (state.currentView === 'home') {
-            app().innerHTML = renderHomeHTML();
-          } else if (state.currentView === 'task-active') {
-            renderTaskActive();
-          }
+  if (document.hidden) return;
+  // Tab/app just became visible — check version then inactivity.
+  // Do NOT stamp the clock here; only user interaction (ACTIVITY_EVENTS → updateLastActive)
+  // should reset it.  That way the banner shown below persists until the user actually
+  // touches something, and the inactivity intervals accumulate real idle time.
+  if (Date.now() - _lastVersionCheckAt > VERSION_CHECK_DEBOUNCE_MS) {
+    if (await checkAssetVersion()) return; // new version detected — update banner shown
+  }
+  checkClientInactivity();
+  if (_sessionExpiryInProgress) return;
+  if (state.user && !state.user.isAdmin && state.activeTask) {
+    try {
+      const interrupted = await checkInactivityInterruption();
+      if (interrupted) {
+        if (state.currentView === 'home') {
+          app().innerHTML = renderHomeHTML();
+        } else if (state.currentView === 'task-active') {
+          renderTaskActive();
         }
-      } catch(e) {
-        console.error('[Tasker] Visibility change error:', e);
       }
+    } catch(e) {
+      console.error('[Tasker] Visibility change error:', e);
     }
   }
 });
