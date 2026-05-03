@@ -2082,11 +2082,14 @@ function renderProgressHTML() {
       <div class="card-title">📊 XP by Source</div>
       <div class="chart-container" style="height:280px"><canvas id="chart-xp-sources"></canvas></div>
       <div style="margin-top:12px">
-        ${x.xpBySource.map(s => `
+        ${x.xpBySource.map(s => {
+          const pct = x.totalXp > 0 ? Math.round(s.xp / x.totalXp * 100) : 0;
+          return `
         <div style="display:flex;justify-content:space-between;align-items:center;font-size:.875rem;padding:4px 0;border-bottom:1px solid #f3f4f6">
           <span style="color:#374151">${esc(s.source)}</span>
-          <span style="font-weight:600;color:#1a56db">${s.xp} XP</span>
-        </div>`).join('')}
+          <span style="font-weight:600;color:#1a56db">${s.xp} XP <span style="font-weight:400;color:#9ca3af">(${pct}%)</span></span>
+        </div>`;
+        }).join('')}
       </div>
     </div>` : '';
 
