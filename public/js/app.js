@@ -45,6 +45,7 @@ const state = {
   userMessages: [],              // [{ id, message, read, created_at }]
   notices: [],                   // [{ id, message, created_at }]
   noticesPanelOpen: false,       // whether Notices and Feedback panel is expanded
+  xpSummary: null,               // { totalXp, level, xpInCurrentLevel, xpNeededForNextLevel, progressPercent, xpBySource }
 };
 
 // ── History management ────────────────────────────────────────────────────────
@@ -598,6 +599,9 @@ function renderBottomNav(active) {
     </button>
     <button class="nav-btn ${active==='analytics'?'active':''}" onclick="renderAnalyticsSession()">
       <span class="nav-icon">📊</span><span>Analytics</span>
+    </button>
+    <button class="nav-btn ${active==='progress'?'active':''}" onclick="renderProgress()">
+      <span class="nav-icon">🏆</span><span>Progress</span>
     </button>
     <button class="nav-btn ${active==='settings'?'active':''}" onclick="renderSettings()">
       <span class="nav-icon">⚙️</span><span>Settings</span>
@@ -1646,6 +1650,34 @@ async function doChangePassword(isForced) {
   }
 }
 
+// ── XP HELPERS ───────────────────────────────────────────────────────────────
+
+/** Render a compact XP level progress bar card for use on Home and Progress pages. */
+function renderXpLevelBar() {
+  const x = state.xpSummary;
+  if (!x) return '';
+  const pct = x.progressPercent;
+  return `
+    <div class="card" style="margin-top:16px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+        <div class="card-title" style="margin:0">⭐ XP Overview</div>
+        <span style="font-size:.8rem;color:#6b7280">Total: <strong>${x.totalXp}</strong> XP</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px">
+        <div style="min-width:48px;text-align:center;background:#1a56db;color:#fff;border-radius:8px;padding:6px 4px;font-weight:800;font-size:1rem;line-height:1.1">
+          Lvl<br>${x.level}
+        </div>
+        <div style="flex:1">
+          <div style="font-size:.8rem;color:#6b7280;margin-bottom:4px">${x.xpInCurrentLevel} / ${x.xpNeededForNextLevel} XP → Level ${x.level + 1}</div>
+          <div style="background:#e5e7eb;border-radius:6px;height:14px;overflow:hidden" role="progressbar" aria-valuenow="${pct}" aria-valuemin="0" aria-valuemax="100">
+            <div style="width:${pct}%;height:100%;background:#1a56db;border-radius:6px;transition:width .4s ease"></div>
+          </div>
+          <div style="font-size:.75rem;color:#9ca3af;margin-top:3px;text-align:right">${pct}%</div>
+        </div>
+      </div>
+    </div>`;
+}
+
 // ── HOME ─────────────────────────────────────────────────────────────────────
 function renderHomeHTML() {
   const t = state.activeTask;
@@ -1717,6 +1749,7 @@ function renderHomeHTML() {
       ▶ Log Task
     </button>`}
     ${statsHTML}
+    ${renderXpLevelBar()}
     <div class="card" style="margin-top:16px">
       <div class="card-title">📋 Pending Tasks</div>
       <p style="font-size:.85rem;color:#6b7280;margin-bottom:8px">How many tasks do you have currently?</p>
@@ -1742,15 +1775,17 @@ async function renderHome() {
   stopTimer(); clearCharts(); state.currentView = 'home';
   pushHistory('home');
   app().innerHTML = renderHomeHTML();
-  const [_activeTask, statsRes, pendingRes, recentRes] = await Promise.all([
+  const [_activeTask, statsRes, pendingRes, recentRes, xpRes] = await Promise.all([
     checkActiveTask(),
     fetch('/api/auth/stats', { credentials: 'same-origin' }).catch(() => null),
     fetch('/api/tasks/pending-count', { credentials: 'same-origin' }).catch(() => null),
     fetch('/api/tasks/recent-count', { credentials: 'same-origin' }).catch(() => null),
+    fetch('/api/xp/summary', { credentials: 'same-origin' }).catch(() => null),
   ]);
   if (statsRes?.ok) state.appStats = await statsRes.json();
   if (pendingRes?.ok) state.pendingTaskLog = await pendingRes.json();
   if (recentRes?.ok) { const r = await recentRes.json(); state.recentHandledCount = r?.count ?? null; }
+  if (xpRes?.ok) state.xpSummary = await xpRes.json();
   await loadNoticesAndMessages();
   if (state.activeTask) {
     await checkInactivityInterruption();
@@ -2029,6 +2064,74 @@ async function doDeleteAccount() {
   } catch(e) {
     btn.disabled = false; btn.textContent = '🗑️ Permanently Delete My Account';
     showAlert(e.message, 'error', 'da-alerts');
+  }
+}
+
+// ── PROGRESS ─────────────────────────────────────────────────────────────────
+function renderProgressHTML() {
+  const x = state.xpSummary;
+  const hasXp = x && x.totalXp > 0;
+  const sourcesHtml = hasXp && x.xpBySource.length > 0 ? `
+    <div class="card" style="margin-top:16px">
+      <div class="card-title">📊 XP by Source</div>
+      <div class="chart-container" style="height:280px"><canvas id="chart-xp-sources"></canvas></div>
+      <div style="margin-top:12px">
+        ${x.xpBySource.map(s => `
+        <div style="display:flex;justify-content:space-between;align-items:center;font-size:.875rem;padding:4px 0;border-bottom:1px solid #f3f4f6">
+          <span style="color:#374151">${esc(s.source)}</span>
+          <span style="font-weight:600;color:#1a56db">${s.xp} XP</span>
+        </div>`).join('')}
+      </div>
+    </div>` : '';
+
+  return `
+  <div class="view">
+    <div class="view-header">
+      <h1>🏆 Progress</h1>
+    </div>
+    ${x ? `
+    <div class="card" style="margin-top:16px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+        <div class="card-title" style="margin:0">Level Progress</div>
+        <span style="font-size:.8rem;color:#6b7280">Total: <strong>${x.totalXp}</strong> XP</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px">
+        <div style="min-width:56px;text-align:center;background:#1a56db;color:#fff;border-radius:8px;padding:8px 4px;font-weight:800;font-size:1.2rem;line-height:1.1">
+          Lvl<br>${x.level}
+        </div>
+        <div style="flex:1">
+          <div style="font-size:.85rem;color:#374151;margin-bottom:5px">${x.xpInCurrentLevel} / ${x.xpNeededForNextLevel} XP to Level ${x.level + 1}</div>
+          <div style="background:#e5e7eb;border-radius:6px;height:16px;overflow:hidden" role="progressbar" aria-valuenow="${x.progressPercent}" aria-valuemin="0" aria-valuemax="100">
+            <div style="width:${x.progressPercent}%;height:100%;background:#1a56db;border-radius:6px;transition:width .4s ease"></div>
+          </div>
+          <div style="font-size:.8rem;color:#9ca3af;margin-top:4px;text-align:right">${x.progressPercent}% complete</div>
+        </div>
+      </div>
+    </div>
+    ${sourcesHtml}` : `
+    <div class="card" style="margin-top:16px">
+      <p style="font-size:.9rem;color:#6b7280;text-align:center">No XP data yet. Complete tasks to start earning XP!</p>
+    </div>`}
+  ${renderFooter()}
+  </div>
+  ${renderBottomNav('progress')}`;
+}
+
+async function renderProgress() {
+  stopTimer(); clearCharts(); state.currentView = 'progress';
+  pushHistory('progress');
+  app().innerHTML = renderProgressHTML();
+  const xpRes = await fetch('/api/xp/summary', { credentials: 'same-origin' }).catch(() => null);
+  if (xpRes?.ok) state.xpSummary = await xpRes.json();
+  if (state.currentView === 'progress') {
+    app().innerHTML = renderProgressHTML();
+    if (state.xpSummary?.xpBySource?.length > 0) {
+      renderChart('chart-xp-sources', 'doughnut',
+        state.xpSummary.xpBySource.map(s => s.source),
+        [{ data: state.xpSummary.xpBySource.map(s => s.xp), backgroundColor: COLORS }],
+        { plugins: { legend: { position: 'bottom' } } }
+      );
+    }
   }
 }
 
@@ -4107,12 +4210,13 @@ const HISTORY_RENDER_MAP = {
   'analytics-history':  () => renderAnalyticsHistory(),
   'admin':              () => renderAdmin(),
   'await-activation':   () => renderAwaitActivation(),
+  'progress':           () => renderProgress(),
 };
 
 const AUTH_REQUIRED_VIEWS = new Set([
   'home', 'settings', 'change-password', 'delete-account',
   'group-selection', 'my-options', 'task-start', 'task-active', 'task-end', 'task-edit',
-  'analytics-session', 'analytics-history', 'admin', 'await-activation',
+  'analytics-session', 'analytics-history', 'admin', 'await-activation', 'progress',
 ]);
 
 window.addEventListener('popstate', async (e) => {

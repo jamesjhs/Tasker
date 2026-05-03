@@ -18,6 +18,7 @@ import adminRouter from './routes/admin';
 import flagsRouter from './routes/flags';
 import messagesRouter from './routes/messages';
 import reviewRouter from './routes/review';
+import xpRouter from './routes/xp';
 
 import { version as APP_VERSION } from '../package.json';
 import type { NextFunction } from 'express';
@@ -117,6 +118,7 @@ app.use('/api/dropdowns', apiLimiter, dropdownsRouter);
 app.use('/api/admin', apiLimiter, adminRouter);
 app.use('/api/flags', apiLimiter, flagsRouter);
 app.use('/api/messages', apiLimiter, messagesRouter);
+app.use('/api/xp', apiLimiter, xpRouter);
 
 app.get('/policy', apiLimiter, (_req, res) => res.sendFile(path.join(__dirname, '..', 'public', 'policy.html')));
 app.get('/dpia',   apiLimiter, (_req, res) => res.sendFile(path.join(__dirname, '..', 'public', 'dpia.html')));
