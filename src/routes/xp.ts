@@ -43,14 +43,14 @@ router.get('/summary', (req: Request, res: Response) => {
       WHERE user_id=? AND status='completed' AND end_time IS NOT NULL`
   ).all(s.userId) as { category: string | null; start_time: string; end_time: string; interruptions: string }[];
 
-  const xpBySource: Record<string, number> = {};
+  const xpBySourceMap: Record<string, number> = {};
   let totalXp = 0;
 
   for (const t of tasks) {
     const interruptions = JSON.parse(t.interruptions || '[]') as { start?: string; end?: string }[];
     const xp = calcTaskXp(t.start_time, t.end_time, interruptions);
     const cat = t.category || 'Uncategorised';
-    xpBySource[cat] = (xpBySource[cat] || 0) + xp;
+    xpBySourceMap[cat] = (xpBySourceMap[cat] || 0) + xp;
     totalXp += xp;
   }
 
@@ -60,7 +60,7 @@ router.get('/summary', (req: Request, res: Response) => {
   const xpInCurrentLevel = totalXp - currentLevelThreshold;
   const xpNeededForNextLevel = nextLevelThreshold - currentLevelThreshold;
 
-  const xpBySources = Object.entries(xpBySource)
+  const xpBySource = Object.entries(xpBySourceMap)
     .map(([source, xp]) => ({ source, xp }))
     .sort((a, b) => b.xp - a.xp);
 
@@ -72,7 +72,7 @@ router.get('/summary', (req: Request, res: Response) => {
     progressPercent: xpNeededForNextLevel > 0
       ? Math.min(100, Math.round(xpInCurrentLevel / xpNeededForNextLevel * 100))
       : 100,
-    xpBySource: xpBySources,
+    xpBySource,
   });
 });
 

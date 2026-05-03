@@ -1652,6 +1652,13 @@ async function doChangePassword(isForced) {
 
 // ── XP HELPERS ───────────────────────────────────────────────────────────────
 
+/** Fetch and cache the XP summary. Forces a refetch when invalidated (e.g. after task completion). */
+async function fetchXpSummary() {
+  if (state.xpSummary) return;
+  const res = await fetch('/api/xp/summary', { credentials: 'same-origin' }).catch(() => null);
+  if (res?.ok) state.xpSummary = await res.json();
+}
+
 /** Render a compact XP level progress bar card for use on Home and Progress pages. */
 function renderXpLevelBar() {
   const x = state.xpSummary;
@@ -1775,17 +1782,16 @@ async function renderHome() {
   stopTimer(); clearCharts(); state.currentView = 'home';
   pushHistory('home');
   app().innerHTML = renderHomeHTML();
-  const [_activeTask, statsRes, pendingRes, recentRes, xpRes] = await Promise.all([
+  const [_activeTask, statsRes, pendingRes, recentRes] = await Promise.all([
     checkActiveTask(),
     fetch('/api/auth/stats', { credentials: 'same-origin' }).catch(() => null),
     fetch('/api/tasks/pending-count', { credentials: 'same-origin' }).catch(() => null),
     fetch('/api/tasks/recent-count', { credentials: 'same-origin' }).catch(() => null),
-    fetch('/api/xp/summary', { credentials: 'same-origin' }).catch(() => null),
   ]);
   if (statsRes?.ok) state.appStats = await statsRes.json();
   if (pendingRes?.ok) state.pendingTaskLog = await pendingRes.json();
   if (recentRes?.ok) { const r = await recentRes.json(); state.recentHandledCount = r?.count ?? null; }
-  if (xpRes?.ok) state.xpSummary = await xpRes.json();
+  await fetchXpSummary();
   await loadNoticesAndMessages();
   if (state.activeTask) {
     await checkInactivityInterruption();
@@ -2121,8 +2127,7 @@ async function renderProgress() {
   stopTimer(); clearCharts(); state.currentView = 'progress';
   pushHistory('progress');
   app().innerHTML = renderProgressHTML();
-  const xpRes = await fetch('/api/xp/summary', { credentials: 'same-origin' }).catch(() => null);
-  if (xpRes?.ok) state.xpSummary = await xpRes.json();
+  await fetchXpSummary();
   if (state.currentView === 'progress') {
     app().innerHTML = renderProgressHTML();
     if (state.xpSummary?.xpBySource?.length > 0) {
@@ -2684,6 +2689,7 @@ async function submitTaskReview(taskId, isEdit, dest) {
   try {
     await api('PATCH', `/api/tasks/${taskId}`, body);
     state.activeTask = null;
+    state.xpSummary = null; // invalidate cached XP — will be refetched on next render
     stopActivityTracking();
     await checkActiveTask();
     if (dest === 'start') {
