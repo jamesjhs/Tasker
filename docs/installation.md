@@ -200,7 +200,7 @@ After completing initial setup, the administrator can enable email-based 2FA fro
 
 If you are locked out of the admin account (e.g. 2FA email is unreachable, or the account has been locked after failed attempts), you can reset it directly from the server command line.
 
-Stop the application first (recommended to avoid concurrent write conflicts), then run from the `/opt/tasker` directory:
+Stop the application first (recommended to avoid concurrent write conflicts), then run from the root of your Tasker installation:
 
 ```bash
 npm run disable-admin-2fa

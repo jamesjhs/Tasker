@@ -19,21 +19,26 @@ import { getDb, closeDb, DB_PATH } from '../db';
 function main(): void {
   console.log(`Database: ${DB_PATH}`);
 
-  const db = getDb();
+  try {
+    const db = getDb();
 
-  const result = db
-    .prepare(
-      'UPDATE users SET mfa_enabled=0, mfa_backup_email=NULL, is_locked=0, failed_login_attempts=0 WHERE is_admin=1'
-    )
-    .run();
+    const result = db
+      .prepare(
+        'UPDATE users SET mfa_enabled=0, mfa_backup_email=NULL, is_locked=0, failed_login_attempts=0 WHERE is_admin=1'
+      )
+      .run();
 
-  if (result.changes === 0) {
-    console.log('No admin account found — nothing was changed.');
-  } else {
-    console.log('Admin 2FA disabled and account unlocked.');
+    if (result.changes === 0) {
+      console.log('No admin account found — nothing was changed.');
+    } else {
+      console.log('Admin 2FA disabled and account unlocked.');
+    }
+
+    closeDb();
+  } catch (err: any) {
+    console.error('Error updating database:', err?.message ?? err);
+    process.exit(1);
   }
-
-  closeDb();
 }
 
 main();
