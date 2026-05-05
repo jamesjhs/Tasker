@@ -198,17 +198,18 @@ After completing initial setup, the administrator can enable email-based 2FA fro
 
 ### Overriding a locked or inaccessible admin account from the server CLI
 
-If you are locked out of the admin account (e.g. 2FA email is unreachable, or the account has been locked after failed attempts), you can reset it directly from the server command line while the application is **stopped**:
+If you are locked out of the admin account (e.g. 2FA email is unreachable, or the account has been locked after failed attempts), you can reset it directly from the server command line.
+
+Stop the application first (recommended to avoid concurrent write conflicts), then run from the `/opt/tasker` directory:
 
 ```bash
-# Disable 2FA and unlock the admin account
-node -e "
-const Database = require('better-sqlite3');
-const db = new Database('data/tasker.db');
-db.prepare('UPDATE users SET mfa_enabled=0, mfa_backup_email=NULL, is_locked=0, failed_login_attempts=0 WHERE is_admin=1').run();
-console.log('Admin 2FA disabled and account unlocked.');
-db.close();
-"
+npm run disable-admin-2fa
+```
+
+This disables 2FA, clears any backup email, unlocks the account, and resets failed login attempt counters. If you have not yet built the application (`npm run build`), you can run the script directly with ts-node instead:
+
+```bash
+npx ts-node src/cli/disable-admin-2fa.ts
 ```
 
 To also reset the admin password at the same time:
