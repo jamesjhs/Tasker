@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Tasker — Technical Reference Manual v1.12.4</title>
+  <title>Tasker — Technical Reference Manual v1.13.0</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; }
     body {
@@ -107,7 +107,7 @@
 <div class="page">
 
 <h1>Tasker — Technical Reference Manual</h1>
-<p class="subtitle">Version 1.12.4 &nbsp;·&nbsp; April 2026 &nbsp;·&nbsp; <em>Prepared in the role of Professor of Digital Engineering Product Design</em></p>
+<p class="subtitle">Version 1.13.0 &nbsp;·&nbsp; May 2026 &nbsp;·&nbsp; <em>Prepared in the role of Professor of Digital Engineering Product Design</em></p>
 
 <div class="toc">
   <h2>Table of Contents</h2>
@@ -122,6 +122,7 @@
     <li><a href="#s8">Field-Level Encryption — <code>src/encrypt.ts</code></a></li>
     <li><a href="#s9">Middleware — <code>src/middleware/index.ts</code></a></li>
     <li><a href="#s10">Anonymous Username Generator — <code>src/words.ts</code></a></li>
+    <li><a href="#s10a">Cloudflare Turnstile CAPTCHA — <code>src/turnstile.ts</code></a></li>
     <li><a href="#s11">API Route Layer</a>
       <ol>
         <li><a href="#s11_1">Authentication — <code>src/routes/auth.ts</code></a></li>
@@ -241,6 +242,7 @@
 │   ├── db.ts               Database singleton + schema + migrations
 │   ├── encrypt.ts          AES-256-GCM field encryption helpers
 │   ├── words.ts            Anonymous username generator
+│   ├── turnstile.ts        Cloudflare Turnstile CAPTCHA helpers
 │   ├── middleware/
 │   │   └── index.ts        requireAuth, requireAdmin, requirePasswordChange,
 │   │                       requireActivation, validateCsrf, logEvent
@@ -293,6 +295,8 @@
     <tr><td><code>SSL_KEY</code></td><td>For TLS</td><td>Path to PEM private key file.</td></tr>
     <tr><td><code>SSL_CERT_DIR</code></td><td>No</td><td>Directory shortcut — individual cert/key paths are derived from this if not overridden.</td></tr>
     <tr><td><code>TASKER_DB_PATH</code></td><td>Tests only</td><td>Override the database path (e.g. <code>:memory:</code> or a temp file). Used by the test harness.</td></tr>
+    <tr><td><code>TURNSTILE_SITE_KEY</code></td><td>No</td><td>Cloudflare Turnstile site key. When both this and <code>TURNSTILE_SECRET_KEY</code> are set, a CAPTCHA widget is rendered on the login and registration forms. Omit to disable Turnstile entirely.</td></tr>
+    <tr><td><code>TURNSTILE_SECRET_KEY</code></td><td>No</td><td>Cloudflare Turnstile secret key used for server-side token verification. Required alongside <code>TURNSTILE_SITE_KEY</code>.</td></tr>
   </tbody>
 </table>
 
@@ -414,6 +418,28 @@
 
 <hr>
 
+<h2 id="s10a">10a. Cloudflare Turnstile CAPTCHA — <code>src/turnstile.ts</code></h2>
+
+<h3>Purpose</h3>
+<p>Provides optional bot-protection on the login and self-registration forms. Turnstile is a privacy-first CAPTCHA alternative from Cloudflare that does not require users to solve challenges in most cases. The module is entirely self-contained — if the environment variables are absent, all functions short-circuit immediately with no network activity.</p>
+
+<h3>Key Exports</h3>
+<ul>
+  <li><code>isTurnstileEnabled()</code> — returns <code>true</code> when both <code>TURNSTILE_SITE_KEY</code> and <code>TURNSTILE_SECRET_KEY</code> are present in the environment. Called by auth routes to gate CAPTCHA enforcement.</li>
+  <li><code>verifyTurnstileToken(token, remoteip?)</code> — makes an HTTPS POST to <code>https://challenges.cloudflare.com/turnstile/v0/siteverify</code> with the secret key and the browser-supplied token. Returns <code>true</code> on success or when Turnstile is disabled; returns <code>false</code> on invalid token, network error, or request timeout (5 s). The <code>remoteip</code> parameter is optional and passed through to Cloudflare for additional fraud signals if provided.</li>
+</ul>
+
+<h3>Integration Points</h3>
+<ul>
+  <li><strong>Server — <code>src/routes/auth.ts</code>:</strong> Both <code>POST /api/auth/register</code> and <code>POST /api/auth/login</code> call <code>verifyTurnstileToken()</code> at the start of their handlers (before any database query). An invalid token returns <code>403 CAPTCHA verification failed</code>.</li>
+  <li><strong>Server — <code>GET /api/auth/turnstile-config</code>:</strong> Returns <code>{ enabled, siteKey }</code> for the client to decide whether to inject the Turnstile widget.</li>
+  <li><strong>Client — <code>public/index.html</code>:</strong> The Turnstile script (<code>https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit</code>) is loaded asynchronously. Widget containers are embedded in both the login and registration form HTML.</li>
+  <li><strong>Client — <code>public/js/app.js</code>:</strong> <code>ensureTurnstileConfig()</code> calls <code>/api/auth/turnstile-config</code> on init and caches the result. <code>renderTurnstileWidget()</code> renders the widget into the designated container when enabled. The token is captured once and attached as <code>cf-turnstile-response</code> in the login and register request bodies.</li>
+  <li><strong>CSP — <code>src/server.ts</code>:</strong> <code>challenges.cloudflare.com</code> is added to <code>scriptSrc</code>, <code>frameSrc</code>, and <code>connectSrc</code> directives so that the Turnstile script and iframe can load and communicate.</li>
+</ul>
+
+<hr>
+
 <h2 id="s11">11. API Route Layer</h2>
 <p>All routes are Express <code>Router</code> instances mounted by <code>server.ts</code>. Route files import and apply only the middleware they need — there is no global <code>app.use(requireAuth)</code>.</p>
 
@@ -425,6 +451,7 @@
   <tbody>
     <tr><td><code>GET /api/auth/csrf-token</code></td><td>Returns (or generates) the CSRF token for the current session. No auth required.</td></tr>
     <tr><td><code>GET /api/auth/registration-config</code></td><td>Returns <code>{ selfRegistration, userInvite }</code> mode settings. Used by the login page to show/hide the Register button.</td></tr>
+    <tr><td><code>GET /api/auth/turnstile-config</code></td><td>Returns <code>{ enabled, siteKey }</code>. When <code>TURNSTILE_SITE_KEY</code> is set, <code>enabled</code> is <code>true</code> and <code>siteKey</code> is the public site key; otherwise <code>enabled</code> is <code>false</code> and <code>siteKey</code> is <code>null</code>. Called by the client on init to decide whether to load and render the Turnstile widget.</td></tr>
     <tr><td><code>GET /api/auth/stats</code></td><td>Returns aggregate user/task counts for the public login page stats.</td></tr>
     <tr><td><code>POST /api/auth/register</code></td><td>Self-registration. Generates username, hashes password at cost 12, inserts user. <code>is_approved</code> set based on <code>selfRegistration</code> mode.</td></tr>
     <tr><td><code>POST /api/auth/invite</code></td><td>Logged-in user invitation. Generates username + temporary password. <code>pending_activation</code> set based on <code>user_invite</code> mode.</td></tr>
@@ -584,11 +611,14 @@
   <li>Sessions are terminated at midnight (server-side <code>sessionDate</code> check).</li>
 </ul>
 
+<h3>14.1a Cloudflare Turnstile CAPTCHA (optional)</h3>
+<p>When <code>TURNSTILE_SITE_KEY</code> and <code>TURNSTILE_SECRET_KEY</code> are configured, a Cloudflare Turnstile widget is rendered on the login and self-registration forms. The browser-supplied token (<code>cf-turnstile-response</code>) is verified against the Cloudflare siteverify API by <code>src/turnstile.ts</code> before any credential check is performed. Failed or missing tokens return <code>403</code>. When the env vars are absent the feature is completely off — no widget, no external calls, no code path change.</p>
+
 <h3>14.2 CSRF Protection</h3>
 <p>Token stored server-side in the session. Client sends it as a custom <code>X-CSRF-Token</code> header. Immune to cross-origin attacks because: cookies are <code>SameSite=strict</code>; the token cannot be read by a cross-origin script; custom headers cannot be set by HTML forms.</p>
 
 <h3>14.3 Content Security Policy</h3>
-<p>Blocks inline script (with <code>'unsafe-inline'</code> exception), external scripts except Chart.js CDN, external images, external styles, external connections except Chart.js CDN.</p>
+<p>Blocks inline script (with <code>'unsafe-inline'</code> exception), external scripts except Chart.js CDN and <code>challenges.cloudflare.com</code> (Turnstile), external images, external styles, external connections except Chart.js CDN and <code>challenges.cloudflare.com</code>. <code>challenges.cloudflare.com</code> is also permitted in <code>frameSrc</code> to allow the Turnstile iframe to render.</p>
 
 <h3>14.4 Rate Limiting</h3>
 <ul>
@@ -881,7 +911,7 @@ R²        = 1 - SS_res / SS_tot</code></pre>
 
 <hr>
 <p style="text-align:center;font-size:.85rem;color:#9ca3af;margin-top:40px">
-  Tasker Technical Reference Manual &nbsp;·&nbsp; v1.12.4 &nbsp;·&nbsp; April 2026<br>
+  Tasker Technical Reference Manual &nbsp;·&nbsp; v1.13.0 &nbsp;·&nbsp; May 2026<br>
   This document is stored in <code>docs/</code> and is not served by the application.
 </p>
 

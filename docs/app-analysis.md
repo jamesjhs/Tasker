@@ -1,6 +1,6 @@
 # Tasker — Detailed Application Analysis
 
-> Generated April 2026. Covers repository state at v1.11.1.
+> Generated May 2026. Covers repository state at v1.13.0.
 > Intended for non-developer stakeholders and external analysis engines.
 
 ---
@@ -85,6 +85,7 @@ All calls are **same-origin only** (browser → same server). No external APIs a
 |---|---|---|---|
 | GET | `/api/auth/csrf-token` | None | Fetch CSRF token |
 | GET | `/api/auth/registration-config` | None | Check if self-registration is enabled |
+| GET | `/api/auth/turnstile-config` | None | Check if Cloudflare Turnstile is enabled and return site key |
 | GET | `/api/auth/stats` | None | Public count of users & tasks |
 | POST | `/api/auth/register` | None | Self-register (password only) |
 | POST | `/api/auth/login` | None | Log in |
@@ -289,7 +290,11 @@ The server does **not** technically scan for or block PII text in free-text fiel
 
 ### HTTP Security Headers
 
-- **Helmet.js** sets Content-Security-Policy (only `'self'` + `cdn.jsdelivr.net` for Chart.js), X-Frame-Options, X-Content-Type-Options, and others. `src/server.ts` lines 36–50
+- **Helmet.js** sets Content-Security-Policy (only `'self'` + `cdn.jsdelivr.net` for Chart.js + `challenges.cloudflare.com` for Turnstile), X-Frame-Options, X-Content-Type-Options, and others. `src/server.ts` lines 36–50
+
+### Cloudflare Turnstile CAPTCHA
+
+- Optional bot-protection on login and self-registration. Enabled by setting both `TURNSTILE_SITE_KEY` and `TURNSTILE_SECRET_KEY` environment variables. When enabled, the browser renders a Cloudflare Turnstile widget; the token is submitted with the form and verified server-side by `src/turnstile.ts` before credentials are checked. When disabled (env vars not set), no widget is shown and no Cloudflare network call is made. `src/turnstile.ts`, `src/routes/auth.ts` lines 48–57, 104–114
 
 ### Encryption at Rest
 
@@ -385,7 +390,7 @@ Entirely on the deploying organisation's own server. Two SQLite files, no cloud 
 
 ### How it protects data
 
-Session authentication with 30-minute expiry and midnight cutoff; CSRF tokens on every write; bcrypt passwords with cost factor 12; account lockout after 3 failed logins; rate limiting; Helmet security headers; optional AES-256-GCM encryption of free-text notes at rest; HTTPS auto-detection; access-controlled so each user sees only their own data; admin sees only counts.
+Session authentication with 30-minute expiry and midnight cutoff; CSRF tokens on every write; bcrypt passwords with cost factor 12; account lockout after 3 failed logins; rate limiting; Helmet security headers; optional Cloudflare Turnstile CAPTCHA on login and registration; optional AES-256-GCM encryption of free-text notes at rest; HTTPS auto-detection; access-controlled so each user sees only their own data; admin sees only counts.
 
 ### What it cannot prevent
 
