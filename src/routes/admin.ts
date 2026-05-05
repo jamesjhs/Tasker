@@ -3,6 +3,7 @@ import { getDb, DB_PATH, replaceDb, RESTORE_DIR, getSetting, setSetting } from '
 import { requireAdmin, requireAuth, validateCsrf, logEvent } from '../middleware/index';
 import { generateUsername } from '../words';
 import { encryptField } from '../encrypt';
+import { clearSpTokenCache } from './sharepoint';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import multer from 'multer';
@@ -418,6 +419,89 @@ router.post('/restore', validateCsrf, upload.single('db'), (req: Request, res: R
     try { fs.unlinkSync(uploadedPath); } catch { /* ignore */ }
     res.status(500).json({ error: 'Restore failed.' });
   }
+});
+
+
+// ── SharePoint Settings ───────────────────────────────────────────────────────
+
+router.get('/sharepoint', (_req: Request, res: Response) => {
+  res.json({
+    tenantId: getSetting('sp_tenant_id') || '',
+    clientId: getSetting('sp_client_id') || '',
+    hasSecret: !!(getSetting('sp_client_secret')),
+  });
+});
+
+router.post('/sharepoint', validateCsrf, (req: Request, res: Response) => {
+  const { tenantId, clientId, clientSecret } = req.body as {
+    tenantId: string; clientId: string; clientSecret?: string;
+  };
+  if (!tenantId || !clientId) {
+    res.status(400).json({ error: 'Tenant ID and Client ID are required.' }); return;
+  }
+  setSetting('sp_tenant_id', tenantId.trim());
+  setSetting('sp_client_id', clientId.trim());
+  if (clientSecret) {
+    const encrypted = encryptField(clientSecret);
+    if (encrypted === null) {
+      res.status(500).json({ error: 'Failed to encrypt client secret. Ensure ENCRYPTION_KEY is set.' });
+      return;
+    }
+    setSetting('sp_client_secret', encrypted);
+  }
+  clearSpTokenCache();
+  logEvent('admin_sp_settings_changed');
+  res.json({ success: true });
+});
+
+// ── SharePoint Directories ────────────────────────────────────────────────────
+
+router.get('/sharepoint/dirs', (_req: Request, res: Response) => {
+  const dirs = getDb().prepare(
+    'SELECT id, name, drive_id, site_id, enabled, created_at FROM sharepoint_directories ORDER BY name',
+  ).all();
+  res.json({ dirs });
+});
+
+router.post('/sharepoint/dirs', validateCsrf, (req: Request, res: Response) => {
+  const { name, driveId, siteId } = req.body as { name: string; driveId: string; siteId?: string };
+  const cleanName    = (name    || '').trim();
+  const cleanDriveId = (driveId || '').trim();
+  const cleanSiteId  = (siteId  || '').trim() || null;
+  if (!cleanName || cleanName.length > 120) {
+    res.status(400).json({ error: 'Directory name must be 1–120 characters.' }); return;
+  }
+  if (!cleanDriveId || cleanDriveId.length > 300) {
+    res.status(400).json({ error: 'Drive ID must be 1–300 characters.' }); return;
+  }
+  try {
+    const result = getDb().prepare(
+      'INSERT INTO sharepoint_directories (name, drive_id, site_id, enabled) VALUES (?,?,?,1)',
+    ).run(cleanName, cleanDriveId, cleanSiteId);
+    logEvent('admin_sp_dir_added');
+    res.json({ success: true, id: result.lastInsertRowid });
+  } catch {
+    res.status(409).json({ error: 'A directory with that Drive ID already exists.' });
+  }
+});
+
+router.patch('/sharepoint/dirs/:id', validateCsrf, (req: Request, res: Response) => {
+  const id = Number(req.params['id']);
+  const { enabled } = req.body as { enabled: boolean };
+  const dir = getDb().prepare('SELECT id FROM sharepoint_directories WHERE id=?').get(id);
+  if (!dir) { res.status(404).json({ error: 'Directory not found.' }); return; }
+  getDb().prepare('UPDATE sharepoint_directories SET enabled=? WHERE id=?').run(enabled ? 1 : 0, id);
+  logEvent('admin_sp_dir_toggled');
+  res.json({ success: true });
+});
+
+router.delete('/sharepoint/dirs/:id', validateCsrf, (req: Request, res: Response) => {
+  const id = Number(req.params['id']);
+  const dir = getDb().prepare('SELECT id FROM sharepoint_directories WHERE id=?').get(id);
+  if (!dir) { res.status(404).json({ error: 'Directory not found.' }); return; }
+  getDb().prepare('DELETE FROM sharepoint_directories WHERE id=?').run(id);
+  logEvent('admin_sp_dir_deleted');
+  res.json({ success: true });
 });
 
 export default router;

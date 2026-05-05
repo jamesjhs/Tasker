@@ -45,6 +45,8 @@ const state = {
   userMessages: [],              // [{ id, message, read, created_at }]
   notices: [],                   // [{ id, message, created_at }]
   noticesPanelOpen: false,       // whether Notices and Feedback panel is expanded
+  sharepointDirs: [],            // [{ id, name, drive_id }] — enabled SP directories
+  spBrowse: null,                // null = dir list; { driveId, dirName, breadcrumbs: [{name,itemId}] }
 };
 
 // ── History management ────────────────────────────────────────────────────────
@@ -539,7 +541,7 @@ async function init() {
       if (state.user.pendingActivation) { renderAwaitActivation(); return; }
 
       setLoadingStatus('Loading dropdown options…');
-      await loadDropdowns();
+      await Promise.all([loadDropdowns(), loadSharepointDirs()]);
 
       setLoadingStatus('Checking active task…');
       await checkActiveTask();
@@ -572,6 +574,13 @@ async function loadDropdowns() {
   } catch(e) {}
 }
 
+async function loadSharepointDirs() {
+  try {
+    const d = await fetch('/api/sharepoint/dirs', { credentials: 'same-origin' }).catch(() => null);
+    if (d?.ok) { const j = await d.json(); state.sharepointDirs = j.dirs || []; }
+  } catch(e) { state.sharepointDirs = []; }
+}
+
 async function loadNoticesAndMessages() {
   try {
     const [noticesRes, msgsRes] = await Promise.all([
@@ -592,6 +601,10 @@ async function checkActiveTask() {
 
 // ── Bottom nav ───────────────────────────────────────────────────────────────
 function renderBottomNav(active) {
+  const filesBtn = state.sharepointDirs.length ? `
+    <button class="nav-btn ${active==='files'?'active':''}" onclick="renderFiles()">
+      <span class="nav-icon">📁</span><span>Files</span>
+    </button>` : '';
   return `<nav class="nav-bottom">
     <button class="nav-btn ${active==='home'?'active':''}" onclick="renderHome()">
       <span class="nav-icon">🏠</span><span>Home</span>
@@ -599,6 +612,7 @@ function renderBottomNav(active) {
     <button class="nav-btn ${active==='analytics'?'active':''}" onclick="renderAnalyticsSession()">
       <span class="nav-icon">📊</span><span>Analytics</span>
     </button>
+    ${filesBtn}
     <button class="nav-btn ${active==='settings'?'active':''}" onclick="renderSettings()">
       <span class="nav-icon">⚙️</span><span>Settings</span>
     </button>
@@ -3357,13 +3371,190 @@ function exportAnalyticsReport() {
 }
 
 
+
+// ── FILES (SharePoint) ───────────────────────────────────────────────────────
+
+async function renderFiles() {
+  stopTimer(); clearCharts(); state.currentView = 'files';
+  pushHistory('files');
+  state.spBrowse = null;
+  app().innerHTML = renderFilesHTML();
+}
+
+function renderFilesHTML() {
+  const browse = state.spBrowse;
+
+  // ── Breadcrumb bar ──────────────────────────────────────────────────────────
+  let breadcrumbHTML = '';
+  if (browse) {
+    const crumbs = [
+      `<button class="btn btn-outline btn-sm" onclick="spNavRoot()">📁 Files</button>`,
+      `<span style="color:#6b7280;font-size:.85rem">›</span>`,
+      `<button class="btn btn-outline btn-sm" onclick="spNavDirRoot('${esc(browse.driveId)}','${esc(browse.dirName)}')">${esc(browse.dirName)}</button>`,
+    ];
+    for (let i = 0; i < browse.breadcrumbs.length - 1; i++) {
+      const bc = browse.breadcrumbs[i];
+      crumbs.push(`<span style="color:#6b7280;font-size:.85rem">›</span>`);
+      crumbs.push(`<button class="btn btn-outline btn-sm" onclick="spNavCrumb(${i})">${esc(bc.name)}</button>`);
+    }
+    if (browse.breadcrumbs.length > 0) {
+      const last = browse.breadcrumbs[browse.breadcrumbs.length - 1];
+      crumbs.push(`<span style="color:#6b7280;font-size:.85rem">›</span>`);
+      crumbs.push(`<span style="font-size:.85rem;font-weight:600;color:#374151">${esc(last.name)}</span>`);
+    }
+    breadcrumbHTML = `<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:14px">${crumbs.join('')}</div>`;
+  }
+
+  // ── Directory list (root) ───────────────────────────────────────────────────
+  let contentHTML = '';
+  if (!browse) {
+    if (!state.sharepointDirs.length) {
+      contentHTML = `<p style="font-size:.9rem;color:#6b7280">No file directories have been configured. Contact your administrator.</p>`;
+    } else {
+      contentHTML = state.sharepointDirs.map(d => `
+      <div class="card" style="padding:14px;cursor:pointer" onclick="spOpenDir('${esc(d.drive_id)}','${esc(d.name)}')">
+        <div style="display:flex;align-items:center;gap:10px">
+          <span style="font-size:1.6rem">📂</span>
+          <div>
+            <div style="font-weight:700;color:#374151">${esc(d.name)}</div>
+            <div style="font-size:.78rem;color:#9ca3af;margin-top:2px">SharePoint directory</div>
+          </div>
+          <span style="margin-left:auto;color:#9ca3af">›</span>
+        </div>
+      </div>`).join('');
+    }
+  } else if (browse.loading) {
+    contentHTML = `<p class="loading" style="padding:2rem 0">Loading…</p>`;
+  } else if (browse.error) {
+    contentHTML = `<div class="alert alert-error">${esc(browse.error)}</div>`;
+  } else {
+    const items = browse.items || [];
+    if (!items.length) {
+      contentHTML = `<p style="font-size:.9rem;color:#6b7280">This folder is empty.</p>`;
+    } else {
+      contentHTML = items.map(item => {
+        if (item.isFolder) {
+          return `
+          <div class="card" style="padding:12px;cursor:pointer" onclick="spOpenFolder('${esc(item.id)}','${esc(item.name)}')">
+            <div style="display:flex;align-items:center;gap:10px">
+              <span style="font-size:1.4rem">📁</span>
+              <span style="font-weight:600;color:#374151;flex:1">${esc(item.name)}</span>
+              <span style="color:#9ca3af">›</span>
+            </div>
+          </div>`;
+        }
+        const sizeStr = item.size != null ? formatFileSize(item.size) : '';
+        const dateStr = item.lastModified ? new Date(item.lastModified).toLocaleDateString() : '';
+        return `
+        <div class="card" style="padding:12px">
+          <div style="display:flex;align-items:center;gap:10px">
+            <span style="font-size:1.4rem">${fileIcon(item.name)}</span>
+            <div style="flex:1;min-width:0">
+              <div style="font-weight:600;color:#374151;word-break:break-word">${esc(item.name)}</div>
+              <div style="font-size:.75rem;color:#9ca3af;margin-top:2px">${[sizeStr, dateStr].filter(Boolean).join(' · ')}</div>
+            </div>
+            <a href="${esc(item.webUrl)}" target="_blank" rel="noopener noreferrer" class="btn btn-outline btn-sm" style="flex-shrink:0">Open ↗</a>
+          </div>
+        </div>`;
+      }).join('');
+    }
+  }
+
+  return `
+  <div class="view">
+    <div class="view-header">
+      <h1>📁 Files</h1>
+    </div>
+    <div id="files-alerts"></div>
+    ${breadcrumbHTML}
+    ${contentHTML}
+    ${renderFooter()}
+  </div>
+  ${renderBottomNav('files')}`;
+}
+
+function formatFileSize(bytes) {
+  if (bytes == null) return '';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function fileIcon(name) {
+  const n = name || '';
+  const dotIdx = n.lastIndexOf('.');
+  // No extension, or filename starts with '.' (e.g. .gitignore)
+  const ext = (dotIdx > 0) ? n.slice(dotIdx + 1).toLowerCase() : '';
+  if (['pdf'].includes(ext)) return '📄';
+  if (['doc','docx'].includes(ext)) return '📝';
+  if (['xls','xlsx','csv'].includes(ext)) return '📊';
+  if (['ppt','pptx'].includes(ext)) return '📋';
+  if (['jpg','jpeg','png','gif','bmp','svg','webp'].includes(ext)) return '🖼️';
+  if (['zip','tar','gz','7z'].includes(ext)) return '🗜️';
+  if (['mp4','mov','avi','mkv'].includes(ext)) return '🎬';
+  if (['mp3','wav','ogg'].includes(ext)) return '🎵';
+  return '📄';
+}
+
+function spNavRoot() {
+  state.spBrowse = null;
+  app().innerHTML = renderFilesHTML();
+}
+
+async function spNavDirRoot(driveId, dirName) {
+  await spOpenDir(driveId, dirName);
+}
+
+async function spOpenDir(driveId, dirName) {
+  state.spBrowse = { driveId, dirName, breadcrumbs: [], loading: true, items: null, error: null };
+  app().innerHTML = renderFilesHTML();
+  try {
+    const d = await api('GET', `/api/sharepoint/browse?driveId=${encodeURIComponent(driveId)}`);
+    state.spBrowse = { driveId, dirName, breadcrumbs: [], loading: false, items: d?.items || [], error: null };
+  } catch(e) {
+    state.spBrowse = { driveId, dirName, breadcrumbs: [], loading: false, items: null, error: e.message };
+  }
+  if (state.currentView === 'files') app().innerHTML = renderFilesHTML();
+}
+
+async function spOpenFolder(itemId, folderName) {
+  if (!state.spBrowse) return;
+  const { driveId, dirName, breadcrumbs } = state.spBrowse;
+  const newCrumbs = [...breadcrumbs, { name: folderName, itemId }];
+  state.spBrowse = { driveId, dirName, breadcrumbs: newCrumbs, loading: true, items: null, error: null };
+  app().innerHTML = renderFilesHTML();
+  try {
+    const d = await api('GET', `/api/sharepoint/browse?driveId=${encodeURIComponent(driveId)}&itemId=${encodeURIComponent(itemId)}`);
+    state.spBrowse = { driveId, dirName, breadcrumbs: newCrumbs, loading: false, items: d?.items || [], error: null };
+  } catch(e) {
+    state.spBrowse = { driveId, dirName, breadcrumbs: newCrumbs, loading: false, items: null, error: e.message };
+  }
+  if (state.currentView === 'files') app().innerHTML = renderFilesHTML();
+}
+
+async function spNavCrumb(crumbIndex) {
+  if (!state.spBrowse) return;
+  const { driveId, dirName, breadcrumbs } = state.spBrowse;
+  const targetCrumb = breadcrumbs[crumbIndex];
+  const newCrumbs = breadcrumbs.slice(0, crumbIndex + 1);
+  state.spBrowse = { driveId, dirName, breadcrumbs: newCrumbs, loading: true, items: null, error: null };
+  app().innerHTML = renderFilesHTML();
+  try {
+    const d = await api('GET', `/api/sharepoint/browse?driveId=${encodeURIComponent(driveId)}&itemId=${encodeURIComponent(targetCrumb.itemId)}`);
+    state.spBrowse = { driveId, dirName, breadcrumbs: newCrumbs, loading: false, items: d?.items || [], error: null };
+  } catch(e) {
+    state.spBrowse = { driveId, dirName, breadcrumbs: newCrumbs, loading: false, items: null, error: e.message };
+  }
+  if (state.currentView === 'files') app().innerHTML = renderFilesHTML();
+}
+
 // ── ADMIN ────────────────────────────────────────────────────────────────────
 async function renderAdmin() {
   stopTimer(); clearCharts(); state.currentView = 'admin';
   pushHistory('admin');
   app().innerHTML = `<div class="view"><p class="loading">Loading admin panel…</p></div>`;
   try {
-    const [stats, users, dropOpts, settings, pendingUsers, awaitingUsers, userGroups, pendingGroups, smtpSettings, notices, flagOpts, proposals, twoFaSettings] = await Promise.all([
+    const [stats, users, dropOpts, settings, pendingUsers, awaitingUsers, userGroups, pendingGroups, smtpSettings, notices, flagOpts, proposals, twoFaSettings, spConfig, spDirs] = await Promise.all([
       api('GET', '/api/admin/stats'),
       api('GET', '/api/admin/users'),
       api('GET', '/api/dropdowns/admin/all'),
@@ -3377,16 +3568,18 @@ async function renderAdmin() {
       api('GET', '/api/flags/admin/all'),
       api('GET', '/api/admin/dropdown-proposals'),
       api('GET', '/api/admin/2fa'),
+      api('GET', '/api/admin/sharepoint').catch(() => null),
+      api('GET', '/api/admin/sharepoint/dirs').catch(() => null),
     ]);
     if (!stats || !users || !dropOpts || !settings || !pendingUsers || !awaitingUsers || !userGroups || !pendingGroups) return;
-    renderAdminContent(stats, users?.users || [], dropOpts?.options || [], settings, pendingUsers?.users || [], awaitingUsers?.users || [], userGroups?.groups || [], pendingGroups?.groups || [], smtpSettings || {}, notices?.notices || [], flagOpts?.options || [], proposals?.proposals || [], twoFaSettings || {});
+    renderAdminContent(stats, users?.users || [], dropOpts?.options || [], settings, pendingUsers?.users || [], awaitingUsers?.users || [], userGroups?.groups || [], pendingGroups?.groups || [], smtpSettings || {}, notices?.notices || [], flagOpts?.options || [], proposals?.proposals || [], twoFaSettings || {}, spConfig || {}, spDirs?.dirs || []);
   } catch(e) {
     app().innerHTML = `<div class="view"><div id="admin-alerts"></div></div>`;
     showAlert(e.message, 'error', 'admin-alerts');
   }
 }
 
-function renderAdminContent(stats, users, dropOpts, settings, pendingUsers, awaitingUsers, userGroups, pendingGroups, smtpSettings, notices, flagOpts, proposals, twoFaSettings) {
+function renderAdminContent(stats, users, dropOpts, settings, pendingUsers, awaitingUsers, userGroups, pendingGroups, smtpSettings, notices, flagOpts, proposals, twoFaSettings, spConfig, spDirs) {
   const pending = dropOpts.filter(o => !o.approved);
   const approved = dropOpts.filter(o => o.approved);
   const userCards = users.map(u => `
@@ -3673,6 +3866,61 @@ function renderAdminContent(stats, users, dropOpts, settings, pendingUsers, awai
       </div>
       <button class="btn btn-primary btn-full" style="margin-top:12px" onclick="save2faSettings()">🔒 Save 2FA Settings</button>
       <div id="tfa-admin-alerts" style="margin-top:8px"></div>
+    </div>
+
+    <div class="section-heading">📁 SharePoint File Storage</div>
+    <p style="font-size:.85rem;color:#6b7280;margin-bottom:10px">Configure an Azure AD app-only service account to give users in-app access to SharePoint document libraries. Requires an Azure AD app registration with <strong>Files.Read.All</strong> application permission (admin-consented).</p>
+    <div class="card">
+      <div style="font-size:.85rem;font-weight:700;color:#374151;margin-bottom:10px">Azure AD credentials</div>
+      <div class="form-group">
+        <label style="font-size:.9rem">Tenant ID</label>
+        <input id="sp-tenant-id" class="input" type="text" value="${esc(spConfig?.tenantId || '')}" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" autocomplete="off" style="margin-top:4px">
+      </div>
+      <div class="form-group" style="margin-top:10px">
+        <label style="font-size:.9rem">Client ID (Application ID)</label>
+        <input id="sp-client-id" class="input" type="text" value="${esc(spConfig?.clientId || '')}" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" autocomplete="off" style="margin-top:4px">
+      </div>
+      <div class="form-group" style="margin-top:10px">
+        <label style="font-size:.9rem">Client Secret ${spConfig?.hasSecret ? '<span style="color:#059669">(saved)</span>' : ''}</label>
+        <input id="sp-client-secret" class="input" type="password" placeholder="${spConfig?.hasSecret ? 'Leave blank to keep existing' : 'Enter client secret'}" autocomplete="new-password" style="margin-top:4px">
+      </div>
+      <button class="btn btn-primary btn-full" style="margin-top:12px" onclick="saveSpSettings()">💾 Save Credentials</button>
+      <div id="sp-cred-alerts" style="margin-top:8px"></div>
+    </div>
+
+    <div class="section-heading" style="margin-top:20px">SharePoint Directories</div>
+    <p style="font-size:.85rem;color:#6b7280;margin-bottom:10px">Add SharePoint drives (document libraries) that users can browse from the Files tab. You can find a drive's ID using <a href="https://developer.microsoft.com/en-us/graph/graph-explorer" target="_blank" rel="noopener noreferrer" style="color:#1a56db">Microsoft Graph Explorer</a> or the SharePoint REST API.</p>
+    ${(spDirs || []).map(d => `
+    <div class="card" style="padding:12px">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+        <div style="min-width:0">
+          <span style="font-weight:700">${esc(d.name)}</span>
+          <span class="badge ${d.enabled ? 'badge-green' : 'badge-warn'}" style="margin-left:6px">${d.enabled ? 'Enabled' : 'Disabled'}</span>
+          <div style="font-size:.72rem;color:#9ca3af;margin-top:3px;word-break:break-all">Drive: ${esc(d.drive_id)}</div>
+        </div>
+        <div style="display:flex;gap:6px;flex-shrink:0">
+          <button class="btn btn-outline btn-sm" onclick="toggleSpDir(${d.id}, ${d.enabled})">${d.enabled ? 'Disable' : 'Enable'}</button>
+          <button class="btn btn-danger btn-sm" onclick="deleteSpDir(${d.id}, '${esc(d.name)}')">🗑</button>
+        </div>
+      </div>
+    </div>`).join('') || '<p style="font-size:.85rem;color:#6b7280;margin-bottom:10px">No directories configured yet.</p>'}
+    <div class="card">
+      <div style="font-size:.85rem;font-weight:700;color:#374151;margin-bottom:10px">Add directory</div>
+      <div class="form-group">
+        <label style="font-size:.9rem">Display name</label>
+        <input id="sp-dir-name" class="input" type="text" placeholder="e.g. Shared Protocols" style="margin-top:4px">
+      </div>
+      <div class="form-group" style="margin-top:10px">
+        <label style="font-size:.9rem">Drive ID</label>
+        <input id="sp-dir-drive-id" class="input" type="text" placeholder="b!abc123…" autocomplete="off" style="margin-top:4px">
+        <p style="font-size:.75rem;color:#6b7280;margin-top:4px">The unique identifier for the SharePoint document library drive.</p>
+      </div>
+      <div class="form-group" style="margin-top:10px">
+        <label style="font-size:.9rem">Site ID <span style="font-weight:400;color:#6b7280">(optional — for reference)</span></label>
+        <input id="sp-dir-site-id" class="input" type="text" placeholder="site.sharepoint.com,{siteId},{webId}" autocomplete="off" style="margin-top:4px">
+      </div>
+      <button class="btn btn-primary btn-full" style="margin-top:12px" onclick="addSpDir()">➕ Add Directory</button>
+      <div id="sp-dir-alerts" style="margin-top:8px"></div>
     </div>
 
     <div class="admin-desktop-grid" style="margin-top:0">
@@ -4006,6 +4254,54 @@ async function dismissProposal(id) {
   } catch(e) { showAlert(e.message, 'error', 'admin-alerts'); }
 }
 
+// ── Admin SharePoint management ───────────────────────────────────────────────
+
+async function saveSpSettings() {
+  const tenantId = document.getElementById('sp-tenant-id')?.value.trim() || '';
+  const clientId = document.getElementById('sp-client-id')?.value.trim() || '';
+  const clientSecret = document.getElementById('sp-client-secret')?.value || undefined;
+  if (!tenantId || !clientId) {
+    showAlert('Tenant ID and Client ID are required.', 'error', 'sp-cred-alerts'); return;
+  }
+  const body = { tenantId, clientId };
+  if (clientSecret) body.clientSecret = clientSecret;
+  try {
+    await api('POST', '/api/admin/sharepoint', body);
+    showAlert('SharePoint credentials saved.', 'success', 'sp-cred-alerts');
+    renderAdmin();
+  } catch(e) { showAlert(e.message, 'error', 'sp-cred-alerts'); }
+}
+
+async function addSpDir() {
+  const name    = document.getElementById('sp-dir-name')?.value.trim() || '';
+  const driveId = document.getElementById('sp-dir-drive-id')?.value.trim() || '';
+  const siteId  = document.getElementById('sp-dir-site-id')?.value.trim() || '';
+  if (!name || !driveId) {
+    showAlert('Display name and Drive ID are required.', 'error', 'sp-dir-alerts'); return;
+  }
+  try {
+    await api('POST', '/api/admin/sharepoint/dirs', { name, driveId, siteId: siteId || undefined });
+    showAlert('Directory added.', 'success', 'sp-dir-alerts');
+    renderAdmin();
+  } catch(e) { showAlert(e.message, 'error', 'sp-dir-alerts'); }
+}
+
+async function toggleSpDir(id, currentlyEnabled) {
+  try {
+    await api('PATCH', `/api/admin/sharepoint/dirs/${id}`, { enabled: !currentlyEnabled });
+    renderAdmin();
+  } catch(e) { showAlert(e.message, 'error', 'admin-alerts'); }
+}
+
+async function deleteSpDir(id, name) {
+  if (!confirm(`Remove "${name}" from the directory list?`)) return;
+  try {
+    await api('DELETE', `/api/admin/sharepoint/dirs/${id}`, {});
+    showAlert(`Directory "${name}" removed.`, 'success', 'admin-alerts');
+    renderAdmin();
+  } catch(e) { showAlert(e.message, 'error', 'admin-alerts'); }
+}
+
 // ── Admin User Group management ───────────────────────────────────────────────
 
 async function addUserGroup() {
@@ -4106,13 +4402,14 @@ const HISTORY_RENDER_MAP = {
   'analytics-session':  () => renderAnalyticsSession(),
   'analytics-history':  () => renderAnalyticsHistory(),
   'admin':              () => renderAdmin(),
+  'files':              () => renderFiles(),
   'await-activation':   () => renderAwaitActivation(),
 };
 
 const AUTH_REQUIRED_VIEWS = new Set([
   'home', 'settings', 'change-password', 'delete-account',
   'group-selection', 'my-options', 'task-start', 'task-active', 'task-end', 'task-edit',
-  'analytics-session', 'analytics-history', 'admin', 'await-activation',
+  'analytics-session', 'analytics-history', 'admin', 'files', 'await-activation',
 ]);
 
 window.addEventListener('popstate', async (e) => {

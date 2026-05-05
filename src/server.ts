@@ -18,6 +18,7 @@ import adminRouter from './routes/admin';
 import flagsRouter from './routes/flags';
 import messagesRouter from './routes/messages';
 import reviewRouter from './routes/review';
+import sharepointRouter from './routes/sharepoint';
 
 import { version as APP_VERSION } from '../package.json';
 import type { NextFunction } from 'express';
@@ -44,7 +45,7 @@ app.use(helmet({
       scriptSrcAttr: ["'unsafe-inline'"],
       styleSrc: ["'self'", "'unsafe-inline'"],
       imgSrc: ["'self'", 'data:'],
-      connectSrc: ["'self'", 'https://cdn.jsdelivr.net'],
+      connectSrc: ["'self'", 'https://cdn.jsdelivr.net', 'https://graph.microsoft.com', 'https://login.microsoftonline.com'],
       workerSrc: ["'self'"],
       manifestSrc: ["'self'"],
       upgradeInsecureRequests: useHttps ? [] : null, // enable when running over HTTPS
@@ -117,6 +118,7 @@ app.use('/api/dropdowns', apiLimiter, dropdownsRouter);
 app.use('/api/admin', apiLimiter, adminRouter);
 app.use('/api/flags', apiLimiter, flagsRouter);
 app.use('/api/messages', apiLimiter, messagesRouter);
+app.use('/api/sharepoint', apiLimiter, sharepointRouter);
 
 app.get('/policy', apiLimiter, (_req, res) => res.sendFile(path.join(__dirname, '..', 'public', 'policy.html')));
 app.get('/dpia',   apiLimiter, (_req, res) => res.sendFile(path.join(__dirname, '..', 'public', 'dpia.html')));

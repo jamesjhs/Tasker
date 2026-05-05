@@ -173,6 +173,15 @@ function initSchema(db: Database.Database): void {
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
 
+    CREATE TABLE IF NOT EXISTS sharepoint_directories (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      drive_id TEXT NOT NULL UNIQUE,
+      site_id TEXT,
+      enabled INTEGER NOT NULL DEFAULT 1,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
     CREATE INDEX IF NOT EXISTS idx_dropdown_proposals_field ON dropdown_proposals(field_name);
 
     CREATE INDEX IF NOT EXISTS idx_users_broadcast ON users(is_admin, is_approved, pending_activation);
