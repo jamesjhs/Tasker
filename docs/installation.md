@@ -1,6 +1,6 @@
 # Tasker — Installation Manual
 
-**Version 1.12.4 — April 2026**
+**Version 1.13.0 — May 2026**
 
 ---
 
@@ -103,6 +103,8 @@ nano .env          # or use your preferred editor
 | `SSL_CERT_DIR` | Directory containing Let's Encrypt certificate files | `/etc/letsencrypt/live/yourdomain` |
 | `SSL_CERT` | Full path to the certificate chain file | `$SSL_CERT_DIR/fullchain.pem` |
 | `SSL_KEY` | Full path to the private key file | `$SSL_CERT_DIR/privkey.pem` |
+| `TURNSTILE_SITE_KEY` | Cloudflare Turnstile site key. When set (alongside `TURNSTILE_SECRET_KEY`), a CAPTCHA widget is displayed on the login and registration forms. Omit to disable Turnstile entirely. | — |
+| `TURNSTILE_SECRET_KEY` | Cloudflare Turnstile secret key. Required when `TURNSTILE_SITE_KEY` is set. | — |
 
 ### Generating a session secret
 

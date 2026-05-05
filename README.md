@@ -1,6 +1,6 @@
 # Tasker
 
-**v1.12.4** — An anonymous task-logging PWA for healthcare staff. Built with TypeScript, Express 5, SQLite, and vanilla JS.
+**v1.13.0** — An anonymous task-logging PWA for healthcare staff. Built with TypeScript, Express 5, SQLite, and vanilla JS.
 
 ---
 
@@ -22,7 +22,8 @@
 - **Configurable registration** — administrator controls three levels for self-registration and user invitations.
 - **30-day data retention** — task data is automatically deleted after 30 days.
 - **Health-check endpoint** — `GET /readyz` returns a JSON status response for uptime/heartbeat monitoring.
-- **Asset version endpoint** — `GET /api/version` returns `{"version":"1.12.4"}` for client-side cache-busting.
+- **Asset version endpoint** — `GET /api/version` returns `{"version":"1.13.0"}` for client-side cache-busting.
+- **Cloudflare Turnstile CAPTCHA** — optional bot-protection for login and self-registration. When `TURNSTILE_SITE_KEY` and `TURNSTILE_SECRET_KEY` are set, Turnstile widgets are rendered on the login and registration forms; tokens are verified server-side before credentials are checked. The feature is fully disabled (and invisible) when the environment variables are not set.
 
 ---
 
@@ -69,6 +70,8 @@ Then create the admin account — see [Installation guide](docs/installation.md#
 | `SSL_CERT_DIR` | Directory containing Let's Encrypt certificate files | `/etc/letsencrypt/live/yourdomain` |
 | `SSL_CERT` | Path to the certificate chain (auto-detects HTTPS if this file exists) | `$SSL_CERT_DIR/fullchain.pem` |
 | `SSL_KEY` | Path to the private key | `$SSL_CERT_DIR/privkey.pem` |
+| `TURNSTILE_SITE_KEY` | Cloudflare Turnstile site key — enables CAPTCHA on login and registration when set | — |
+| `TURNSTILE_SECRET_KEY` | Cloudflare Turnstile secret key — required alongside `TURNSTILE_SITE_KEY` | — |
 
 > **HTTPS is detected automatically.** If both `SSL_CERT` and `SSL_KEY` exist on disk the server starts in HTTPS mode. Otherwise it starts in plain HTTP mode.
 
@@ -92,9 +95,10 @@ src/
   server.ts               Express 5 app, middleware wiring, SSL detection, 30-day retention job, /readyz health check, /api/version endpoint
   db.ts                   SQLite schema + migrations + seed data, getDb(), getSetting(), setSetting(), TASKER_DB_PATH override for tests
   words.ts                Memorable two-word username generator
+  turnstile.ts            Cloudflare Turnstile CAPTCHA helpers — isTurnstileEnabled(), verifyTurnstileToken()
   middleware/index.ts     requireAuth, requireAdmin, CSRF, logEvent
   routes/
-    auth.ts               /api/auth/* — register, login, logout, change-password, me, account delete, invite, user-groups, set-group, propose-group, my-options
+    auth.ts               /api/auth/* — register, login, logout, change-password, me, account delete, invite, user-groups, set-group, propose-group, my-options, turnstile-config
     tasks.ts              /api/tasks/* — start, active, PATCH, GET
     analytics.ts          /api/analytics/* — session, history, export (xlsx)
     dropdowns.ts          /api/dropdowns/* — list, propose, admin CRUD
@@ -145,6 +149,7 @@ docs/
 - Unapproved dropdown options are rejected when users update their personal option list
 - Global error handler prevents accidental stack-trace leakage on unexpected errors
 - 241-test negative security suite covering CSRF, IDOR, SQL injection, XSS, input validation, resource exhaustion, error handling, session fixation, SMTP sanitisation, and option validation (`npm test`)
+- **Cloudflare Turnstile CAPTCHA** — optional bot-protection on login and self-registration; server-side token verification via `src/turnstile.ts`; disabled and invisible when env vars are not set
 
 ---
 
@@ -155,6 +160,11 @@ See [`/policy`](/policy) for the full Data and Use Policy.
 ---
 
 ## Changelog
+
+### v1.13.0 (May 2026) — Cloudflare Turnstile CAPTCHA
+
+- **Cloudflare Turnstile CAPTCHA** — optional bot-protection added to the login and self-registration forms. When `TURNSTILE_SITE_KEY` and `TURNSTILE_SECRET_KEY` environment variables are set, a Turnstile challenge widget is rendered on both forms. The token submitted by the browser is verified server-side (via `src/turnstile.ts`) before credentials are checked; an invalid or missing token returns `403 CAPTCHA verification failed`. When the environment variables are not set, Turnstile is completely disabled — no widget is displayed and no network call is made. The Cloudflare Turnstile script (`https://challenges.cloudflare.com`) is now permitted in the Content-Security-Policy (`scriptSrc`, `frameSrc`, `connectSrc`). A new `GET /api/auth/turnstile-config` endpoint returns `{ enabled, siteKey }` for the client to decide whether to render the widget.
+- **Version bump** — Version number incremented to 1.13.0; all page footers and documentation updated accordingly.
 
 ### v1.12.4 (April 2026) — Version bump and technical manual update
 
