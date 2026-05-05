@@ -5,6 +5,7 @@ import { getDb, getSetting } from '../db';
 import { generateUsername } from '../words';
 import { requireAuth, validateCsrf, logEvent, requirePasswordChange, requireActivation } from '../middleware/index';
 import { sendEmail } from '../email';
+import { isTurnstileEnabled, verifyTurnstileToken } from '../turnstile';
 
 const router = Router();
 const PASSWORD_RE = /^(?=.*[!@#$%^&*()\-_=+\[\]{};:'",.<>/?\\|`~]).{8,}$/;
@@ -13,6 +14,15 @@ router.get('/csrf-token', (req: Request, res: Response) => {
   const s = req.session as any;
   if (!s.csrfToken) s.csrfToken = crypto.randomBytes(32).toString('hex');
   res.json({ token: s.csrfToken });
+});
+
+router.get('/turnstile-config', (_req: Request, res: Response) => {
+  const siteKey = process.env['TURNSTILE_SITE_KEY'] || '';
+  if (siteKey) {
+    res.json({ enabled: true, siteKey });
+  } else {
+    res.json({ enabled: false, siteKey: null });
+  }
 });
 
 router.get('/registration-config', (_req: Request, res: Response) => {
@@ -34,6 +44,17 @@ router.post('/register', validateCsrf, async (req: Request, res: Response) => {
     res.status(403).json({ error: 'Self-registration is not enabled.' });
     return;
   }
+
+  // Verify Turnstile CAPTCHA when enabled
+  if (isTurnstileEnabled()) {
+    const token = (req.body as any)['cf-turnstile-response'] || '';
+    const valid = await verifyTurnstileToken(token, req.ip);
+    if (!valid) {
+      res.status(400).json({ error: 'CAPTCHA verification failed. Please try again.' });
+      return;
+    }
+  }
+
   const { password } = req.body as { password: string };
   if (!password || !PASSWORD_RE.test(password)) {
     res.status(400).json({ error: 'Password must be at least 8 characters and include at least one special character.' });
@@ -80,6 +101,16 @@ router.post('/invite', requireAuth, validateCsrf, async (req: Request, res: Resp
 });
 
 router.post('/login', validateCsrf, async (req: Request, res: Response) => {
+  // Verify Turnstile CAPTCHA when enabled
+  if (isTurnstileEnabled()) {
+    const token = (req.body as any)['cf-turnstile-response'] || '';
+    const valid = await verifyTurnstileToken(token, req.ip);
+    if (!valid) {
+      res.status(400).json({ error: 'CAPTCHA verification failed. Please try again.' });
+      return;
+    }
+  }
+
   const { username, password } = req.body as { username: string; password: string };
   if (!username || !password) { res.status(400).json({ error: 'Username and password required.' }); return; }
   const db = getDb();

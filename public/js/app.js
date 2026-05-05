@@ -45,6 +45,9 @@ const state = {
   userMessages: [],              // [{ id, message, read, created_at }]
   notices: [],                   // [{ id, message, created_at }]
   noticesPanelOpen: false,       // whether Notices and Feedback panel is expanded
+  turnstileConfig: null,         // { enabled, siteKey } — cached from /api/auth/turnstile-config
+  loginTurnstileId: null,        // Turnstile widget ID on the login form
+  registerTurnstileId: null,     // Turnstile widget ID on the register form
 };
 
 // ── History management ────────────────────────────────────────────────────────
@@ -1026,6 +1029,45 @@ async function renderLanding() {
   </div>`;
 }
 
+// ── TURNSTILE CAPTCHA ─────────────────────────────────────────────────────────
+/** Fetches and caches the Turnstile site config from the server. */
+async function ensureTurnstileConfig() {
+  if (state.turnstileConfig !== null) return state.turnstileConfig;
+  try {
+    const r = await fetch('/api/auth/turnstile-config', { credentials: 'same-origin' });
+    state.turnstileConfig = r.ok ? await r.json() : { enabled: false, siteKey: null };
+  } catch(e) {
+    state.turnstileConfig = { enabled: false, siteKey: null };
+  }
+  return state.turnstileConfig;
+}
+
+/**
+ * Renders a Turnstile widget into the element with id=containerId.
+ * Polls until window.turnstile is available (up to ~3 s) to handle async script loading.
+ * Calls onWidgetId(widgetId) once the widget is mounted.
+ */
+function renderTurnstileWidget(containerId, onWidgetId) {
+  if (!state.turnstileConfig?.enabled || !state.turnstileConfig?.siteKey) return;
+  const container = document.getElementById(containerId);
+  if (!container) return;
+  let attempts = 0;
+  const tryRender = () => {
+    if (window.turnstile) {
+      const widgetId = window.turnstile.render(container, {
+        sitekey: state.turnstileConfig.siteKey,
+        theme: 'light',
+        size: 'normal',
+      });
+      if (onWidgetId) onWidgetId(widgetId);
+    } else if (attempts < 30) {
+      attempts++;
+      setTimeout(tryRender, 100);
+    }
+  };
+  tryRender();
+}
+
 // ── LOGIN ────────────────────────────────────────────────────────────────────
 async function renderLogin() {
   stopTimer(); stopActivityTracking(); clearCharts(); state.currentView = 'login';
@@ -1037,7 +1079,7 @@ async function renderLogin() {
   if ('caches' in window) {
     try { await Promise.all((await caches.keys()).map(k => caches.delete(k))); } catch(e) {}
   }
-  // Fetch registration config and public stats in parallel
+  // Fetch registration config, public stats and Turnstile config in parallel
   try {
     const [cfgRes, statsRes] = await Promise.all([
       fetch('/api/auth/registration-config', { credentials: 'same-origin' }),
@@ -1046,8 +1088,12 @@ async function renderLogin() {
     if (cfgRes.ok) state.registrationConfig = await cfgRes.json();
     if (statsRes.ok) state.appStats = await statsRes.json();
   } catch(e) {}
+  await ensureTurnstileConfig();
   const showRegister = state.registrationConfig?.selfRegistration !== 'disabled';
   const statsHTML = renderStatsCards(state.appStats, '20px');
+  const turnstileHTML = state.turnstileConfig?.enabled
+    ? `<div id="turnstile-login" style="margin:12px 0;display:flex;justify-content:center"></div>`
+    : '';
   app().innerHTML = `
   <div class="view" style="min-height:auto;padding-bottom:24px">
     <div style="text-align:center;padding-top:30px;margin-bottom:28px">
@@ -1068,6 +1114,7 @@ async function renderLogin() {
           <button class="pw-toggle" type="button" onclick="togglePw('l-pass',this)">👁️</button>
         </div>
       </div>
+      ${turnstileHTML}
       <button class="btn btn-primary btn-full" id="l-btn" onclick="doLogin()">Log in</button>
     </div>
     <div style="text-align:center;margin-top:16px;display:flex;flex-direction:column;gap:10px">
@@ -1078,6 +1125,8 @@ async function renderLogin() {
     ${statsHTML}
     ${renderFooter()}
   </div>`;
+  state.loginTurnstileId = null;
+  renderTurnstileWidget('turnstile-login', id => { state.loginTurnstileId = id; });
   document.getElementById('l-user').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
   document.getElementById('l-pass').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
 }
@@ -1093,9 +1142,24 @@ async function doLogin() {
   const username = document.getElementById('l-user').value.trim();
   const password = document.getElementById('l-pass').value;
   if (!username || !password) { showAlert('Enter username and password.', 'error', 'login-alerts'); return; }
+
+  // Collect Turnstile token when the widget is active
+  let turnstileToken = '';
+  if (state.turnstileConfig?.enabled) {
+    turnstileToken = window.turnstile?.getResponse(state.loginTurnstileId) || '';
+    if (!turnstileToken) {
+      showAlert('Please complete the CAPTCHA verification.', 'error', 'login-alerts');
+      return;
+    }
+  }
+
   btn.disabled = true; btn.textContent = 'Logging in…';
   try {
-    const d = await api('POST', '/api/auth/login', { username, password });
+    const d = await api('POST', '/api/auth/login', {
+      username,
+      password,
+      'cf-turnstile-response': turnstileToken,
+    });
     if (!d) return;
     if (d.requires2fa) {
       state._pending2faUsername = username;
@@ -1121,6 +1185,10 @@ async function doLogin() {
       renderHome();
     });
   } catch(e) {
+    // Reset Turnstile widget so the user can obtain a new token
+    if (state.turnstileConfig?.enabled && state.loginTurnstileId != null) {
+      window.turnstile?.reset(state.loginTurnstileId);
+    }
     if (/invalid csrf token/i.test(e.message)) {
       showAlert('Login expired, refreshing…', 'info', 'login-alerts');
       setTimeout(() => location.reload(), 2000);
@@ -1452,6 +1520,9 @@ function setGroupFromSettings() {
 function renderRegister() {
   stopTimer(); clearCharts(); state.currentView = 'register';
   pushHistory('register');
+  const turnstileHTML = state.turnstileConfig?.enabled
+    ? `<div id="turnstile-register" style="margin:12px 0;display:flex;justify-content:center"></div>`
+    : '';
   app().innerHTML = `
   <div class="view">
     <div class="view-header">
@@ -1483,10 +1554,13 @@ function renderRegister() {
           I understand I must <strong>never enter patient or identifiable information</strong>.
         </label>
       </div>
+      ${turnstileHTML}
       <button class="btn btn-primary btn-full" id="r-btn" onclick="doRegister()">Register</button>
     </div>
     ${renderFooter()}
   </div>`;
+  state.registerTurnstileId = null;
+  renderTurnstileWidget('turnstile-register', id => { state.registerTurnstileId = id; });
 }
 
 async function doRegister() {
@@ -1496,9 +1570,23 @@ async function doRegister() {
   const policy = document.getElementById('r-policy').checked;
   if (!policy) { showAlert('Please read and accept the Data & Use Policy.', 'error', 'reg-alerts'); return; }
   if (pass !== pass2) { showAlert('Passwords do not match.', 'error', 'reg-alerts'); return; }
+
+  // Collect Turnstile token when the widget is active
+  let turnstileToken = '';
+  if (state.turnstileConfig?.enabled) {
+    turnstileToken = window.turnstile?.getResponse(state.registerTurnstileId) || '';
+    if (!turnstileToken) {
+      showAlert('Please complete the CAPTCHA verification.', 'error', 'reg-alerts');
+      return;
+    }
+  }
+
   btn.disabled = true; btn.textContent = 'Registering…';
   try {
-    const d = await api('POST', '/api/auth/register', { password: pass });
+    const d = await api('POST', '/api/auth/register', {
+      password: pass,
+      'cf-turnstile-response': turnstileToken,
+    });
     if (!d) return;
     if (d.pending) {
       showRegisterPending(d.username);
@@ -1506,6 +1594,10 @@ async function doRegister() {
       showRegisterSuccess(d.username);
     }
   } catch(e) {
+    // Reset Turnstile widget so the user can obtain a new token
+    if (state.turnstileConfig?.enabled && state.registerTurnstileId != null) {
+      window.turnstile?.reset(state.registerTurnstileId);
+    }
     btn.disabled = false; btn.textContent = 'Register';
     showAlert(e.message, 'error', 'reg-alerts');
   }
