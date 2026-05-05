@@ -36,7 +36,7 @@ export function verifyTurnstileToken(token: string, remoteip?: string): Promise<
       },
       (res) => {
         let data = '';
-        res.on('data', (chunk: string) => { data += chunk; });
+        res.on('data', (chunk: Buffer) => { data += chunk; });
         res.on('end', () => {
           try {
             const json = JSON.parse(data) as { success: boolean };

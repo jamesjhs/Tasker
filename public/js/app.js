@@ -1144,9 +1144,10 @@ async function doLogin() {
   if (!username || !password) { showAlert('Enter username and password.', 'error', 'login-alerts'); return; }
 
   // Collect Turnstile token when the widget is active
+  let turnstileToken = '';
   if (state.turnstileConfig?.enabled) {
-    const token = window.turnstile?.getResponse(state.loginTurnstileId) || '';
-    if (!token) {
+    turnstileToken = window.turnstile?.getResponse(state.loginTurnstileId) || '';
+    if (!turnstileToken) {
       showAlert('Please complete the CAPTCHA verification.', 'error', 'login-alerts');
       return;
     }
@@ -1154,9 +1155,6 @@ async function doLogin() {
 
   btn.disabled = true; btn.textContent = 'Logging in…';
   try {
-    const turnstileToken = state.turnstileConfig?.enabled
-      ? (window.turnstile?.getResponse(state.loginTurnstileId) || '')
-      : '';
     const d = await api('POST', '/api/auth/login', {
       username,
       password,
@@ -1574,9 +1572,10 @@ async function doRegister() {
   if (pass !== pass2) { showAlert('Passwords do not match.', 'error', 'reg-alerts'); return; }
 
   // Collect Turnstile token when the widget is active
+  let turnstileToken = '';
   if (state.turnstileConfig?.enabled) {
-    const token = window.turnstile?.getResponse(state.registerTurnstileId) || '';
-    if (!token) {
+    turnstileToken = window.turnstile?.getResponse(state.registerTurnstileId) || '';
+    if (!turnstileToken) {
       showAlert('Please complete the CAPTCHA verification.', 'error', 'reg-alerts');
       return;
     }
@@ -1584,9 +1583,6 @@ async function doRegister() {
 
   btn.disabled = true; btn.textContent = 'Registering…';
   try {
-    const turnstileToken = state.turnstileConfig?.enabled
-      ? (window.turnstile?.getResponse(state.registerTurnstileId) || '')
-      : '';
     const d = await api('POST', '/api/auth/register', {
       password: pass,
       'cf-turnstile-response': turnstileToken,
