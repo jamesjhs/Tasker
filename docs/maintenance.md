@@ -1,6 +1,6 @@
 # Tasker — Maintenance and Troubleshooting Manual
 
-**Version 1.13.1 — May 2026**
+**Version 1.13.2 — May 2026**
 
 ---
 

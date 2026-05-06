@@ -401,7 +401,7 @@ function stopActivityTracking() {
   dismissInactivityWarning();
   if (state.inactivityCheckInterval) { clearInterval(state.inactivityCheckInterval); state.inactivityCheckInterval = null; }
   if (state.versionPollInterval) { clearInterval(state.versionPollInterval); state.versionPollInterval = null; }
-  ACTIVITY_EVENTS.forEach(evt => document.removeEventListener(evt, updateLastActive));
+  ACTIVITY_EVENTS.forEach(evt => document.removeEventListener(evt, updateLastActive, { passive: true }));
 }
 
 async function forceSessionExpiry() {

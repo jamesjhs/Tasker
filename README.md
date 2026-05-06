@@ -1,6 +1,6 @@
 # Tasker
 
-**v1.13.1** — An anonymous task-logging PWA for healthcare staff. Built with TypeScript, Express 5, SQLite, and vanilla JS.
+**v1.13.2** — An anonymous task-logging PWA for healthcare staff. Built with TypeScript, Express 5, SQLite, and vanilla JS.
 
 ---
 
@@ -22,7 +22,7 @@
 - **Configurable registration** — administrator controls three levels for self-registration and user invitations.
 - **30-day data retention** — task data is automatically deleted after 30 days.
 - **Health-check endpoint** — `GET /readyz` returns a JSON status response for uptime/heartbeat monitoring.
-- **Asset version endpoint** — `GET /api/version` returns `{"version":"1.13.1"}` for client-side cache-busting.
+- **Asset version endpoint** — `GET /api/version` returns `{"version":"1.13.2"}` for client-side cache-busting.
 - **Cloudflare Turnstile CAPTCHA** — optional bot-protection for login and self-registration. When `TURNSTILE_SITE_KEY` and `TURNSTILE_SECRET_KEY` are set, Turnstile widgets are rendered on the login and registration forms; tokens are verified server-side before credentials are checked. The feature is fully disabled (and invisible) when the environment variables are not set.
 
 ---
@@ -160,6 +160,11 @@ See [`/policy`](/policy) for the full Data and Use Policy.
 ---
 
 ## Changelog
+
+### v1.13.2 (May 2026) — Bug fix: event listener mismatch in inactivity tracking
+
+- **Bug fix: Event listeners not properly removed** — `stopActivityTracking()` was removing event listeners without the `{ passive: true }` option, while `startActivityTracking()` added them with this option. According to browser specs, `removeEventListener` must be called with the exact same parameters as `addEventListener`, including the options object. This mismatch caused the listeners to never be properly removed, potentially causing listener accumulation and interfering with proper inactivity tracking. Updated `stopActivityTracking()` to include `{ passive: true }` when removing event listeners.
+- **Version bump** — Version number incremented to 1.13.2; all page footers and documentation updated accordingly.
 
 ### v1.13.1 (May 2026) — Version bump
 
