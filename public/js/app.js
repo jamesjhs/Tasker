@@ -341,8 +341,12 @@ function showInactivityWarning(lastActiveMs) {
   el.className = 'inactivity-warn';
   el.innerHTML = `
     <span class="inactivity-warn-text">App last used: ${hh}:${mm}</span>
-    <button class="inactivity-warn-dismiss" onclick="dismissAndResetInactivity()">Dismiss</button>
+    <button class="inactivity-warn-dismiss">Dismiss</button>
   `;
+  const dismissBtn = el.querySelector('.inactivity-warn-dismiss');
+  if (dismissBtn) {
+    dismissBtn.addEventListener('click', dismissAndResetInactivity);
+  }
   document.body.appendChild(el);
   _inactivityWarnEl = el;
 }
