@@ -5,7 +5,7 @@
 
 // ── State ───────────────────────────────────────────────────────────────────
 const INACTIVITY_MS = 30 * 60 * 1000; // 30 minutes
-const WARN_MS       =  5 * 60 * 1000; // 5 minutes — inactivity warning overlay
+const WARN_MS       = 10 * 60 * 1000; // 10 minutes — inactivity warning overlay
 const VERSION_CHECK_DEBOUNCE_MS = 60 * 1000; // 60 seconds — min gap between version checks
 const VERSION_POLL_INTERVAL_MS  = 5 * 60 * 1000; // 5 minutes — background version poll
 
@@ -331,6 +331,11 @@ function stopTimer() {
 }
 
 // ── Inactivity / activity tracking ──────────────────────────────────────────
+// Tracks user interactions (click, touch, keydown, scroll) globally across the
+// entire logged-in app.  After WARN_MS of no interaction a banner is shown;
+// after INACTIVITY_MS the session is force-expired.  Tracking is started on
+// login and stopped only on logout or session expiry — never in between.
+
 function showInactivityWarning(lastActiveMs) {
   if (_inactivityWarnEl) return; // already visible
   const d = new Date(lastActiveMs);
@@ -339,16 +344,16 @@ function showInactivityWarning(lastActiveMs) {
   const el = document.createElement('div');
   el.id = 'inactivity-warn';
   el.className = 'inactivity-warn';
-  
+
   const textSpan = document.createElement('span');
   textSpan.className = 'inactivity-warn-text';
   textSpan.textContent = `App last used: ${hh}:${mm}`;
-  
+
   const dismissBtn = document.createElement('button');
   dismissBtn.className = 'inactivity-warn-dismiss';
   dismissBtn.textContent = 'Dismiss';
   dismissBtn.addEventListener('click', dismissAndResetInactivity);
-  
+
   el.appendChild(textSpan);
   el.appendChild(dismissBtn);
   document.body.appendChild(el);
@@ -368,13 +373,11 @@ function setLastActiveTimestamp() {
 }
 
 function dismissAndResetInactivity() {
-  // Dismiss the warning and reset the timer
   dismissInactivityWarning();
   setLastActiveTimestamp();
 }
 
 function updateLastActive() {
-  // Always reset the timer on any interaction with the app
   dismissInactivityWarning();
   setLastActiveTimestamp();
 }
@@ -387,9 +390,8 @@ const ACTIVITY_EVENTS = ['click', 'touchstart', 'keydown', 'scroll'];
 
 function startActivityTracking() {
   stopActivityTracking();
-  // Stamp the current time as the baseline for this session without running
-  // the expiry check — prevents a stale localStorage value from a previous
-  // session triggering an immediate re-expiry right after a fresh login.
+  // Stamp the current time so a stale localStorage value from a previous
+  // session cannot trigger an immediate expiry right after a fresh login.
   setLastActiveTimestamp();
   ACTIVITY_EVENTS.forEach(evt => document.addEventListener(evt, updateLastActive, { passive: true }));
   state.inactivityCheckInterval = setInterval(checkClientInactivity, 60000);
@@ -456,29 +458,6 @@ function checkClientInactivity() {
   } else {
     dismissInactivityWarning();
   }
-}
-
-async function checkInactivityInterruption() {
-  if (!state.activeTask) return false;
-  const last = getLastActive();
-  if (!last) return false;
-  const taskStart = new Date(state.activeTask.start_time).getTime();
-  const effectiveLast = Math.max(last, taskStart);
-  const gap = Date.now() - effectiveLast;
-  if (gap < INACTIVITY_MS) return false;
-  const t = state.activeTask;
-  const interruptions = [...(t.interruptions || []), {
-    start: new Date(effectiveLast).toISOString(),
-    end: new Date().toISOString(),
-  }];
-  try {
-    await api('PATCH', `/api/tasks/${t.id}`, { interruptions });
-    t.interruptions = interruptions;
-    return true;
-  } catch(e) {
-    console.error('[Tasker] Failed to record inactivity interruption:', e);
-  }
-  return false;
 }
 
 // ── API helper ──────────────────────────────────────────────────────────────
@@ -1863,13 +1842,6 @@ async function renderHome() {
   if (pendingRes?.ok) state.pendingTaskLog = await pendingRes.json();
   if (recentRes?.ok) { const r = await recentRes.json(); state.recentHandledCount = r?.count ?? null; }
   await loadNoticesAndMessages();
-  if (state.activeTask) {
-    await checkInactivityInterruption();
-    updateLastActive();
-    startActivityTracking();
-  } else {
-    stopActivityTracking();
-  }
   if (state.currentView === 'home') {
     app().innerHTML = renderHomeHTML();
     if (state.pendingGraphDays) await renderPendingChart(state.pendingGraphDays);
@@ -1888,7 +1860,6 @@ async function discardActiveTask() {
   try {
     await api('PATCH', `/api/tasks/${state.activeTask.id}`, { status: 'discarded' });
     state.activeTask = null;
-    stopActivityTracking();
     renderHome();
   } catch(e) { showAlert(e.message, 'error', 'home-alerts'); }
 }
@@ -2455,7 +2426,6 @@ async function discardFromModal() {
     await api('PATCH', `/api/tasks/${state.activeTask.id}`, { status: 'discarded' });
     state.activeTask = null;
     state.interruptStart = null;
-    stopActivityTracking();
     const m = document.getElementById('intr-modal');
     if (m) m.remove();
     renderHome();
@@ -2467,7 +2437,6 @@ async function cancelActiveTask() {
   try {
     await api('PATCH', `/api/tasks/${state.activeTask.id}`, { status: 'discarded' });
     state.activeTask = null;
-    stopActivityTracking();
     renderHome();
   } catch(e) { alert(e.message); }
 }
@@ -2692,7 +2661,6 @@ async function submitTaskReview(taskId, isEdit, dest) {
   try {
     await api('PATCH', `/api/tasks/${taskId}`, body);
     state.activeTask = null;
-    stopActivityTracking();
     await checkActiveTask();
     if (dest === 'start') {
       state.lastUsedCombos = { category: categoryVal, subcategory: subcategoryVal };
@@ -2709,7 +2677,6 @@ async function discardFromEnd(taskId) {
   try {
     await api('PATCH', `/api/tasks/${taskId}`, { status: 'discarded' });
     state.activeTask = null;
-    stopActivityTracking();
     renderHome();
   } catch(e) { showAlert(e.message, 'error', 'te-alerts'); }
 }
@@ -4273,25 +4240,9 @@ document.addEventListener('visibilitychange', async () => {
   if (document.hidden) return;
   // Tab/app just became visible — check version then inactivity.
   // Do NOT stamp the clock here; only user interaction (ACTIVITY_EVENTS → updateLastActive)
-  // should reset it.  That way the banner shown below persists until the user actually
-  // touches something, and the inactivity intervals accumulate real idle time.
+  // should reset it.  That way the banner persists until the user actually touches something.
   if (Date.now() - _lastVersionCheckAt > VERSION_CHECK_DEBOUNCE_MS) {
     if (await checkAssetVersion()) return; // new version detected — update banner shown
   }
   checkClientInactivity();
-  if (_sessionExpiryInProgress) return;
-  if (state.user && !state.user.isAdmin && state.activeTask) {
-    try {
-      const interrupted = await checkInactivityInterruption();
-      if (interrupted) {
-        if (state.currentView === 'home') {
-          app().innerHTML = renderHomeHTML();
-        } else if (state.currentView === 'task-active') {
-          renderTaskActive();
-        }
-      }
-    } catch(e) {
-      console.error('[Tasker] Visibility change error:', e);
-    }
-  }
 });
