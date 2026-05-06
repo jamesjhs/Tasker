@@ -339,7 +339,18 @@ function showInactivityWarning(lastActiveMs) {
   const el = document.createElement('div');
   el.id = 'inactivity-warn';
   el.className = 'inactivity-warn';
-  el.textContent = `App last used: ${hh}:${mm}`;
+  
+  const textSpan = document.createElement('span');
+  textSpan.className = 'inactivity-warn-text';
+  textSpan.textContent = `App last used: ${hh}:${mm}`;
+  
+  const dismissBtn = document.createElement('button');
+  dismissBtn.className = 'inactivity-warn-dismiss';
+  dismissBtn.textContent = 'Dismiss';
+  dismissBtn.addEventListener('click', dismissAndResetInactivity);
+  
+  el.appendChild(textSpan);
+  el.appendChild(dismissBtn);
   document.body.appendChild(el);
   _inactivityWarnEl = el;
 }
@@ -348,16 +359,24 @@ function dismissInactivityWarning() {
   if (_inactivityWarnEl) { _inactivityWarnEl.remove(); _inactivityWarnEl = null; }
 }
 
-function updateLastActive() {
-  if (state.user) {
-    const last = getLastActive();
-    // If the user interacts after the session has already expired, treat this
-    // interaction as the trigger to run the expiry flow rather than silently
-    // resetting the clock.
-    if (last && Date.now() - last >= INACTIVITY_MS) { forceSessionExpiry(); return; }
+function setLastActiveTimestamp() {
+  try {
+    localStorage.setItem('tasker_last_active', Date.now().toString());
+  } catch(e) {
+    console.warn('[Tasker] Failed to update last active timestamp:', e);
   }
+}
+
+function dismissAndResetInactivity() {
+  // Dismiss the warning and reset the timer
   dismissInactivityWarning();
-  try { localStorage.setItem('tasker_last_active', Date.now().toString()); } catch(e) {}
+  setLastActiveTimestamp();
+}
+
+function updateLastActive() {
+  // Always reset the timer on any interaction with the app
+  dismissInactivityWarning();
+  setLastActiveTimestamp();
 }
 
 function getLastActive() {
@@ -371,7 +390,7 @@ function startActivityTracking() {
   // Stamp the current time as the baseline for this session without running
   // the expiry check — prevents a stale localStorage value from a previous
   // session triggering an immediate re-expiry right after a fresh login.
-  try { localStorage.setItem('tasker_last_active', Date.now().toString()); } catch(e) {}
+  setLastActiveTimestamp();
   ACTIVITY_EVENTS.forEach(evt => document.addEventListener(evt, updateLastActive, { passive: true }));
   state.inactivityCheckInterval = setInterval(checkClientInactivity, 60000);
   // Poll for new app versions every 5 minutes while the user is logged in.

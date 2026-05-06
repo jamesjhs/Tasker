@@ -592,7 +592,37 @@ a:hover { text-decoration: underline; }
   padding: 10px 16px;
   /* Ensure the strip clears the iOS home-indicator / gesture bar in PWA mode */
   padding-bottom: max(10px, env(safe-area-inset-bottom));
-  pointer-events: none;
+  /* Enable pointer events so users can interact with the dismiss button */
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+}
+
+.inactivity-warn-text {
+  flex: 0 0 auto;
+}
+
+.inactivity-warn-dismiss {
+  flex: 0 0 auto;
+  background: #f59e0b;
+  color: white;
+  border: none;
+  padding: 6px 14px;
+  border-radius: 4px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.inactivity-warn-dismiss:hover {
+  background: #d97706;
+}
+
+.inactivity-warn-dismiss:active {
+  background: #b45309;
 }
 
 /* ── App update banner ────────────────────────────────────────────── */
