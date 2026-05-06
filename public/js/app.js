@@ -339,7 +339,10 @@ function showInactivityWarning(lastActiveMs) {
   const el = document.createElement('div');
   el.id = 'inactivity-warn';
   el.className = 'inactivity-warn';
-  el.textContent = `App last used: ${hh}:${mm}`;
+  el.innerHTML = `
+    <span class="inactivity-warn-text">App last used: ${hh}:${mm}</span>
+    <button class="inactivity-warn-dismiss" onclick="dismissAndResetInactivity()">Dismiss</button>
+  `;
   document.body.appendChild(el);
   _inactivityWarnEl = el;
 }
@@ -348,14 +351,14 @@ function dismissInactivityWarning() {
   if (_inactivityWarnEl) { _inactivityWarnEl.remove(); _inactivityWarnEl = null; }
 }
 
+function dismissAndResetInactivity() {
+  // Dismiss the warning and reset the timer
+  dismissInactivityWarning();
+  try { localStorage.setItem('tasker_last_active', Date.now().toString()); } catch(e) {}
+}
+
 function updateLastActive() {
-  if (state.user) {
-    const last = getLastActive();
-    // If the user interacts after the session has already expired, treat this
-    // interaction as the trigger to run the expiry flow rather than silently
-    // resetting the clock.
-    if (last && Date.now() - last >= INACTIVITY_MS) { forceSessionExpiry(); return; }
-  }
+  // Always reset the timer on any interaction with the app
   dismissInactivityWarning();
   try { localStorage.setItem('tasker_last_active', Date.now().toString()); } catch(e) {}
 }
