@@ -155,6 +155,14 @@ html, body {
   -webkit-tap-highlight-color: transparent;
 }
 .btn:active { transform: scale(.97); }
+.btn:disabled, .btn[disabled] {
+  background: #d1d5db;
+  color: #9ca3af;
+  cursor: not-allowed;
+  opacity: 1;
+  transform: none;
+  pointer-events: none;
+}
 .btn-primary { background: #1a56db; color: #fff; }
 .btn-primary:hover { opacity: .9; }
 .btn-danger  { background: #dc2626; color: #fff; }

@@ -174,8 +174,10 @@ router.post('/login', validateCsrf, async (req: Request, res: Response) => {
         `Your Tasker admin login verification code is:\n\n  ${code}\n\nThis code expires in 10 minutes. Do not share it with anyone.`,
       );
     } catch (e: any) {
-      console.error('[Tasker] 2FA email error:', e);
-      res.status(503).json({ error: 'Could not send 2FA code (SMTP error). Please contact the administrator.' });
+      console.error('[Tasker] 2FA email error — could not send verification code to:', recipients);
+      console.error('[Tasker] SMTP error detail:', e?.message || e);
+      console.warn(`[Tasker] 2FA FALLBACK — verification code for user ${user.username}: ${code} (expires in 10 minutes)`);
+      res.json({ requires2fa: true, emailFailed: true });
       return;
     }
     res.json({ requires2fa: true });
@@ -302,8 +304,10 @@ router.post('/resend-2fa', validateCsrf, async (req: Request, res: Response) => 
     );
     res.json({ success: true });
   } catch (e: any) {
-    console.error('[Tasker] Resend 2FA email error:', e);
-    res.status(503).json({ error: 'Could not resend code (SMTP error). Please contact the administrator.' });
+    console.error('[Tasker] Resend 2FA email error — could not send verification code to:', recipients);
+    console.error('[Tasker] SMTP error detail:', e?.message || e);
+    console.warn(`[Tasker] 2FA FALLBACK — verification code for user ${user.username}: ${code} (expires in 10 minutes)`);
+    res.json({ success: true, emailFailed: true });
   }
 });
 

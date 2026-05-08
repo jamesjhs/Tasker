@@ -1045,17 +1045,21 @@ async function ensureTurnstileConfig() {
  * Polls until window.turnstile is available (up to ~3 s) to handle async script loading.
  * Calls onWidgetId(widgetId) once the widget is mounted.
  */
-function renderTurnstileWidget(containerId, onWidgetId) {
+function renderTurnstileWidget(containerId, onWidgetId, submitBtnId) {
   if (!state.turnstileConfig?.enabled || !state.turnstileConfig?.siteKey) return;
   const container = document.getElementById(containerId);
   if (!container) return;
   let attempts = 0;
   const tryRender = () => {
     if (window.turnstile) {
+      const btn = submitBtnId ? document.getElementById(submitBtnId) : null;
       const widgetId = window.turnstile.render(container, {
         sitekey: state.turnstileConfig.siteKey,
         theme: 'light',
         size: 'normal',
+        callback: () => { if (btn) btn.disabled = false; },
+        'expired-callback': () => { if (btn) btn.disabled = true; },
+        'error-callback': () => { if (btn) btn.disabled = true; },
       });
       if (onWidgetId) onWidgetId(widgetId);
     } else if (attempts < 30) {
@@ -1113,7 +1117,7 @@ async function renderLogin() {
         </div>
       </div>
       ${turnstileHTML}
-      <button class="btn btn-primary btn-full" id="l-btn" onclick="doLogin()">Log in</button>
+      <button class="btn btn-primary btn-full" id="l-btn" onclick="doLogin()"${state.turnstileConfig?.enabled ? ' disabled' : ''}>Log in</button>
     </div>
     <div style="text-align:center;margin-top:16px;display:flex;flex-direction:column;gap:10px">
       ${showRegister ? `<button class="link-btn" onclick="renderRegister()">Don't have an account? Register</button>` : ''}
@@ -1124,7 +1128,7 @@ async function renderLogin() {
     ${renderFooter()}
   </div>`;
   state.loginTurnstileId = null;
-  renderTurnstileWidget('turnstile-login', id => { state.loginTurnstileId = id; });
+  renderTurnstileWidget('turnstile-login', id => { state.loginTurnstileId = id; }, 'l-btn');
   document.getElementById('l-user').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
   document.getElementById('l-pass').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
 }
@@ -1162,7 +1166,7 @@ async function doLogin() {
     if (d.requires2fa) {
       state._pending2faUsername = username;
       await refreshCsrf();
-      render2faVerify();
+      render2faVerify(d.emailFailed);
       return;
     }
     // Clear all SW caches on login so every authenticated session starts with
@@ -1197,15 +1201,18 @@ async function doLogin() {
   }
 }
 
-async function render2faVerify() {
+async function render2faVerify(emailFailed = false) {
   state.currentView = 'login';
   replaceHistory('login');
+  const subtitle = emailFailed
+    ? `<p class="alert alert-warning" style="font-size:.9rem;margin:0">⚠️ Email delivery failed (SMTP error). Check the server logs for your verification code, then enter it below.</p>`
+    : `<p style="color:#6b7280;font-size:.9rem;margin-top:4px">A verification code has been sent to your registered admin email address.</p>`;
   app().innerHTML = `
   <div class="view" style="min-height:auto;padding-bottom:24px">
     <div style="text-align:center;padding-top:30px;margin-bottom:28px">
       <div style="font-size:3rem">🔐</div>
       <h1 style="font-size:1.8rem;color:#1a56db;margin-top:8px">Two-Factor Authentication</h1>
-      <p style="color:#6b7280;font-size:.9rem;margin-top:4px">A verification code has been sent to your registered admin email address.</p>
+      ${subtitle}
     </div>
     <div id="tfa-alerts"></div>
     <div class="card">
@@ -1259,8 +1266,12 @@ async function do2faResend() {
   const btn = document.getElementById('tfa-resend-btn');
   btn.disabled = true; btn.textContent = 'Sending…';
   try {
-    await api('POST', '/api/auth/resend-2fa', {});
-    showAlert('A new code has been sent to your admin email.', 'success', 'tfa-alerts');
+    const d = await api('POST', '/api/auth/resend-2fa', {});
+    if (d?.emailFailed) {
+      showAlert('Email delivery failed (SMTP error) — check the server logs for your new code.', 'warning', 'tfa-alerts');
+    } else {
+      showAlert('A new code has been sent to your admin email.', 'success', 'tfa-alerts');
+    }
   } catch(e) {
     showAlert(e.message, 'error', 'tfa-alerts');
   } finally {
@@ -1553,12 +1564,12 @@ function renderRegister() {
         </label>
       </div>
       ${turnstileHTML}
-      <button class="btn btn-primary btn-full" id="r-btn" onclick="doRegister()">Register</button>
+      <button class="btn btn-primary btn-full" id="r-btn" onclick="doRegister()"${state.turnstileConfig?.enabled ? ' disabled' : ''}>Register</button>
     </div>
     ${renderFooter()}
   </div>`;
   state.registerTurnstileId = null;
-  renderTurnstileWidget('turnstile-register', id => { state.registerTurnstileId = id; });
+  renderTurnstileWidget('turnstile-register', id => { state.registerTurnstileId = id; }, 'r-btn');
 }
 
 async function doRegister() {
