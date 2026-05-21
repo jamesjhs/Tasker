@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Tasker — Technical Reference Manual v1.13.6</title>
+  <title>Tasker — Technical Reference Manual v1.13.7</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; }
     body {
@@ -107,7 +107,7 @@
 <div class="page">
 
 <h1>Tasker — Technical Reference Manual</h1>
-<p class="subtitle">Version 1.13.2 &nbsp;·&nbsp; May 2026 &nbsp;·&nbsp; <em>Prepared in the role of Professor of Digital Engineering Product Design</em></p>
+<p class="subtitle">Version 1.13.7 &nbsp;·&nbsp; May 2026 &nbsp;·&nbsp; <em>Prepared in the role of Professor of Digital Engineering Product Design</em></p>
 
 <div class="toc">
   <h2>Table of Contents</h2>
@@ -475,6 +475,7 @@
     <tr><td><code>GET /api/tasks/active</code></td><td>Returns the single <code>in_progress</code> task for the current user, or <code>{ task: null }</code>. Decrypts notes.</td></tr>
     <tr><td><code>GET /api/tasks/recent-count</code></td><td>Count of tasks completed in the last 7 days.</td></tr>
     <tr><td><code>GET/POST /api/tasks/pending-count</code></td><td>Log or retrieve timestamped snapshots of the user's pending task backlog (0–9999).</td></tr>
+    <tr><td><code>GET /api/tasks/common-fields</code></td><td>Returns quick-pick suggestions for category/subcategory/outcome (up to 9 each), frequency-ordered with most-recent-first pinning, plus the most recent task assigned date used by Log Task date presets.</td></tr>
     <tr><td><code>POST /api/tasks/start</code></td><td>Creates a task with <code>status = 'in_progress'</code>. Enforces single active task per user. Validates start_time is today. Encrypts notes.</td></tr>
     <tr><td><code>PATCH /api/tasks/:id</code></td><td>Main task update. Dynamic SET clause. Validates temporal consistency, notes length (2000 chars), date-of-today constraints. Encrypts notes on write. Logs event on completion/discard.</td></tr>
     <tr><td><code>GET /api/tasks/</code></td><td>All non-discarded tasks with optional query-string filtering.</td></tr>
@@ -743,6 +744,8 @@ Admin: POST /api/admin/users/:id/unlock → failed_login_attempts=0, is_locked=0
 <h3>17.1 Normal Task Flow</h3>
 <pre><code>User taps "Log Task"
 → selects type (duty/personal), category, subcategory, assigned date
+→ optional quick-picks for category/subcategory (up to 9; most-recent-first highlighted)
+→ starts timer via one of three date actions (Prev dd/mm, Yesterday, Selected Date)
 → POST /api/tasks/start → status='in_progress'
 → Live timer display
 
@@ -911,7 +914,7 @@ R²        = 1 - SS_res / SS_tot</code></pre>
 
 <hr>
 <p style="text-align:center;font-size:.85rem;color:#9ca3af;margin-top:40px">
-  Tasker Technical Reference Manual &nbsp;·&nbsp; v1.13.6 &nbsp;·&nbsp; May 2026<br>
+  Tasker Technical Reference Manual &nbsp;·&nbsp; v1.13.7 &nbsp;·&nbsp; May 2026<br>
   This document is stored in <code>docs/</code> and is not served by the application.
 </p>
 

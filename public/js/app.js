@@ -2139,9 +2139,11 @@ function renderTaskStart() {
   stopTimer(); clearCharts(); state.currentView = 'task-start';
   pushHistory('task-start');
   state.taskForm = { is_duty: null };
-  const today = new Date().toISOString().split('T')[0];
-  const previousAssigned = state.recentAssignedDate || '';
+  const today = getTodayISO();
+  const previousAssigned = state.recentAssignedDate || null;
+  const hasPreviousAssigned = Boolean(previousAssigned);
   const previousLabel = previousAssigned ? formatDateDDMM(previousAssigned) : '—';
+  const previousAria = hasPreviousAssigned ? `Use previous task date ${previousLabel}` : 'No previous task date available';
   app().innerHTML = `
   <div class="view">
     <div class="view-header">
@@ -2165,7 +2167,7 @@ function renderTaskStart() {
       <input id="ts-assigned" class="input" type="date" value="${today}">
     </div>
     <div class="date-preset-group task-start-date-actions">
-      <button class="btn btn-sm task-date-btn task-date-btn--previous" ${previousAssigned ? '' : 'disabled'} onclick="startTaskWithDatePreset('previous')">🟢 Prev (${esc(previousLabel)})</button>
+      <button class="btn btn-sm task-date-btn task-date-btn--previous" aria-label="${esc(previousAria)}" ${hasPreviousAssigned ? '' : 'disabled title="No previous task date available"'} onclick="startTaskWithDatePreset('previous')">🟢 Prev (${esc(previousLabel)})</button>
       <button class="btn btn-sm task-date-btn task-date-btn--yesterday" onclick="startTaskWithDatePreset('yesterday')">🟡 Yesterday</button>
       <button class="btn btn-sm btn-primary task-date-btn" onclick="startTaskWithDatePreset('selected')">▶ Selected Date</button>
     </div>
@@ -2208,9 +2210,14 @@ function syncQuickPickSelection(containerId, field, value) {
 function formatDateDDMM(isoDate) {
   const parts = String(isoDate || '').split('-');
   if (parts.length !== 3) return '';
-  const day = parts[2]?.padStart(2, '0');
-  const month = parts[1]?.padStart(2, '0');
+  const day = (parts[2] || '').padStart(2, '0');
+  const month = (parts[1] || '').padStart(2, '0');
+  if (!day.trim() || !month.trim()) return '';
   return `${day}/${month}`;
+}
+
+function getTodayISO() {
+  return new Date().toISOString().split('T')[0];
 }
 
 function getYesterdayDate() {
@@ -2219,15 +2226,26 @@ function getYesterdayDate() {
   return d.toISOString().split('T')[0];
 }
 
-function mergeRecentFirst(list, value, limit = 9) {
+function moveValueToFront(list, value, limit = 9) {
   if (!value) return (list || []).slice(0, limit);
   return [value, ...(list || []).filter(v => v !== value)].slice(0, limit);
 }
 
 function startTaskWithDatePreset(mode) {
-  const selected = document.getElementById('ts-assigned')?.value || new Date().toISOString().split('T')[0];
+  const selected = document.getElementById('ts-assigned')?.value || getTodayISO();
   const previous = state.recentAssignedDate || selected;
-  const assignedDate = mode === 'previous' ? previous : mode === 'yesterday' ? getYesterdayDate() : selected;
+  let assignedDate = selected;
+  switch (mode) {
+    case 'previous':
+      assignedDate = previous;
+      break;
+    case 'yesterday':
+      assignedDate = getYesterdayDate();
+      break;
+    default:
+      assignedDate = selected;
+      break;
+  }
   const input = document.getElementById('ts-assigned');
   if (input) input.value = assignedDate;
   doStartTask(assignedDate);
@@ -2313,7 +2331,7 @@ async function submitNewOption(containerId, field) {
 async function doStartTask(forcedAssignedDate = null) {
   const category = document.getElementById('ts-cat-sel')?.value || null;
   const subcategory = document.getElementById('ts-sub-sel')?.value || null;
-  const assigned_date = forcedAssignedDate || document.getElementById('ts-assigned')?.value || new Date().toISOString().split('T')[0];
+  const assigned_date = forcedAssignedDate || document.getElementById('ts-assigned')?.value || getTodayISO();
   const is_duty = state.taskForm.is_duty;
   if (!category) { showAlert('Please select a Task From.', 'error', 'ts-alerts'); return; }
   if (!subcategory) { showAlert('Please select a Task Type.', 'error', 'ts-alerts'); return; }
@@ -2728,8 +2746,8 @@ async function submitTaskReview(taskId, isEdit, dest) {
     await checkActiveTask();
     if (dest === 'start') {
       state.lastUsedCombos = { category: categoryVal, subcategory: subcategoryVal };
-      state.commonFields.category = mergeRecentFirst(state.commonFields.category, categoryVal);
-      state.commonFields.subcategory = mergeRecentFirst(state.commonFields.subcategory, subcategoryVal);
+      state.commonFields.category = moveValueToFront(state.commonFields.category, categoryVal);
+      state.commonFields.subcategory = moveValueToFront(state.commonFields.subcategory, subcategoryVal);
       state.recentAssignedDate = body.assigned_date || state.recentAssignedDate;
       renderTaskStart();
     } else {

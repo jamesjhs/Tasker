@@ -174,23 +174,29 @@ router.get('/', (req: Request, res: Response) => {
 router.get('/common-fields', (req: Request, res: Response) => {
   const s = req.session as any;
   const db = getDb();
-  const ALLOWED_FIELDS = new Set(['category', 'subcategory', 'outcome']);
+  const FIELD_SQL: Record<string, string> = {
+    category: 'category',
+    subcategory: 'subcategory',
+    outcome: 'outcome',
+  };
+  const RECENT_ORDER_SQL = 'COALESCE(end_time,start_time,created_at) DESC';
   const topNWithRecentFirst = (field: string, limit: number): string[] => {
-    if (!ALLOWED_FIELDS.has(field)) return [];
+    const safeField = FIELD_SQL[field];
+    if (!safeField) return [];
     const frequent = (db.prepare(
-      `SELECT ${field}, COUNT(*) as cnt FROM tasks WHERE user_id=? AND ${field} IS NOT NULL AND status='completed' AND start_time >= datetime('now', '-30 days') GROUP BY ${field} ORDER BY cnt DESC LIMIT ?`
-    ).all(s.userId, limit) as any[]).map(r => r[field]);
+      `SELECT ${safeField}, COUNT(*) as cnt FROM tasks WHERE user_id=? AND ${safeField} IS NOT NULL AND status='completed' AND start_time >= datetime('now', '-30 days') GROUP BY ${safeField} ORDER BY cnt DESC LIMIT ?`
+    ).all(s.userId, limit) as any[]).map(r => r[safeField]);
     const recent = db.prepare(
-      `SELECT ${field} FROM tasks WHERE user_id=? AND ${field} IS NOT NULL AND status='completed' ORDER BY COALESCE(end_time,start_time,created_at) DESC LIMIT 1`
+      `SELECT ${safeField} FROM tasks WHERE user_id=? AND ${safeField} IS NOT NULL AND status='completed' ORDER BY ${RECENT_ORDER_SQL} LIMIT 1`
     ).get(s.userId) as any;
-    const recentVal = recent?.[field] || null;
+    const recentVal = recent?.[safeField] || null;
     if (!recentVal) return frequent.slice(0, limit);
     return [recentVal, ...frequent.filter(v => v !== recentVal)].slice(0, limit);
   };
   const recentTask = db.prepare(
-    `SELECT assigned_date, start_time FROM tasks WHERE user_id=? AND status!='discarded' ORDER BY COALESCE(end_time,start_time,created_at) DESC LIMIT 1`
+    `SELECT assigned_date, COALESCE(end_time,start_time,created_at) AS recent_time FROM tasks WHERE user_id=? AND status!='discarded' ORDER BY ${RECENT_ORDER_SQL} LIMIT 1`
   ).get(s.userId) as any;
-  const recentAssignedDate = recentTask?.assigned_date || (recentTask?.start_time ? String(recentTask.start_time).slice(0, 10) : null);
+  const recentAssignedDate = recentTask?.assigned_date || (recentTask?.recent_time ? String(recentTask.recent_time).slice(0, 10) : null);
   res.json({
     category: topNWithRecentFirst('category', 9),
     subcategory: topNWithRecentFirst('subcategory', 9),
