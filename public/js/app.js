@@ -2159,9 +2159,9 @@ function renderTaskStart() {
       </div>
     </div>
     ${buildDropdownGroup('category','Task From', state.dropdowns.category, 'ts-cat')}
-    ${buildQuickPickRow('category', 'ts-cat', state.commonFields.category, 3, state.commonFields.category?.[0] || null)}
+    ${buildQuickPickRow('category', 'ts-cat', state.commonFields.category, 3)}
     ${buildDropdownGroup('subcategory','Task Type', state.dropdowns.subcategory, 'ts-sub')}
-    ${buildQuickPickRow('subcategory', 'ts-sub', state.commonFields.subcategory, 3, state.commonFields.subcategory?.[0] || null)}
+    ${buildQuickPickRow('subcategory', 'ts-sub', state.commonFields.subcategory, 3)}
     <div class="form-group">
       <label for="ts-assigned">Date assigned</label>
       <input id="ts-assigned" class="input" type="date" value="${today}">
@@ -2184,12 +2184,12 @@ function buildDropdownGroup(field, label, options, containerId) {
   return buildComboBox(field, label, options, containerId, true, null);
 }
 
-function buildQuickPickRow(field, containerId, values, cols, highlightedValue = null) {
+function buildQuickPickRow(field, containerId, values, cols, selectedValue = null) {
   if (!values || values.length === 0) return '';
   const colClass = cols === 3 ? ' quick-pick-grid--3col' : '';
   const max = 9;
   const items = values.slice(0, max).map((v, idx) =>
-    `<button type="button" class="quick-pick-btn${highlightedValue === v ? ' qp-selected' : ''}${idx === 0 ? ' qp-recent' : ''}" data-container="${safeId(containerId)}" data-field="${safeId(field)}" data-value="${esc(v)}" onclick="handleQuickPick(this)">${esc(v)}</button>`
+    `<button type="button" class="quick-pick-btn${selectedValue === v ? ' qp-selected' : ''}${idx === 0 ? ' qp-recent' : ''}" data-container="${safeId(containerId)}" data-field="${safeId(field)}" data-value="${esc(v)}" onclick="handleQuickPick(this)">${esc(v)}</button>`
   ).join('');
   return `<div class="quick-pick-grid${colClass}">${items}</div>`;
 }

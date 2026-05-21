@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Tasker — Technical Reference Manual v1.13.7</title>
+  <title>Tasker — Technical Reference Manual v1.13.8</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; }
     body {
@@ -107,7 +107,7 @@
 <div class="page">
 
 <h1>Tasker — Technical Reference Manual</h1>
-<p class="subtitle">Version 1.13.7 &nbsp;·&nbsp; May 2026 &nbsp;·&nbsp; <em>Prepared in the role of Professor of Digital Engineering Product Design</em></p>
+<p class="subtitle">Version 1.13.8 &nbsp;·&nbsp; May 2026 &nbsp;·&nbsp; <em>Prepared in the role of Professor of Digital Engineering Product Design</em></p>
 
 <div class="toc">
   <h2>Table of Contents</h2>
@@ -744,7 +744,7 @@ Admin: POST /api/admin/users/:id/unlock → failed_login_attempts=0, is_locked=0
 <h3>17.1 Normal Task Flow</h3>
 <pre><code>User taps "Log Task"
 → selects type (duty/personal), category, subcategory, assigned date
-→ optional quick-picks for category/subcategory (up to 9; most-recent-first highlighted)
+→ optional quick-picks for category/subcategory (up to 9; most-recent-first green border, dark-blue only after selection)
 → starts timer via one of three date actions (Prev dd/mm, Yesterday, Selected Date)
 → POST /api/tasks/start → status='in_progress'
 → Live timer display
@@ -914,7 +914,7 @@ R²        = 1 - SS_res / SS_tot</code></pre>
 
 <hr>
 <p style="text-align:center;font-size:.85rem;color:#9ca3af;margin-top:40px">
-  Tasker Technical Reference Manual &nbsp;·&nbsp; v1.13.7 &nbsp;·&nbsp; May 2026<br>
+  Tasker Technical Reference Manual &nbsp;·&nbsp; v1.13.8 &nbsp;·&nbsp; May 2026<br>
   This document is stored in <code>docs/</code> and is not served by the application.
 </p>
 
