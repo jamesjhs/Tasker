@@ -1,6 +1,6 @@
 # Tasker
 
-**v1.13.6** — An anonymous task-logging PWA for healthcare staff. Built with TypeScript, Express 5, SQLite, and vanilla JS.
+**v1.13.7** — An anonymous task-logging PWA for healthcare staff. Built with TypeScript, Express 5, SQLite, and vanilla JS.
 
 ---
 
@@ -9,6 +9,7 @@
 - **Anonymous by design** — usernames are auto-generated memorable word pairs. No real names, emails, or patient data stored.
 - **PWA** — installable on mobile, works offline for cached assets.
 - **Task tracking** — duty vs personal tasks, categories, subcategories, outcomes, interruption handling.
+- **Faster Log Task start flow** — up to 9 frequency-ranked quick-pick buttons for Task From/Task Type with most-recent-first highlighting, plus 3 one-tap date-start actions (Previous Task date, Yesterday, Selected Date).
 - **Task flags** — admin-managed list of structured task annotations (e.g. "Sent to wrong user", "Priority too high"). Users select any that apply; free-text notes removed for data protection. Users can suggest new flags via email.
 - **Analytics** — session and 30-day history with Chart.js charts, filtering, flag distribution chart, linear regression trendlines, and XLSX analytics report download.
 - **Excel export** — users can download their raw task data as `.xlsx` (includes Flags column), or download a full analytics report as `.xlsx` with one data sheet per chart.
@@ -22,7 +23,7 @@
 - **Configurable registration** — administrator controls three levels for self-registration and user invitations.
 - **30-day data retention** — task data is automatically deleted after 30 days.
 - **Health-check endpoint** — `GET /readyz` returns a JSON status response for uptime/heartbeat monitoring.
-- **Asset version endpoint** — `GET /api/version` returns `{"version":"1.13.2"}` for client-side cache-busting.
+- **Asset version endpoint** — `GET /api/version` returns `{"version":"1.13.7"}` for client-side cache-busting.
 - **Cloudflare Turnstile CAPTCHA** — optional bot-protection for login and self-registration. When `TURNSTILE_SITE_KEY` and `TURNSTILE_SECRET_KEY` are set, Turnstile widgets are rendered on the login and registration forms; tokens are verified server-side before credentials are checked. The feature is fully disabled (and invisible) when the environment variables are not set.
 
 ---
@@ -161,6 +162,13 @@ See [`/policy`](/policy) for the full Data and Use Policy.
 
 ## Changelog
 
+### v1.13.7 (May 2026) — Log Task quick-pick and date-start enhancements
+
+- **Date assigned quick-start actions** — the Log Task screen now provides three horizontally aligned start buttons: **Prev (dd/mm)** (green) to use the most recent task's assigned date, **Yesterday** (yellow), and **Selected Date** (blue) for the date currently shown in the picker.
+- **Task From / Task Type quick picks expanded** — quick-pick rows now show up to **9** options instead of 6, ordered by frequency with the **most recently used option pinned first** and visually highlighted.
+- **Persistent quick-pick highlighting** — when a user taps a quick-pick button (or selects the same value in the combobox), the corresponding quick-pick stays highlighted to confirm the active selection.
+- **Version bump** — Version number incremented to 1.13.7; documentation updated to reflect the new Log Task behavior.
+
 ### v1.13.2 (May 2026) — Bug fix: event listener mismatch in inactivity tracking
 
 - **Bug fix: Event listeners not properly removed** — `stopActivityTracking()` was removing event listeners without the `{ passive: true }` option, while `startActivityTracking()` added them with this option. According to browser specs, `removeEventListener` must be called with the exact same parameters as `addEventListener`, including the options object. This mismatch caused the listeners to never be properly removed, potentially causing listener accumulation and interfering with proper inactivity tracking. Updated `stopActivityTracking()` to include `{ passive: true }` when removing event listeners.
@@ -283,4 +291,3 @@ See [`/policy`](/policy) for the full Data and Use Policy.
 ### v1.1.0
 
 - Initial public release with task logging, analytics, admin panel, Excel export, PWA support, and configurable registration.
-

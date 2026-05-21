@@ -23,6 +23,7 @@ const state = {
   dropdowns: { category: [], subcategory: [], outcome: [] },
   flagOptions: [],       // [{ id, value }]
   commonFields: { category: [], subcategory: [], outcome: [] },
+  recentAssignedDate: null, // YYYY-MM-DD from most recently logged task
   taskForm: {},
   lastUsedCombos: {},
   editTask: null,
@@ -218,6 +219,7 @@ function selectComboOpt(id, field, value) {
   if (hidden) hidden.value = value;
   if (btn) { btn.textContent = value; btn.classList.remove('placeholder'); }
   state.taskForm[field] = value;
+  syncQuickPickSelection(id, field, value);
   closeCombo(id);
   // hide add-new row if it was open
   const newDiv = document.getElementById(`${id}-new`);
@@ -569,7 +571,14 @@ async function loadDropdowns() {
     if (subs) state.dropdowns.subcategory = subs.options;
     if (outs) state.dropdowns.outcome = outs.options;
     if (flagOpts) state.flagOptions = flagOpts.options || [];
-    if (common) state.commonFields = common;
+    if (common) {
+      state.commonFields = {
+        category: Array.isArray(common.category) ? common.category : [],
+        subcategory: Array.isArray(common.subcategory) ? common.subcategory : [],
+        outcome: Array.isArray(common.outcome) ? common.outcome : [],
+      };
+      state.recentAssignedDate = common.recentAssignedDate || null;
+    }
   } catch(e) {}
 }
 
@@ -2130,6 +2139,11 @@ function renderTaskStart() {
   stopTimer(); clearCharts(); state.currentView = 'task-start';
   pushHistory('task-start');
   state.taskForm = { is_duty: null };
+  const today = getTodayISO();
+  const previousAssigned = state.recentAssignedDate || null;
+  const hasPreviousAssigned = Boolean(previousAssigned);
+  const previousLabel = previousAssigned ? formatDateDDMM(previousAssigned) : '—';
+  const previousAria = hasPreviousAssigned ? `Use previous task date ${previousLabel}` : 'No previous task date available';
   app().innerHTML = `
   <div class="view">
     <div class="view-header">
@@ -2145,14 +2159,18 @@ function renderTaskStart() {
       </div>
     </div>
     ${buildDropdownGroup('category','Task From', state.dropdowns.category, 'ts-cat')}
-    ${buildQuickPickRow('category', 'ts-cat', state.commonFields.category, 3)}
+    ${buildQuickPickRow('category', 'ts-cat', state.commonFields.category, 3, state.commonFields.category?.[0] || null)}
     ${buildDropdownGroup('subcategory','Task Type', state.dropdowns.subcategory, 'ts-sub')}
-    ${buildQuickPickRow('subcategory', 'ts-sub', state.commonFields.subcategory, 3)}
+    ${buildQuickPickRow('subcategory', 'ts-sub', state.commonFields.subcategory, 3, state.commonFields.subcategory?.[0] || null)}
     <div class="form-group">
       <label for="ts-assigned">Date assigned</label>
-      <input id="ts-assigned" class="input" type="date" value="${new Date().toISOString().split('T')[0]}">
+      <input id="ts-assigned" class="input" type="date" value="${today}">
     </div>
-    <button class="btn btn-primary btn-full" style="font-size:1.1rem;padding:18px" onclick="doStartTask()">▶ Start Timer</button>
+    <div class="date-preset-group task-start-date-actions">
+      <button class="btn btn-sm task-date-btn task-date-btn--previous" aria-label="${esc(previousAria)}" ${hasPreviousAssigned ? '' : 'disabled title="No previous task date available"'} onclick="startTaskWithDatePreset('previous')">🟢 Prev (${esc(previousLabel)})</button>
+      <button class="btn btn-sm task-date-btn task-date-btn--yesterday" onclick="startTaskWithDatePreset('yesterday')">🟡 Yesterday</button>
+      <button class="btn btn-sm btn-primary task-date-btn" onclick="startTaskWithDatePreset('selected')">▶ Selected Date</button>
+    </div>
   </div>`;
 }
 
@@ -2166,18 +2184,71 @@ function buildDropdownGroup(field, label, options, containerId) {
   return buildComboBox(field, label, options, containerId, true, null);
 }
 
-function buildQuickPickRow(field, containerId, values, cols) {
+function buildQuickPickRow(field, containerId, values, cols, highlightedValue = null) {
   if (!values || values.length === 0) return '';
   const colClass = cols === 3 ? ' quick-pick-grid--3col' : '';
-  const max = cols === 3 ? 6 : 4;
-  const items = values.slice(0, max).map(v =>
-    `<button type="button" class="quick-pick-btn" data-container="${safeId(containerId)}" data-field="${safeId(field)}" data-value="${esc(v)}" onclick="handleQuickPick(this)">${esc(v)}</button>`
+  const max = 9;
+  const items = values.slice(0, max).map((v, idx) =>
+    `<button type="button" class="quick-pick-btn${highlightedValue === v ? ' qp-selected' : ''}${idx === 0 ? ' qp-recent' : ''}" data-container="${safeId(containerId)}" data-field="${safeId(field)}" data-value="${esc(v)}" onclick="handleQuickPick(this)">${esc(v)}</button>`
   ).join('');
   return `<div class="quick-pick-grid${colClass}">${items}</div>`;
 }
 
 function handleQuickPick(el) {
   selectComboOpt(el.dataset.container, el.dataset.field, el.dataset.value);
+  syncQuickPickSelection(el.dataset.container, el.dataset.field, el.dataset.value);
+}
+
+function syncQuickPickSelection(containerId, field, value) {
+  const id = safeId(containerId);
+  const f = safeId(field);
+  document.querySelectorAll(`.quick-pick-btn[data-container="${id}"][data-field="${f}"]`).forEach(el => {
+    el.classList.toggle('qp-selected', el.dataset.value === value);
+  });
+}
+
+function formatDateDDMM(isoDate) {
+  const parts = String(isoDate || '').split('-');
+  if (parts.length !== 3) return '';
+  const day = (parts[2] || '').padStart(2, '0');
+  const month = (parts[1] || '').padStart(2, '0');
+  if (!day.trim() || !month.trim()) return '';
+  return `${day}/${month}`;
+}
+
+function getTodayISO() {
+  return new Date().toISOString().split('T')[0];
+}
+
+function getYesterdayDate() {
+  const d = new Date();
+  d.setDate(d.getDate() - 1);
+  return d.toISOString().split('T')[0];
+}
+
+function moveValueToFront(list, value, limit = 9) {
+  if (!value) return (list || []).slice(0, limit);
+  return [value, ...(list || []).filter(v => v !== value)].slice(0, limit);
+}
+
+function startTaskWithDatePreset(mode) {
+  const selected = document.getElementById('ts-assigned')?.value || getTodayISO();
+  const previous = state.recentAssignedDate || selected;
+  let assignedDate = selected;
+  switch (mode) {
+    case 'previous':
+      assignedDate = previous;
+      break;
+    case 'yesterday':
+      assignedDate = getYesterdayDate();
+      break;
+    default:
+      assignedDate = selected;
+      break;
+  }
+  const input = document.getElementById('ts-assigned');
+  if (input) input.value = assignedDate;
+  doStartTask(assignedDate);
 }
 
 function buildRunningOutcomeGroup(options, current) {
@@ -2257,10 +2328,10 @@ async function submitNewOption(containerId, field) {
   }
 }
 
-async function doStartTask() {
+async function doStartTask(forcedAssignedDate = null) {
   const category = document.getElementById('ts-cat-sel')?.value || null;
   const subcategory = document.getElementById('ts-sub-sel')?.value || null;
-  const assigned_date = document.getElementById('ts-assigned')?.value || new Date().toISOString().split('T')[0];
+  const assigned_date = forcedAssignedDate || document.getElementById('ts-assigned')?.value || getTodayISO();
   const is_duty = state.taskForm.is_duty;
   if (!category) { showAlert('Please select a Task From.', 'error', 'ts-alerts'); return; }
   if (!subcategory) { showAlert('Please select a Task Type.', 'error', 'ts-alerts'); return; }
@@ -2675,6 +2746,9 @@ async function submitTaskReview(taskId, isEdit, dest) {
     await checkActiveTask();
     if (dest === 'start') {
       state.lastUsedCombos = { category: categoryVal, subcategory: subcategoryVal };
+      state.commonFields.category = moveValueToFront(state.commonFields.category, categoryVal);
+      state.commonFields.subcategory = moveValueToFront(state.commonFields.subcategory, subcategoryVal);
+      state.recentAssignedDate = body.assigned_date || state.recentAssignedDate;
       renderTaskStart();
     } else {
       showAlert('Task saved!', 'success', 'te-alerts');

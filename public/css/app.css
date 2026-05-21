@@ -379,6 +379,16 @@ html, body {
   margin-bottom: 10px;
 }
 .date-preset-group .btn { flex: 1; min-width: 70px; }
+.task-start-date-actions { flex-wrap: nowrap; }
+.task-start-date-actions .task-date-btn {
+  min-width: 0;
+  font-size: .78rem;
+  padding: 8px 6px;
+}
+.task-date-btn--previous { background: #16a34a; color: #fff; }
+.task-date-btn--previous:hover { background: #15803d; }
+.task-date-btn--yesterday { background: #facc15; color: #1f2937; }
+.task-date-btn--yesterday:hover { background: #eab308; }
 
 /* ── Stat grid 3-column variant ───────────────────────────────────── */
 .stat-grid-3 { grid-template-columns: 1fr 1fr 1fr; }
@@ -500,6 +510,9 @@ html, body {
 }
 .quick-pick-btn:hover { background: #dbeafe; }
 .quick-pick-btn.qp-selected { background: #1a56db; color: #fff; }
+.quick-pick-btn.qp-recent {
+  box-shadow: inset 0 0 0 2px #16a34a;
+}
 
 /* ── Task card ────────────────────────────────────────────────────── */
 .task-card { position: relative; }
