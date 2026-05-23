@@ -31,6 +31,13 @@ import fs from 'fs';
 import { version as APP_VERSION } from '../../package.json';
 
 const PUBLIC_DIR = path.join(__dirname, '..', '..', 'public');
+const APP_ORIGIN = 'https://tasker.example.test';
+
+function renderIndexHtml(template: string) {
+  return template
+    .replace(/__APP_VERSION__/g, APP_VERSION)
+    .replace(/__APP_ORIGIN__/g, APP_ORIGIN);
+}
 
 // ── Minimal test app mirroring the version/cache routes from server.ts ────────
 // Auth, sessions and rate-limiting are omitted — this suite focuses purely on
@@ -40,9 +47,50 @@ function buildVersionApp() {
 
   const swRaw = fs.readFileSync(path.join(PUBLIC_DIR, 'sw.js'), 'utf8');
   const swContent = swRaw.replace(/'tasker-__APP_VERSION__'/g, `'tasker-${APP_VERSION}'`);
+  const indexTemplate = fs.readFileSync(path.join(PUBLIC_DIR, 'index.html'), 'utf8');
 
   app.get('/readyz', (_req, res) => {
     res.json({ ok: true, service: 'Tasker', version: APP_VERSION, timestamp: new Date().toISOString() });
+  });
+
+  app.get('/robots.txt', (_req, res) => {
+    res.type('text/plain').send(
+      [
+        'User-agent: *',
+        'Allow: /',
+        'Disallow: /api/',
+        'Disallow: /suggest/review/',
+        `Sitemap: ${APP_ORIGIN}/sitemap.xml`,
+      ].join('\n'),
+    );
+  });
+
+  app.get('/llms.txt', (_req, res) => {
+    res.type('text/plain').send(
+      [
+        '# Tasker',
+        '> Anonymous workload logger for NHS and healthcare teams.',
+        '',
+        `Version: ${APP_VERSION}`,
+        `${APP_ORIGIN}/`,
+        `${APP_ORIGIN}/guide`,
+        `${APP_ORIGIN}/help`,
+        `${APP_ORIGIN}/policy`,
+        `${APP_ORIGIN}/dpia`,
+      ].join('\n'),
+    );
+  });
+
+  app.get('/sitemap.xml', (_req, res) => {
+    const today = new Date().toISOString().split('T')[0];
+    const urls = ['/', '/guide', '/help', '/policy', '/dpia'];
+    const body = urls.map(url => (
+      `  <url>\n    <loc>${APP_ORIGIN}${url}</loc>\n    <lastmod>${today}</lastmod>\n  </url>`
+    )).join('\n');
+    res.type('application/xml').send(
+      `<?xml version="1.0" encoding="UTF-8"?>\n` +
+      `<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${body}\n</urlset>\n`,
+    );
   });
 
   app.get('/sw.js', (_req, res) => {
@@ -53,6 +101,7 @@ function buildVersionApp() {
   });
 
   app.use(express.static(PUBLIC_DIR, {
+    index: false,
     setHeaders: (res, filePath) => {
       if (filePath.endsWith('index.html')) {
         res.setHeader('Cache-Control', 'no-cache');
@@ -68,10 +117,14 @@ function buildVersionApp() {
   app.get('/dpia',   (_req, res) => res.sendFile(path.join(PUBLIC_DIR, 'dpia.html')));
   app.get('/help',   (_req, res) => res.sendFile(path.join(PUBLIC_DIR, 'help.html')));
   app.get('/guide',  (_req, res) => res.sendFile(path.join(PUBLIC_DIR, 'guide.html')));
+  app.get(['/', '/index.html'], (_req, res) => {
+    res.setHeader('Cache-Control', 'no-cache');
+    res.type('html').send(renderIndexHtml(indexTemplate));
+  });
 
   app.get('/{*path}', (_req, res) => {
     res.setHeader('Cache-Control', 'no-cache');
-    res.sendFile(path.join(PUBLIC_DIR, 'index.html'));
+    res.type('html').send(renderIndexHtml(indexTemplate));
   });
 
   return app;
@@ -82,13 +135,13 @@ let vApp: ReturnType<typeof buildVersionApp>;
 let swRaw: string;        // sw.js as it exists on disk (with __APP_VERSION__ placeholder)
 let swServed: string;     // sw.js as served by the app (version injected)
 let appJsSrc: string;     // public/js/app.js full source
-let indexHtml: string;    // public/index.html full content
+let indexHtml: string;    // rendered index.html content
 
 beforeAll(async () => {
   vApp      = buildVersionApp();
   swRaw     = fs.readFileSync(path.join(PUBLIC_DIR, 'sw.js'), 'utf8');
   appJsSrc  = fs.readFileSync(path.join(PUBLIC_DIR, 'js', 'app.js'), 'utf8');
-  indexHtml = fs.readFileSync(path.join(PUBLIC_DIR, 'index.html'), 'utf8');
+  indexHtml = renderIndexHtml(fs.readFileSync(path.join(PUBLIC_DIR, 'index.html'), 'utf8'));
   const r   = await request(vApp).get('/sw.js');
   swServed  = r.text;
 });
@@ -295,6 +348,23 @@ describe('SPA shell routing', () => {
   test('index.html references /css/app.css (the stylesheet)', () => {
     expect(indexHtml).toContain('/css/app.css');
   });
+
+  test('index.html injects canonical and social URLs using the public origin', () => {
+    expect(indexHtml).toContain(`<link rel="canonical" href="${APP_ORIGIN}/">`);
+    expect(indexHtml).toContain(`<meta property="og:url" content="${APP_ORIGIN}/">`);
+    expect(indexHtml).toContain(`${APP_ORIGIN}/social-preview.svg`);
+  });
+
+  test('index.html includes structured data with the live version', () => {
+    expect(indexHtml).toContain('"@type": "SoftwareApplication"');
+    expect(indexHtml).toContain(`"softwareVersion": "${APP_VERSION}"`);
+    expect(indexHtml).toContain('"@type": "FAQPage"');
+  });
+
+  test('served SPA shell does not leak unresolved template placeholders', () => {
+    expect(indexHtml).not.toContain('__APP_VERSION__');
+    expect(indexHtml).not.toContain('__APP_ORIGIN__');
+  });
 });
 
 // =============================================================================
@@ -349,7 +419,39 @@ describe('Standalone pages', () => {
 });
 
 // =============================================================================
-// 7. Static assets: cache-eligible (no forced no-cache from setHeaders)
+// 7. Crawl-supporting assets
+// =============================================================================
+describe('Crawl-supporting assets', () => {
+  test('GET /robots.txt returns crawler rules and sitemap location', async () => {
+    const res = await request(vApp).get('/robots.txt');
+    expect(res.status).toBe(200);
+    expect(res.headers['content-type']).toMatch(/text\/plain/);
+    expect(res.text).toContain('Disallow: /api/');
+    expect(res.text).toContain(`Sitemap: ${APP_ORIGIN}/sitemap.xml`);
+  });
+
+  test('GET /llms.txt returns plain-text product facts and key URLs', async () => {
+    const res = await request(vApp).get('/llms.txt');
+    expect(res.status).toBe(200);
+    expect(res.headers['content-type']).toMatch(/text\/plain/);
+    expect(res.text).toContain(`# Tasker`);
+    expect(res.text).toContain(`Version: ${APP_VERSION}`);
+    expect(res.text).toContain(`${APP_ORIGIN}/guide`);
+  });
+
+  test('GET /sitemap.xml returns XML with the primary public routes', async () => {
+    const res = await request(vApp).get('/sitemap.xml');
+    expect(res.status).toBe(200);
+    expect(res.headers['content-type']).toMatch(/xml/);
+    expect(res.text).toContain(`${APP_ORIGIN}/`);
+    expect(res.text).toContain(`${APP_ORIGIN}/guide`);
+    expect(res.text).toContain(`${APP_ORIGIN}/policy`);
+    expect(res.text).toContain(`${APP_ORIGIN}/dpia`);
+  });
+});
+
+// =============================================================================
+// 8. Static assets: cache-eligible (no forced no-cache from setHeaders)
 // =============================================================================
 describe('Static assets', () => {
   test('GET /css/app.css returns HTTP 200', async () => {

@@ -20,7 +20,7 @@ import messagesRouter from './routes/messages';
 import reviewRouter from './routes/review';
 
 import { version as APP_VERSION } from '../package.json';
-import type { NextFunction } from 'express';
+import type { NextFunction, Request } from 'express';
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const SqliteStoreFactory = require('better-sqlite3-session-store');
@@ -29,6 +29,7 @@ const app = express();
 app.set('trust proxy', 1);
 const PORT = process.env['PORT'] || 3020;
 const SESSION_SECRET = process.env['SESSION_SECRET'] || crypto.randomBytes(64).toString('hex');
+const APP_URL = (process.env['APP_URL'] || '').trim().replace(/\/+$/, '');
 
 // ─── SSL configuration ────────────────────────────────────────────────────────
 const useHttps = process.env['USE_HTTPS'] === 'true';
@@ -80,6 +81,70 @@ app.get('/readyz', apiLimiter, (_req, res) => {
   res.json({ ok: true, service: 'Tasker', version: APP_VERSION, timestamp: new Date().toISOString() });
 });
 
+app.get('/robots.txt', apiLimiter, (req, res) => {
+  const origin = getPublicOrigin(req);
+  res.type('text/plain').send(
+    [
+      'User-agent: *',
+      'Allow: /',
+      'Disallow: /api/',
+      'Disallow: /suggest/review/',
+      `Sitemap: ${origin}/sitemap.xml`,
+    ].join('\n'),
+  );
+});
+
+app.get('/llms.txt', apiLimiter, (req, res) => {
+  const origin = getPublicOrigin(req);
+  res.type('text/plain').send(
+    [
+      '# Tasker',
+      '> Anonymous workload logger for NHS and healthcare teams.',
+      '',
+      `Version: ${APP_VERSION}`,
+      'Type: Self-hosted Progressive Web App (PWA)',
+      'Stack: Node.js, Express, SQLite, vanilla JavaScript',
+      '',
+      '## What Tasker does',
+      '- Lets healthcare teams log tasks in real time with structured categories, outcomes, and interruption tracking.',
+      '- Provides analytics, pending-workload snapshots, XLSX exports, notices, user messages, and role-based dropdown configuration.',
+      '- Supports self-registration or admin-issued accounts, optional Cloudflare Turnstile CAPTCHA, and email-based admin 2FA.',
+      '',
+      '## What Tasker does not do',
+      '- Does not store patient data, real names, or email addresses for standard users.',
+      '- Does not depend on a cloud database or third-party analytics platform.',
+      '- Does not market itself as a clinical record or rostering system.',
+      '',
+      '## Privacy and deployment facts',
+      '- Anonymous usernames are generated automatically.',
+      '- Task data is automatically deleted after 30 days.',
+      '- Deployment is self-hosted; data stays on the organisation’s own server.',
+      '- Admins can publish notices, manage groups/options, and download encrypted-safe SQLite backups.',
+      '',
+      '## Key URLs',
+      `${origin}/`,
+      `${origin}/guide`,
+      `${origin}/help`,
+      `${origin}/policy`,
+      `${origin}/dpia`,
+      'https://github.com/jamesjhs/Tasker',
+    ].join('\n'),
+  );
+});
+
+app.get('/sitemap.xml', apiLimiter, (req, res) => {
+  const origin = getPublicOrigin(req);
+  const urls = ['/', '/guide', '/help', '/policy', '/dpia'];
+  const today = new Date().toISOString().split('T')[0];
+  const body = urls.map(url => (
+    `  <url>\n    <loc>${origin}${url}</loc>\n    <lastmod>${today}</lastmod>\n  </url>`
+  )).join('\n');
+  res.type('application/xml').send(
+    `<?xml version="1.0" encoding="UTF-8"?>\n` +
+    `<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${body}\n</urlset>\n`,
+  );
+});
+
 // ─── Static files ─────────────────────────────────────────────────────────────
 // Serve sw.js dynamically so its CACHE_NAME always reflects the current app
 // version.  The SW's activate handler deletes every cache whose name doesn't
@@ -89,6 +154,18 @@ app.get('/readyz', apiLimiter, (_req, res) => {
 const swContent = fs
   .readFileSync(path.join(__dirname, '..', 'public', 'sw.js'), 'utf8')
   .replace(/'tasker-__APP_VERSION__'/g, `'tasker-${APP_VERSION}'`);
+const indexTemplate = fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8');
+
+function getPublicOrigin(req: Request): string {
+  return APP_URL || `${req.protocol}://${req.get('host')}`;
+}
+
+function renderIndexHtml(req: Request): string {
+  const origin = getPublicOrigin(req).replace(/\/+$/, '');
+  return indexTemplate
+    .replace(/__APP_VERSION__/g, APP_VERSION)
+    .replace(/__APP_ORIGIN__/g, origin);
+}
 
 app.get('/sw.js', (_req, res) => {
   res.setHeader('Content-Type', 'application/javascript; charset=UTF-8');
@@ -98,6 +175,7 @@ app.get('/sw.js', (_req, res) => {
 });
 
 app.use(express.static(path.join(__dirname, '..', 'public'), {
+  index: false,
   setHeaders: (res, filePath) => {
     if (filePath.endsWith('index.html')) {
       // Always revalidate the HTML shell so clients pick up new asset fingerprints
@@ -123,13 +201,17 @@ app.get('/policy', apiLimiter, (_req, res) => res.sendFile(path.join(__dirname, 
 app.get('/dpia',   apiLimiter, (_req, res) => res.sendFile(path.join(__dirname, '..', 'public', 'dpia.html')));
 app.get('/help',   apiLimiter, (_req, res) => res.sendFile(path.join(__dirname, '..', 'public', 'help.html')));
 app.get('/guide',  apiLimiter, (_req, res) => res.sendFile(path.join(__dirname, '..', 'public', 'guide.html')));
+app.get(['/', '/index.html'], apiLimiter, (req, res) => {
+  res.setHeader('Cache-Control', 'no-cache');
+  res.type('html').send(renderIndexHtml(req));
+});
 
 // ─── Suggestion review page (token-gated, no login required) ────────────────
 app.use('/suggest/review', apiLimiter, reviewRouter);
 
 app.get('/{*path}', apiLimiter, (_req, res) => {
   res.setHeader('Cache-Control', 'no-cache');
-  res.sendFile(path.join(__dirname, '..', 'public', 'index.html'));
+  res.type('html').send(renderIndexHtml(_req));
 });
 
 // ─── Global error handler (must be after all routes) ─────────────────────────

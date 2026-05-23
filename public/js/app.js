@@ -792,7 +792,6 @@ function mockupPendingTasksScreen() {
 async function renderLanding() {
   stopTimer(); stopActivityTracking(); clearCharts(); state.currentView = 'landing';
   replaceHistory('landing');
-  // Fetch registration config and public stats in parallel
   try {
     const [cfgRes, statsRes] = await Promise.all([
       fetch('/api/auth/registration-config', { credentials: 'same-origin' }),
@@ -800,70 +799,129 @@ async function renderLanding() {
     ]);
     if (cfgRes.ok) state.registrationConfig = await cfgRes.json();
     if (statsRes.ok) state.appStats = await statsRes.json();
-  } catch(e) {}
+  } catch (e) {}
   const showRegister = state.registrationConfig?.selfRegistration !== 'disabled';
   const stats = state.appStats;
 
   app().innerHTML = `
   <div class="landing">
-
-    <!-- Hero -->
     <div class="landing-hero">
-      <div style="font-size:3.2rem;margin-bottom:2px">🔒</div>
-      <h1>Tasker</h1>
-      <p class="tagline">Private, anonymous admin-task logging — built for healthcare teams who need real workload insight without risking patient confidentiality.</p>
-      <div class="hero-btns">
-        <button class="btn btn-white" onclick="renderLogin()">Log In</button>
-        ${showRegister ? `<button class="btn btn-outline-white" onclick="renderRegister()">Create Account — Free</button>` : ''}
+      <nav class="landing-nav" aria-label="Primary">
+        <a class="landing-nav__brand" href="/" onclick="event.preventDefault();renderLanding()">Tasker</a>
+        <div class="landing-nav__links">
+          <a href="/guide">Guide</a>
+          <a href="/help">Help</a>
+          <a href="/policy">Policy</a>
+          <a href="/dpia">DPIA</a>
+          <a href="https://github.com/jamesjhs/Tasker" target="_blank" rel="noreferrer">GitHub</a>
+        </div>
+      </nav>
+
+      <div class="hero-grid">
+        <div class="hero-copy">
+          <p class="section-eyebrow section-eyebrow--hero">Anonymous workload intelligence for NHS and healthcare teams</p>
+          <h1>See where the day goes — without storing who the work was for.</h1>
+          <p class="tagline">Tasker is a self-hosted, privacy-first PWA for teams that need to log work in real time, measure interruptions, and export evidence-ready analytics while keeping patient data, staff identities, and vendor-hosted cloud records out of the workflow.</p>
+          <ul class="hero-trust-pills" aria-label="Tasker trust points">
+            <li>Self-hosted Node.js + SQLite</li>
+            <li>Anonymous usernames by design</li>
+            <li>30-day automatic task deletion</li>
+            <li>Installable PWA with analytics and export</li>
+          </ul>
+          <div class="hero-btns">
+            <button class="btn btn-white" onclick="renderLogin()">Log In</button>
+            ${showRegister ? `<button class="btn btn-outline-white" onclick="renderRegister()">Create Account</button>` : ''}
+          </div>
+          <div class="hero-link-row">
+            <a href="/guide">See the workflow</a>
+            <a href="/policy">Read the data &amp; use policy</a>
+            <a href="/dpia">Read the DPIA</a>
+          </div>
+          ${stats ? `
+          <div class="hero-stats">
+            <div class="hero-stat">
+              <div class="hero-stat-num">${Number(stats.userCount).toLocaleString()}</div>
+              <div class="hero-stat-label">Approved user accounts</div>
+            </div>
+            <div class="hero-stat">
+              <div class="hero-stat-num">${Number(stats.taskCount).toLocaleString()}</div>
+              <div class="hero-stat-label">Completed tasks logged</div>
+            </div>
+          </div>` : ''}
+        </div>
+
+        <aside class="hero-aside">
+          <div class="hero-panel">
+            <p class="hero-panel-eyebrow">Why teams switch to Tasker</p>
+            <h2 class="hero-panel-title">Purpose-built for operational evidence, not surveillance or vendor lock-in.</h2>
+            <p class="hero-panel-text">Tasker is strongest when a team wants to understand workload safely: quick task timing, interruption evidence, pending-task snapshots, 30-day analytics, and exports — all on infrastructure the organisation controls.</p>
+            <div class="hero-panel-links">
+              <a href="/guide">Quick start guide</a>
+              <a href="/help">User help</a>
+              <a href="/policy">Privacy policy</a>
+              <a href="/dpia">Data protection impact assessment</a>
+            </div>
+          </div>
+        </aside>
       </div>
-      ${stats ? `
-      <div class="hero-stats">
-        <div class="hero-stat">
-          <div class="hero-stat-num">${Number(stats.userCount).toLocaleString()}</div>
-          <div class="hero-stat-label">Active users</div>
-        </div>
-        <div class="hero-stat">
-          <div class="hero-stat-num">${Number(stats.taskCount).toLocaleString()}</div>
-          <div class="hero-stat-label">Tasks logged</div>
-        </div>
-      </div>` : ''}
     </div>
 
-    <!-- Privacy pillars -->
     <div class="landing-section landing-section--alt">
-      <div class="section-inner">
-        <p class="section-eyebrow">Built for healthcare, with privacy at its core</p>
-        <h2 class="section-title">Anonymity &amp; Privacy, by Design</h2>
-        <p class="section-sub">Tasker was created specifically for NHS and healthcare admin staff. It lets you track your workload without ever capturing a single piece of patient, staff, or organisation-identifiable information.</p>
-        <div class="privacy-pillars">
-          <div class="privacy-pill">
-            <div class="pp-icon">👤</div>
-            <div class="pp-label">Anonymous usernames — no names, no email required</div>
-          </div>
-          <div class="privacy-pill">
-            <div class="pp-icon">🚫</div>
-            <div class="pp-label">Zero patient data — ever stored or processed</div>
-          </div>
-          <div class="privacy-pill">
-            <div class="pp-icon">⏱️</div>
-            <div class="pp-label">All data auto-deleted after 30 days</div>
-          </div>
-          <div class="privacy-pill">
-            <div class="pp-icon">📋</div>
-            <div class="pp-label">Full DPIA available — GDPR compliant by design</div>
-          </div>
+      <div class="section-inner section-inner--wide">
+        <p class="section-eyebrow">Why Tasker</p>
+        <h2 class="section-title">Built for the gap between spreadsheets, cloud trackers, and enterprise workforce suites</h2>
+        <p class="section-sub">Tasker is not a rostering platform and it is not a generic SaaS timer. It is a focused operational tool for understanding workload safely, quickly, and on your own infrastructure.</p>
+        <div class="comparison-grid">
+          <article class="comparison-card">
+            <h3>Manual logs and spreadsheets</h3>
+            <p>Low cost, but slow to maintain, easy to abandon, and weak for consistent categorisation, trend analysis, and evidence-ready reporting.</p>
+          </article>
+          <article class="comparison-card">
+            <h3>Generic cloud time trackers</h3>
+            <p>Polished reporting, but usually tied to email identities, vendor-hosted storage, and workflows that were not designed for privacy-sensitive healthcare settings.</p>
+          </article>
+          <article class="comparison-card">
+            <h3>Enterprise workforce suites</h3>
+            <p>Useful for rostering and organisation-wide workforce management, but heavyweight when the real need is fast task-level workload evidence.</p>
+          </article>
+          <article class="comparison-card comparison-card--featured">
+            <h3>Tasker</h3>
+            <p>Self-hosted, anonymous, mobile-first workload logging with analytics, exports, admin controls, and privacy documentation already built in.</p>
+          </article>
         </div>
       </div>
     </div>
 
-    <!-- App screenshots -->
     <div class="landing-section" style="background:#fff">
-      <div class="section-inner">
-        <p class="section-eyebrow">See every screen</p>
-        <h2 class="section-title">Purpose-built for safety at every step</h2>
-        <p class="section-sub">
-          All data shown below is <strong>example only</strong> — illustrative healthcare workflows with no real users, no patient information, and no identifiable details of any kind.
-        </p>
+      <div class="section-inner section-inner--wide">
+        <p class="section-eyebrow">What the app actually does</p>
+        <h2 class="section-title">Task logging, interruption evidence, analytics, and rollout controls in one place</h2>
+        <div class="feature-row feature-row--light">
+          <article class="feature-panel">
+            <h3>Log work live</h3>
+            <p>Start a task when work begins, stop it when it ends, assign outcomes, and keep category choices fast with searchable comboboxes and quick-pick shortcuts.</p>
+          </article>
+          <article class="feature-panel">
+            <h3>Measure hidden workload</h3>
+            <p>Capture interruptions and pending-task snapshots so teams can demonstrate the operational cost of context switching and backlog pressure.</p>
+          </article>
+          <article class="feature-panel">
+            <h3>Review and export evidence</h3>
+            <p>Use session and 30-day analytics, trendlines, and XLSX exports to support audits, service redesign, appraisals, and workforce planning conversations.</p>
+          </article>
+          <article class="feature-panel">
+            <h3>Roll out safely</h3>
+            <p>Admins can manage groups, dropdowns, notices, messages, backup/restore, registration rules, optional Turnstile CAPTCHA, and admin email 2FA.</p>
+          </article>
+        </div>
+      </div>
+    </div>
+
+    <div class="landing-section landing-section--alt">
+      <div class="section-inner section-inner--wide">
+        <p class="section-eyebrow">Preview the workflow</p>
+        <h2 class="section-title">Purpose-built for quick adoption on mobile</h2>
+        <p class="section-sub">Every screen below uses example-only data. They show how Tasker helps teams go from live logging to trend analysis without expanding the data-risk surface.</p>
         <div class="mockup-grid">
           ${mockupHomeScreen()}
           ${mockupLogTaskScreen()}
@@ -874,10 +932,10 @@ async function renderLanding() {
           ${mockupPendingTasksScreen()}
           ${mockupSettingsScreen()}
           <div class="phone-wrap" style="grid-column:span 2;align-items:center;justify-content:center">
-            <div style="background:#f0f4ff;border-radius:14px;padding:20px 24px;max-width:280px;text-align:center">
+            <div style="background:#fff;border-radius:18px;padding:22px 24px;max-width:320px;text-align:center;box-shadow:0 6px 20px rgba(15,23,42,.08)">
               <div style="font-size:2rem;margin-bottom:8px">📖</div>
-              <div style="font-weight:700;font-size:.95rem;margin-bottom:6px">Quick Start Guide</div>
-              <p style="font-size:.83rem;color:#6b7280;margin-bottom:12px">New to Tasker? Our step-by-step guide walks you through registering, logging your first task, and reading your analytics.</p>
+              <div style="font-weight:700;font-size:1rem;margin-bottom:6px">Quick Start Guide</div>
+              <p style="font-size:.86rem;color:#6b7280;margin-bottom:14px;line-height:1.7">Need to see the onboarding path first? The guide covers registration, first login, task logging, analytics, and safe use rules.</p>
               <a href="/guide" class="btn btn-primary btn-sm">Read the Guide</a>
             </div>
           </div>
@@ -885,150 +943,97 @@ async function renderLanding() {
       </div>
     </div>
 
-    <!-- How it works -->
-    <div class="landing-section landing-section--alt">
-      <div class="section-inner">
-        <p class="section-eyebrow">Simple workflow</p>
-        <h2 class="section-title">Up and running in three steps</h2>
-        <div class="steps-grid">
-          <div class="step-card">
-            <div class="step-number">1</div>
-            <div class="step-title">Register Anonymously</div>
-            <div class="step-text">You're assigned a randomly-generated, memorable username — no name, no email, no identifiable information required. Just choose a password and you're in.</div>
-          </div>
-          <div class="step-card">
-            <div class="step-number">2</div>
-            <div class="step-title">Log Tasks as They Happen</div>
-            <div class="step-text">Tap <strong>▶ Log Task</strong> when a work item starts. Select a category (e.g. "Prescription Query") and a sub-type. Tasker records the time — no patient details, no free text.</div>
-          </div>
-          <div class="step-card">
-            <div class="step-number">3</div>
-            <div class="step-title">Review, Export &amp; Act</div>
-            <div class="step-text">Use the Analytics view to see where your time goes. Export an anonymised Excel report to use in team meetings, appraisals, or workforce planning conversations.</div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Example task categories -->
     <div class="landing-section" style="background:#fff">
-      <div class="section-inner">
-        <p class="section-eyebrow">Healthcare-ready out of the box</p>
-        <h2 class="section-title">Example task categories</h2>
-        <div class="alert alert-warning" style="max-width:540px;margin:0 auto 28px;font-size:.83rem;text-align:left">
-          ⚠️ <strong>These categories are illustrative examples only.</strong> Tasker never stores patient names, NHS numbers, dates of birth, locations, or any identifying information. Category names describe the <em>type</em> of administrative work — nothing more. Administrators can customise all categories for their team.
-        </div>
-        <div class="task-examples">
-          <div class="task-example-card">
-            <div class="tec-title">💊 Prescription Queries</div>
-            <ul class="tec-items">
-              <li>Dose Query</li>
-              <li>Clarification Request</li>
-              <li>Stock / Availability Issue</li>
-              <li>Repeat Prescription Request</li>
-              <li>Medication Change Query</li>
+      <div class="section-inner section-inner--wide">
+        <p class="section-eyebrow">Core operating principles</p>
+        <h2 class="section-title">The product is designed around privacy, evidence, and low-friction adoption</h2>
+        <div class="principles-grid">
+          <article class="principle-card">
+            <h3>Privacy first</h3>
+            <ul>
+              <li>Generated usernames instead of named user profiles</li>
+              <li>No patient data or real-name workflow required</li>
+              <li>30-day retention to keep the exposure window small</li>
             </ul>
-          </div>
-          <div class="task-example-card">
-            <div class="tec-title">📞 Phone Triage</div>
-            <ul class="tec-items">
-              <li>Callback Request</li>
-              <li>Urgent Clinical Query</li>
-              <li>Appointment Query</li>
-              <li>Results / Test Query</li>
-              <li>Third-party Enquiry</li>
+          </article>
+          <article class="principle-card">
+            <h3>Evidence over anecdote</h3>
+            <ul>
+              <li>Live timing with structured outcomes</li>
+              <li>Pending workload snapshots and interruption logging</li>
+              <li>Analytics and exportable reports for decision-making</li>
             </ul>
-          </div>
-          <div class="task-example-card">
-            <div class="tec-title">📄 Correspondence</div>
-            <ul class="tec-items">
-              <li>Referral Letter</li>
-              <li>Results / Discharge Letter</li>
-              <li>Appointment Letter</li>
-              <li>Patient Communication</li>
-              <li>Insurance / Legal Request</li>
+          </article>
+          <article class="principle-card">
+            <h3>Simple deployment</h3>
+            <ul>
+              <li>Self-hosted Node.js and SQLite stack</li>
+              <li>Installable PWA for mobile-friendly access</li>
+              <li>Guide, help page, policy, and DPIA published alongside the app</li>
             </ul>
-          </div>
-          <div class="task-example-card">
-            <div class="tec-title">🗂️ Administration</div>
-            <ul class="tec-items">
-              <li>Record Scanning / Filing</li>
-              <li>Appointment Booking</li>
-              <li>Form Processing</li>
-              <li>Inbox Management</li>
-              <li>System / Data Entry</li>
-            </ul>
-          </div>
+          </article>
         </div>
       </div>
     </div>
 
-    <!-- Features -->
+    <div class="landing-section landing-section--alt">
+      <div class="section-inner section-inner--wide">
+        <p class="section-eyebrow">Who it fits best</p>
+        <h2 class="section-title">Designed for teams that need operational clarity without data sprawl</h2>
+        <div class="fit-grid">
+          <article class="fit-card">
+            <h3>Healthcare admin teams</h3>
+            <p>Ideal when reception, referrals, correspondence, medicines admin, or coordination work needs clearer evidence than a spreadsheet can provide.</p>
+          </article>
+          <article class="fit-card">
+            <h3>Clinical support workflows</h3>
+            <p>Useful when clinicians or mixed teams need a simple way to separate direct task effort, interruptions, and outcome patterns without using the clinical record.</p>
+          </article>
+          <article class="fit-card">
+            <h3>Service improvement programmes</h3>
+            <p>Strong for pilots, redesign work, backlog reviews, and operational conversations where privacy, ownership, and low rollout cost matter.</p>
+          </article>
+        </div>
+      </div>
+    </div>
+
     <div class="landing-section landing-section--dark">
-      <div class="section-inner">
-        <p class="section-eyebrow">Everything you need</p>
-        <h2 class="section-title">Nothing you shouldn't have</h2>
-        <p class="section-sub">Tasker gives you real insight into your workload without creating any data risk for your organisation.</p>
-        <div class="feature-row">
-          <div class="feature-item">
-            <div class="feature-icon">📊</div>
-            <div class="feature-text">
-              <h3>Real-time Analytics</h3>
-              <p>See instantly where your time goes — by category, type, and outcome — filtered by today, this week, or this month.</p>
-            </div>
-          </div>
-          <div class="feature-item">
-            <div class="feature-icon">⏸️</div>
-            <div class="feature-text">
-              <h3>Interruption Tracking</h3>
-              <p>Record mid-task interruptions with a single tap. Understand the true cost of context-switching on your working day.</p>
-            </div>
-          </div>
-          <div class="feature-item">
-            <div class="feature-icon">📋</div>
-            <div class="feature-text">
-              <h3>Pending Workload Log</h3>
-              <p>Log a simple daily pending count and watch the trend over time — a powerful signal for workload conversations with management.</p>
-            </div>
-          </div>
-          <div class="feature-item">
-            <div class="feature-icon">📤</div>
-            <div class="feature-text">
-              <h3>Anonymised Exports</h3>
-              <p>Download Excel reports of your task history — fully anonymised, ready to use in appraisals, team meetings, or audit submissions.</p>
-            </div>
-          </div>
-          <div class="feature-item">
-            <div class="feature-icon">👥</div>
-            <div class="feature-text">
-              <h3>Team Groups</h3>
-              <p>Organise users into role-based groups — reception, nursing, admin — with customised category lists tailored to each team.</p>
-            </div>
-          </div>
-          <div class="feature-item">
-            <div class="feature-icon">🔒</div>
-            <div class="feature-text">
-              <h3>DPIA-Ready &amp; GDPR-Compliant</h3>
-              <p>A full Data Protection Impact Assessment is publicly available, confirming no personal data is processed or stored by design.</p>
-            </div>
-          </div>
+      <div class="section-inner section-inner--wide">
+        <p class="section-eyebrow">Common questions</p>
+        <h2 class="section-title">FAQ</h2>
+        <div class="faq-grid">
+          <article class="faq-card">
+            <h3>Is Tasker a clinical record system?</h3>
+            <p>No. It is a workload-logging tool for operational evidence. It should not be used to store patient records or identifiable clinical information.</p>
+          </article>
+          <article class="faq-card">
+            <h3>Can standard users stay anonymous?</h3>
+            <p>Yes. The app is built around generated usernames and avoids requiring real names or email addresses for ordinary user accounts.</p>
+          </article>
+          <article class="faq-card">
+            <h3>Where is the data kept?</h3>
+            <p>On the organisation’s own server. Tasker runs on Node.js with SQLite rather than relying on a third-party hosted database service.</p>
+          </article>
+          <article class="faq-card">
+            <h3>What helps rollout and governance?</h3>
+            <p>Tasker ships with an installation guide, user help, public policy, DPIA, admin controls, backup/restore tooling, and configurable registration rules.</p>
+          </article>
         </div>
       </div>
     </div>
 
-    <!-- CTA -->
     <div class="landing-cta">
-      <h2>Ready to understand your workload?</h2>
-      <p>Join healthcare teams already logging tasks anonymously with Tasker — free, private, and no patient data risk.</p>
+      <h2>Ready to evidence workload without expanding privacy risk?</h2>
+      <p>Tasker gives healthcare teams a practical middle ground: faster than spreadsheets, lighter than enterprise workforce suites, and safer than cloud-first time trackers.</p>
       <div class="landing-cta-btns">
-        <button class="btn btn-white" onclick="renderLogin()" style="font-size:1rem">Log In</button>
-        ${showRegister ? `<button class="btn btn-outline-white" onclick="renderRegister()" style="font-size:1rem">Create Account — Free</button>` : ''}
+        <button class="btn btn-white" onclick="renderLogin()">Log In</button>
+        ${showRegister ? `<button class="btn btn-outline-white" onclick="renderRegister()">Create Account</button>` : ''}
       </div>
       <div class="landing-footer-links">
-        <a href="/policy">Privacy Policy</a>
-        <a href="/dpia">Data Protection Impact Assessment</a>
         <a href="/guide">Quick Start Guide</a>
         <a href="/help">Help</a>
+        <a href="/policy">Policy</a>
+        <a href="/dpia">DPIA</a>
       </div>
     </div>
 
