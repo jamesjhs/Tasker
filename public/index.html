@@ -1,27 +1,310 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en-GB">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <meta name="theme-color" content="#1a56db">
+  <meta name="description" content="Tasker is a self-hosted, anonymous workload logger for NHS and healthcare teams. Track tasks, interruptions, analytics, and workload trends without storing patient data, real names, or vendor-hosted cloud records.">
+  <meta name="robots" content="index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1">
+  <meta name="googlebot" content="index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1">
+  <meta name="application-name" content="Tasker">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
-  <title>Tasker</title>
+  <meta name="apple-mobile-web-app-title" content="Tasker">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="format-detection" content="telephone=no, date=no, email=no, address=no">
+  <meta name="referrer" content="strict-origin-when-cross-origin">
+  <link rel="canonical" href="__APP_ORIGIN__/">
   <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <link rel="apple-touch-icon" href="/icons/icon-192.png">
   <link rel="manifest" href="/manifest.json">
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+  <link rel="preconnect" href="https://challenges.cloudflare.com" crossorigin>
+  <meta property="og:site_name" content="Tasker">
+  <meta property="og:type" content="website">
+  <meta property="og:locale" content="en_GB">
+  <meta property="og:url" content="__APP_ORIGIN__/">
+  <meta property="og:title" content="Tasker — Anonymous workload logger for healthcare teams">
+  <meta property="og:description" content="A self-hosted NHS-ready task logger that helps teams track work, interruptions, and workload trends without storing patient data, real names, or email-linked user profiles.">
+  <meta property="og:image" content="__APP_ORIGIN__/social-preview.svg">
+  <meta property="og:image:type" content="image/svg+xml">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="Tasker: anonymous workload logger for healthcare teams">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Tasker — Anonymous workload logger for healthcare teams">
+  <meta name="twitter:description" content="Self-hosted, privacy-first workload logging for NHS and healthcare teams. No patient data, no real names, 30-day data retention, analytics included.">
+  <meta name="twitter:image" content="__APP_ORIGIN__/social-preview.svg">
+  <meta name="twitter:image:alt" content="Tasker: anonymous workload logger for healthcare teams">
+  <title>Tasker — Anonymous workload logger for healthcare teams</title>
   <link rel="stylesheet" href="/css/app.css">
+  <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "SoftwareApplication",
+      "name": "Tasker",
+      "url": "__APP_ORIGIN__/",
+      "applicationCategory": "HealthApplication",
+      "operatingSystem": "Web",
+      "softwareVersion": "__APP_VERSION__",
+      "description": "Tasker is a self-hosted, anonymous workload logger for NHS and healthcare teams. It tracks tasks, interruptions, analytics, and workload trends without storing patient data, real names, or email-linked user identities.",
+      "offers": {
+        "@type": "Offer",
+        "price": "0",
+        "priceCurrency": "GBP"
+      },
+      "featureList": [
+        "Anonymous usernames generated automatically",
+        "Self-hosted Node.js and SQLite deployment",
+        "Real-time task logging with outcomes and interruption tracking",
+        "Pending workload snapshot logging and 30-day analytics",
+        "Excel exports for raw data and analytics reports",
+        "Admin-managed groups, options, notices, messages, and backup tools",
+        "30-day automatic task deletion",
+        "Optional Cloudflare Turnstile CAPTCHA and admin email 2FA"
+      ],
+      "publisher": {
+        "@type": "Organization",
+        "name": "Tasker",
+        "url": "https://github.com/jamesjhs/Tasker"
+      }
+    }
+  </script>
+  <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "FAQPage",
+      "mainEntity": [
+        {
+          "@type": "Question",
+          "name": "Does Tasker store patient data or staff identities?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "No. Tasker is designed for anonymous workload logging. Standard user accounts use generated usernames instead of real names or email addresses, and the product documentation repeatedly instructs users not to enter patient or identifiable information."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Where is Tasker hosted?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Tasker is self-hosted. It runs on Node.js with SQLite, so the organisation keeps the application and database on its own infrastructure rather than sending data to a third-party SaaS provider."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "What does Tasker help a healthcare team measure?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Tasker helps teams log work in real time, track interruptions, capture pending workload snapshots, review analytics over the current session and the previous 30 days, and export reports for service improvement or workload conversations."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Who is Tasker best suited for?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Tasker is best suited to NHS and healthcare teams that need a lightweight, privacy-first way to evidence administrative or operational workload without adopting a full enterprise rostering or cloud time-tracking platform."
+          }
+        }
+      ]
+    }
+  </script>
 </head>
 <body>
   <div id="app">
-    <div class="loading-screen">
-      <div class="loading-spinner" aria-hidden="true"></div>
-      <p class="loading-title">Loading Tasker…</p>
-      <p id="loading-status" class="loading-status">Starting…</p>
-      <p id="loading-error" class="loading-error" hidden></p>
-      <div id="loading-actions" class="loading-actions" hidden>
-        <button class="btn btn-primary" id="loading-retry-btn">Retry</button>
-        <button class="btn btn-secondary" id="loading-login-btn">Open Tasker</button>
-      </div>
+    <div class="landing landing-static">
+      <header class="landing-hero">
+        <nav class="landing-nav" aria-label="Primary">
+          <a class="landing-nav__brand" href="/">Tasker</a>
+          <div class="landing-nav__links">
+            <a href="/guide">Guide</a>
+            <a href="/help">Help</a>
+            <a href="/policy">Policy</a>
+            <a href="/dpia">DPIA</a>
+            <a href="https://github.com/jamesjhs/Tasker" target="_blank" rel="noreferrer">GitHub</a>
+          </div>
+        </nav>
+
+        <div class="hero-grid">
+          <div class="hero-copy">
+            <p class="section-eyebrow section-eyebrow--hero">Anonymous workload intelligence for NHS and healthcare teams</p>
+            <h1>See where the day goes — without storing who the work was for.</h1>
+            <p class="tagline">Tasker is a self-hosted, privacy-first PWA for teams that need to track workload in real time, understand interruptions, and export evidence-ready analytics while keeping patient data, staff identities, and vendor-hosted cloud records out of the workflow.</p>
+            <ul class="hero-trust-pills" aria-label="Tasker trust points">
+              <li>Self-hosted Node.js + SQLite</li>
+              <li>Anonymous usernames by design</li>
+              <li>30-day automatic task deletion</li>
+              <li>Installable PWA with built-in analytics</li>
+            </ul>
+            <div class="hero-btns">
+              <a class="btn btn-white" href="/guide">See the workflow</a>
+              <a class="btn btn-outline-white" href="https://github.com/jamesjhs/Tasker" target="_blank" rel="noreferrer">Review the codebase</a>
+            </div>
+            <div class="hero-link-row">
+              <a href="/policy">Read the data &amp; use policy</a>
+              <a href="/dpia">Read the DPIA</a>
+              <a href="/help">Browse the user guide</a>
+            </div>
+          </div>
+
+          <aside class="hero-aside">
+            <div class="hero-panel" id="app-launch-panel">
+              <p class="hero-panel-eyebrow">Launch Tasker</p>
+              <h2 class="hero-panel-title">Open the app, or use the supporting documentation first.</h2>
+              <p class="hero-panel-text">Tasker’s interactive interface requires JavaScript. The loading panel below starts the app shell and gives direct access to login when initialisation completes.</p>
+              <div class="loading-screen loading-screen--embedded">
+                <div class="loading-spinner" aria-hidden="true"></div>
+                <p class="loading-title">Loading Tasker…</p>
+                <p id="loading-status" class="loading-status">Preparing the app shell…</p>
+                <p id="loading-error" class="loading-error" hidden></p>
+                <div id="loading-actions" class="loading-actions" hidden>
+                  <button class="btn btn-primary" id="loading-retry-btn">Retry</button>
+                  <button class="btn btn-secondary" id="loading-login-btn">Open Tasker</button>
+                </div>
+              </div>
+              <div class="hero-panel-links" aria-label="Documentation links">
+                <a href="/guide">Quick start guide</a>
+                <a href="/help">User help</a>
+                <a href="/policy">Privacy policy</a>
+                <a href="/dpia">Data protection impact assessment</a>
+              </div>
+            </div>
+          </aside>
+        </div>
+      </header>
+
+      <main class="landing-main">
+        <section class="landing-section landing-section--alt">
+          <div class="section-inner section-inner--wide">
+            <p class="section-eyebrow">Why teams pick Tasker</p>
+            <h2 class="section-title">Built for the gap between spreadsheets, cloud trackers, and enterprise workforce suites</h2>
+            <p class="section-sub">Tasker is not a rostering platform and it is not a generic SaaS timer. It is a focused operational tool for understanding workload safely, quickly, and on your own infrastructure.</p>
+            <div class="comparison-grid">
+              <article class="comparison-card">
+                <h3>Manual logs and spreadsheets</h3>
+                <p>Low cost, but slow to maintain, easy to abandon, and weak for trend analysis or consistent categorisation.</p>
+              </article>
+              <article class="comparison-card">
+                <h3>Generic cloud time trackers</h3>
+                <p>Polished reporting, but usually tied to email identities, vendor-hosted storage, and non-healthcare workflows.</p>
+              </article>
+              <article class="comparison-card">
+                <h3>Enterprise workforce suites</h3>
+                <p>Strong for rostering and compliance, but too heavy when the immediate need is lightweight task-level workload evidence.</p>
+              </article>
+              <article class="comparison-card comparison-card--featured">
+                <h3>Tasker</h3>
+                <p>Self-hosted, anonymous, mobile-first workload logging with analytics, exports, admin controls, and privacy documentation already built in.</p>
+              </article>
+            </div>
+          </div>
+        </section>
+
+        <section class="landing-section">
+          <div class="section-inner section-inner--wide">
+            <p class="section-eyebrow">What the app actually does</p>
+            <h2 class="section-title">Task logging, interruption evidence, analytics, and rollout controls in one place</h2>
+            <div class="feature-row feature-row--light">
+              <article class="feature-panel">
+                <h3>Log work live</h3>
+                <p>Start a task when work begins, stop it when it ends, assign outcomes, and keep category choices fast with searchable comboboxes and quick picks.</p>
+              </article>
+              <article class="feature-panel">
+                <h3>Measure hidden workload</h3>
+                <p>Capture interruptions and pending-task snapshots so teams can demonstrate the true operational cost of context switching and backlog pressure.</p>
+              </article>
+              <article class="feature-panel">
+                <h3>Review and export evidence</h3>
+                <p>Use session and 30-day analytics, trendlines, and XLSX exports to support audits, service redesign, appraisals, and workforce planning.</p>
+              </article>
+              <article class="feature-panel">
+                <h3>Roll out safely</h3>
+                <p>Admins can manage groups, dropdowns, notices, messages, backup/restore, registration rules, optional Turnstile CAPTCHA, and admin email 2FA.</p>
+              </article>
+            </div>
+          </div>
+        </section>
+
+        <section class="landing-section landing-section--alt">
+          <div class="section-inner section-inner--wide">
+            <p class="section-eyebrow">Core operating principles</p>
+            <h2 class="section-title">The product is designed around privacy, evidence, and low-friction adoption</h2>
+            <div class="principles-grid">
+              <article class="principle-card">
+                <h3>Privacy first</h3>
+                <ul>
+                  <li>Generated usernames instead of named user profiles</li>
+                  <li>No patient data or real-name workflow required</li>
+                  <li>30-day retention to keep data exposure small</li>
+                </ul>
+              </article>
+              <article class="principle-card">
+                <h3>Evidence over anecdote</h3>
+                <ul>
+                  <li>Live timing with structured outcomes</li>
+                  <li>Pending workload snapshots and interruption logging</li>
+                  <li>Analytics and exportable reports for decision-making</li>
+                </ul>
+              </article>
+              <article class="principle-card">
+                <h3>Simple deployment</h3>
+                <ul>
+                  <li>Self-hosted Node.js and SQLite stack</li>
+                  <li>Installable PWA for mobile-friendly access</li>
+                  <li>Guide, help page, policy, and DPIA published alongside the app</li>
+                </ul>
+              </article>
+            </div>
+          </div>
+        </section>
+
+        <section class="landing-section">
+          <div class="section-inner section-inner--wide">
+            <p class="section-eyebrow">Best fit</p>
+            <h2 class="section-title">Who Tasker is for</h2>
+            <div class="fit-grid">
+              <article class="fit-card">
+                <h3>Healthcare admin teams</h3>
+                <p>Ideal when reception, referrals, correspondence, medicines admin, or coordination work needs clearer evidence than a spreadsheet can provide.</p>
+              </article>
+              <article class="fit-card">
+                <h3>Clinical support workflows</h3>
+                <p>Useful when clinicians or mixed teams need a simple way to separate direct task effort, interruptions, and outcome patterns without using the clinical record.</p>
+              </article>
+              <article class="fit-card">
+                <h3>Service improvement programmes</h3>
+                <p>Strong for pilots, redesign work, backlog reviews, and operational conversations where privacy, ownership, and low rollout cost matter.</p>
+              </article>
+            </div>
+          </div>
+        </section>
+
+        <section class="landing-section landing-section--dark">
+          <div class="section-inner section-inner--wide">
+            <p class="section-eyebrow">Common questions</p>
+            <h2 class="section-title">FAQ</h2>
+            <div class="faq-grid">
+              <article class="faq-card">
+                <h3>Is Tasker a clinical record system?</h3>
+                <p>No. It is a workload-logging tool for operational evidence. It should not be used to store patient records or identifiable clinical information.</p>
+              </article>
+              <article class="faq-card">
+                <h3>Can standard users stay anonymous?</h3>
+                <p>Yes. The app is built around generated usernames and avoids requiring real names or email addresses for ordinary user accounts.</p>
+              </article>
+              <article class="faq-card">
+                <h3>Where is the data kept?</h3>
+                <p>On the organisation’s own server. Tasker runs on Node.js with SQLite rather than relying on a third-party hosted database service.</p>
+              </article>
+              <article class="faq-card">
+                <h3>What helps rollout and governance?</h3>
+                <p>Tasker ships with an installation guide, user help, public policy, DPIA, admin controls, backup/restore tooling, and configurable registration rules.</p>
+              </article>
+            </div>
+          </div>
+        </section>
+      </main>
     </div>
   </div>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>

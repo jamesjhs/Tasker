@@ -1,11 +1,13 @@
 {
   "name": "Tasker",
   "short_name": "Tasker",
-  "description": "Anonymous task logger for healthcare staff",
+  "description": "Self-hosted anonymous workload logger for NHS and healthcare teams",
+  "lang": "en-GB",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#ffffff",
   "theme_color": "#1a56db",
+  "categories": ["medical", "productivity", "utilities"],
   "icons": [
     { "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml" },
     { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png" },

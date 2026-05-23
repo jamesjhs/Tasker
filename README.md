@@ -1,6 +1,6 @@
 # Tasker
 
-**v1.13.8** — An anonymous task-logging PWA for healthcare staff. Built with TypeScript, Express 5, SQLite, and vanilla JS.
+**v1.14.0** — A self-hosted, anonymous workload-logging PWA for NHS and healthcare teams. Built with TypeScript, Express 5, SQLite, and vanilla JS.
 
 ---
 
@@ -23,7 +23,8 @@
 - **Configurable registration** — administrator controls three levels for self-registration and user invitations.
 - **30-day data retention** — task data is automatically deleted after 30 days.
 - **Health-check endpoint** — `GET /readyz` returns a JSON status response for uptime/heartbeat monitoring.
-- **Asset version endpoint** — `GET /api/version` returns `{"version":"1.13.8"}` for client-side cache-busting.
+- **Landing, SEO & crawler-ready homepage** — homepage now includes semantic marketing copy, structured data, Open Graph/Twitter cards, `robots.txt`, `sitemap.xml`, and `llms.txt`.
+- **Asset version endpoint** — `GET /api/version` returns `{"version":"1.14.0"}` for client-side cache-busting.
 - **Cloudflare Turnstile CAPTCHA** — optional bot-protection for login and self-registration. When `TURNSTILE_SITE_KEY` and `TURNSTILE_SECRET_KEY` are set, Turnstile widgets are rendered on the login and registration forms; tokens are verified server-side before credentials are checked. The feature is fully disabled (and invisible) when the environment variables are not set.
 
 ---
@@ -34,6 +35,7 @@
 |---|---|
 | Installation guide | [`docs/installation.md`](docs/installation.md) |
 | Maintenance & troubleshooting | [`docs/maintenance.md`](docs/maintenance.md) |
+| Search engine submission guide | [`docs/search-engine-submission.md`](docs/search-engine-submission.md) |
 | User guide (in-app) | `/help` route |
 | Data & Use Policy (in-app) | `/policy` route |
 
@@ -68,6 +70,7 @@ Then create the admin account — see [Installation guide](docs/installation.md#
 | `PORT` | Server port | `3020` |
 | `SESSION_SECRET` | Session signing secret (**set this in production!**) | Random (changes on restart) |
 | `NODE_ENV` | Set to `production` to enable secure cookies (requires HTTPS) | — |
+| `APP_URL` | Full public base URL. Used for review links plus canonical, `robots.txt`, `sitemap.xml`, and `llms.txt` output. | Request origin |
 | `SSL_CERT_DIR` | Directory containing Let's Encrypt certificate files | `/etc/letsencrypt/live/yourdomain` |
 | `SSL_CERT` | Path to the certificate chain (auto-detects HTTPS if this file exists) | `$SSL_CERT_DIR/fullchain.pem` |
 | `SSL_KEY` | Path to the private key | `$SSL_CERT_DIR/privkey.pem` |
@@ -93,7 +96,7 @@ npm run build # compile TypeScript → dist/
 
 ```
 src/
-  server.ts               Express 5 app, middleware wiring, SSL detection, 30-day retention job, /readyz health check, /api/version endpoint
+  server.ts               Express 5 app, middleware wiring, SSL detection, dynamic SEO shell rendering, /readyz health check, /api/version, robots/sitemap/llms, 30-day retention job
   db.ts                   SQLite schema + migrations + seed data, getDb(), getSetting(), setSetting(), TASKER_DB_PATH override for tests
   words.ts                Memorable two-word username generator
   turnstile.ts            Cloudflare Turnstile CAPTCHA helpers — isTurnstileEnabled(), verifyTurnstileToken()
@@ -110,9 +113,10 @@ src/
     helpers/testApp.ts    Isolated Express app + test-user helpers for jest/supertest
 
 public/
-  index.html              SPA shell
+  index.html              SEO-aware SPA shell + static landing content template
   favicon.svg             SVG favicon (browser tab icon)
   manifest.json           PWA manifest
+  social-preview.svg      Social preview asset for Open Graph / Twitter cards
   sw.js                   Service worker (cache-first static, network-first API)
   policy.html             Data & Use Policy  (served at /policy)
   help.html               User guide         (served at /help)
@@ -161,6 +165,12 @@ See [`/policy`](/policy) for the full Data and Use Policy.
 ---
 
 ## Changelog
+
+### v1.14.0 (May 2026) — Landing page, SEO, and crawler optimisation
+
+- **Homepage repositioning** — rewrote the public landing experience to emphasise Tasker’s real differentiators: self-hosting, anonymous usernames, privacy-first workload evidence, interruption tracking, analytics, and export-ready reporting for healthcare teams.
+- **Search, AI crawler, and social readiness** — added semantic homepage content, JSON-LD structured data, Open Graph/Twitter metadata, `robots.txt`, `sitemap.xml`, `llms.txt`, and a dedicated social preview asset.
+- **Documentation update** — expanded repository documentation with a search-engine submission guide and refreshed versioning to 1.14.0 across the current docs set.
 
 ### v1.13.8 (May 2026) — Log Task quick-pick highlight refinement
 

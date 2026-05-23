@@ -1,0 +1,39 @@
+<svg width="1200" height="630" viewBox="0 0 1200 630" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">Tasker social preview</title>
+  <desc id="desc">Tasker is a self-hosted anonymous workload logger for healthcare teams.</desc>
+  <defs>
+    <linearGradient id="bg" x1="84" y1="54" x2="1114" y2="588" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0F172A"/>
+      <stop offset="0.52" stop-color="#1A1A2E"/>
+      <stop offset="1" stop-color="#1A56DB"/>
+    </linearGradient>
+    <linearGradient id="panel" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="rgba(255,255,255,0.20)"/>
+      <stop offset="1" stop-color="rgba(255,255,255,0.08)"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="630" rx="36" fill="url(#bg)"/>
+  <circle cx="1048" cy="104" r="136" fill="#93C5FD" opacity="0.14"/>
+  <circle cx="153" cy="548" r="172" fill="#60A5FA" opacity="0.10"/>
+  <rect x="72" y="72" width="1056" height="486" rx="28" fill="url(#panel)" stroke="rgba(255,255,255,0.16)" stroke-width="2"/>
+  <g transform="translate(112 108)">
+    <rect width="94" height="94" rx="24" fill="#FFFFFF" fill-opacity="0.12"/>
+    <path d="M48 21C32.536 21 20 33.536 20 49C20 64.464 32.536 77 48 77C63.464 77 76 64.464 76 49C76 33.536 63.464 21 48 21ZM48 33C56.837 33 64 40.163 64 49C64 57.837 56.837 65 48 65C39.163 65 32 57.837 32 49C32 40.163 39.163 33 48 33Z" fill="white"/>
+    <path d="M48 39L53.706 48.294L63 54L53.706 59.706L48 69L42.294 59.706L33 54L42.294 48.294L48 39Z" fill="#93C5FD"/>
+  </g>
+  <text x="232" y="152" fill="white" font-family="Arial, Helvetica, sans-serif" font-size="74" font-weight="700" letter-spacing="-1.8">Tasker</text>
+  <text x="232" y="212" fill="#BFDBFE" font-family="Arial, Helvetica, sans-serif" font-size="28" font-weight="700" letter-spacing="2.8">ANONYMOUS WORKLOAD LOGGER FOR HEALTHCARE TEAMS</text>
+  <text x="112" y="306" fill="white" font-family="Arial, Helvetica, sans-serif" font-size="42" font-weight="700">Self-hosted. Privacy-first. Built for operational evidence.</text>
+  <text x="112" y="366" fill="#E2E8F0" font-family="Arial, Helvetica, sans-serif" font-size="28">Track tasks, interruptions, backlog pressure, analytics, and exports</text>
+  <text x="112" y="406" fill="#E2E8F0" font-family="Arial, Helvetica, sans-serif" font-size="28">without storing patient data, real names, or vendor-hosted cloud records.</text>
+  <g transform="translate(112 470)">
+    <rect width="215" height="58" rx="29" fill="#FFFFFF" fill-opacity="0.14" stroke="rgba(255,255,255,0.14)"/>
+    <text x="28" y="37" fill="white" font-family="Arial, Helvetica, sans-serif" font-size="24" font-weight="700">Self-hosted</text>
+    <rect x="236" width="266" height="58" rx="29" fill="#FFFFFF" fill-opacity="0.14" stroke="rgba(255,255,255,0.14)"/>
+    <text x="264" y="37" fill="white" font-family="Arial, Helvetica, sans-serif" font-size="24" font-weight="700">Anonymous by design</text>
+    <rect x="523" width="255" height="58" rx="29" fill="#FFFFFF" fill-opacity="0.14" stroke="rgba(255,255,255,0.14)"/>
+    <text x="551" y="37" fill="white" font-family="Arial, Helvetica, sans-serif" font-size="24" font-weight="700">30-day retention</text>
+    <rect x="799" width="216" height="58" rx="29" fill="#FFFFFF" fill-opacity="0.14" stroke="rgba(255,255,255,0.14)"/>
+    <text x="827" y="37" fill="white" font-family="Arial, Helvetica, sans-serif" font-size="24" font-weight="700">PWA + exports</text>
+  </g>
+</svg>
