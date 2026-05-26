@@ -299,6 +299,7 @@
     <tr><td><code>TASKER_DB_PATH</code></td><td>Tests only</td><td>Override the database path (e.g. <code>:memory:</code> or a temp file). Used by the test harness.</td></tr>
     <tr><td><code>TURNSTILE_SITE_KEY</code></td><td>No</td><td>Cloudflare Turnstile site key. When both this and <code>TURNSTILE_SECRET_KEY</code> are set, a CAPTCHA widget is rendered on the login and registration forms. Omit to disable Turnstile entirely.</td></tr>
     <tr><td><code>TURNSTILE_SECRET_KEY</code></td><td>No</td><td>Cloudflare Turnstile secret key used for server-side token verification. Required alongside <code>TURNSTILE_SITE_KEY</code>.</td></tr>
+    <tr><td><code>ALLOW_2FA_LOG_FALLBACK</code></td><td>No</td><td>Debug-only flag. When set to <code>true</code>, admin 2FA codes are logged if SMTP delivery fails. Do not enable in production.</td></tr>
   </tbody>
 </table>
 

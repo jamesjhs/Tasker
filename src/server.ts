@@ -43,7 +43,12 @@ if (!trustProxyValue) {
   }
 }
 const PORT = process.env['PORT'] || 3020;
-const SESSION_SECRET = process.env['SESSION_SECRET'] || crypto.randomBytes(64).toString('hex');
+const NODE_ENV = process.env['NODE_ENV'] || 'development';
+const SESSION_SECRET_ENV = process.env['SESSION_SECRET'];
+if (NODE_ENV === 'production' && !SESSION_SECRET_ENV) {
+  throw new Error('SESSION_SECRET must be set in production.');
+}
+const SESSION_SECRET = SESSION_SECRET_ENV || crypto.randomBytes(64).toString('hex');
 const APP_URL = (process.env['APP_URL'] || '').trim().replace(/\/+$/, '');
 
 // ─── SSL configuration ────────────────────────────────────────────────────────
@@ -52,12 +57,17 @@ const SSL_CERT = process.env['SSL_CERT'] || '';
 const SSL_KEY  = process.env['SSL_KEY']  || '';
 
 // ─── Security headers ─────────────────────────────────────────────────────────
+app.use((req, res, next) => {
+  res.locals.cspNonce = crypto.randomBytes(16).toString('base64');
+  next();
+});
+
 app.use(helmet({
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'"],
-      scriptSrc: ["'self'", "'unsafe-inline'", 'https://cdn.jsdelivr.net', 'https://challenges.cloudflare.com'],
-      scriptSrcAttr: ["'unsafe-inline'"],
+      scriptSrc: ["'self'", (req, res) => `'nonce-${(res as express.Response).locals.cspNonce}'`, 'https://cdn.jsdelivr.net', 'https://challenges.cloudflare.com'],
+      scriptSrcAttr: ["'none'"],
       styleSrc: ["'self'", "'unsafe-inline'"],
       imgSrc: ["'self'", 'data:'],
       connectSrc: ["'self'", 'https://cdn.jsdelivr.net', 'https://challenges.cloudflare.com'],
@@ -82,7 +92,7 @@ app.use(session({
   cookie: {
     httpOnly: true,
     sameSite: 'strict',
-    secure: process.env['NODE_ENV'] === 'production',
+    secure: NODE_ENV === 'production',
     maxAge: 30 * 60 * 1000,
   },
 }));
@@ -175,11 +185,12 @@ function getPublicOrigin(req: Request): string {
   return APP_URL || `${req.protocol}://${req.get('host')}`;
 }
 
-function renderIndexHtml(req: Request): string {
+function renderIndexHtml(req: Request, nonce: string): string {
   const origin = getPublicOrigin(req).replace(/\/+$/, '');
   return indexTemplate
     .replace(/__APP_VERSION__/g, APP_VERSION)
-    .replace(/__APP_ORIGIN__/g, origin);
+    .replace(/__APP_ORIGIN__/g, origin)
+    .replace(/__CSP_NONCE__/g, nonce);
 }
 
 app.get('/sw.js', (_req, res) => {
@@ -218,7 +229,7 @@ app.get('/help',   apiLimiter, (_req, res) => res.sendFile(path.join(__dirname, 
 app.get('/guide',  apiLimiter, (_req, res) => res.sendFile(path.join(__dirname, '..', 'public', 'guide.html')));
 app.get(['/', '/index.html'], apiLimiter, (req, res) => {
   res.setHeader('Cache-Control', 'no-cache');
-  res.type('html').send(renderIndexHtml(req));
+  res.type('html').send(renderIndexHtml(req, res.locals.cspNonce));
 });
 
 // ─── Suggestion review page (token-gated, no login required) ────────────────
@@ -226,7 +237,7 @@ app.use('/suggest/review', apiLimiter, reviewRouter);
 
 app.get('/{*path}', apiLimiter, (_req, res) => {
   res.setHeader('Cache-Control', 'no-cache');
-  res.type('html').send(renderIndexHtml(_req));
+  res.type('html').send(renderIndexHtml(_req, res.locals.cspNonce));
 });
 
 // ─── Global error handler (must be after all routes) ─────────────────────────

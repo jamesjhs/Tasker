@@ -103,7 +103,7 @@ function showUpdateBanner() {
   banner.id = 'update-banner';
   banner.innerHTML =
     '<span>A new version of Tasker is available.</span>' +
-    '<button onclick="performAppUpdate()">🔄 App Update Needed</button>';
+    '<button data-action="performAppUpdate">🔄 App Update Needed</button>';
   document.body.prepend(banner);
 }
 
@@ -138,6 +138,153 @@ const esc = str => str == null ? '' : String(str)
   .replace(/"/g,'&quot;').replace(/'/g,'&#039;');
 // Sanitise values used as HTML attribute identifiers (strip everything except a-z A-Z 0-9 - _)
 const safeId = str => str == null ? '' : String(str).replace(/[^a-zA-Z0-9\-_]/g, '');
+
+function coerceActionArg(value) {
+  if (value === 'true') return true;
+  if (value === 'false') return false;
+  if (value === 'null') return null;
+  if (value === '') return '';
+  if (/^-?\d+(\.\d+)?$/.test(value)) return Number(value);
+  return value;
+}
+
+function getActionArgs(el) {
+  if (!el) return [];
+  if (el.dataset.args) {
+    try { return JSON.parse(el.dataset.args); } catch { return []; }
+  }
+  const keys = Object.keys(el.dataset)
+    .filter(key => key === 'arg' || /^arg\d+$/.test(key))
+    .sort((a, b) => {
+      const aIdx = a === 'arg' ? 1 : Number(a.slice(3));
+      const bIdx = b === 'arg' ? 1 : Number(b.slice(3));
+      return aIdx - bIdx;
+    });
+  return keys.map(key => coerceActionArg(el.dataset[key]));
+}
+
+const ACTION_HANDLERS = {
+  performAppUpdate: () => performAppUpdate(),
+  openCombo: (_el, _ev, id, field, hasNew) => openCombo(id, field, hasNew),
+  filterCombo: (_el, _ev, id, field, hasNew) => filterCombo(id, field, hasNew),
+  comboKeydown: (_el, ev, id, field, hasNew) => comboKeydown(ev, id, field, hasNew),
+  selectComboOpt: (_el, _ev, id, field, value) => selectComboOpt(id, field, value),
+  comboAddNew: (_el, _ev, id, field) => comboAddNew(id, field),
+  submitNewOption: (_el, _ev, id, field) => submitNewOption(id, field),
+  returnToLogin: () => returnToLogin(),
+  renderHome: () => renderHome(),
+  renderAnalyticsSession: () => renderAnalyticsSession(),
+  renderSettings: () => renderSettings(),
+  renderLanding: () => renderLanding(),
+  renderLogin: () => renderLogin(),
+  renderRegister: () => renderRegister(),
+  renderAdmin: () => renderAdmin(),
+  togglePw: (el, _ev, id) => togglePw(id, el),
+  doLogin: () => doLogin(),
+  do2faVerify: () => do2faVerify(),
+  do2faResend: () => do2faResend(),
+  selectGroupOption: (_el, _ev, id) => selectGroupOption(Number(id)),
+  doSetGroup: () => doSetGroup(),
+  skipGroupSelection: () => skipGroupSelection(),
+  proposeGroupName: (_el, _ev, containerId) => proposeGroupName(containerId),
+  proposeOptionFromCustomise: (_el, _ev, field) => proposeOptionFromCustomise(field),
+  doSaveMyOptions: () => doSaveMyOptions(),
+  skipMyOptions: () => skipMyOptions(),
+  doRegister: () => doRegister(),
+  copyWithAlert: (_el, _ev, text, alertId) => copyWithAlert(text, alertId),
+  doLogout: () => doLogout(),
+  doChangePassword: (_el, _ev, isForced) => doChangePassword(Boolean(isForced)),
+  toggleNoticesPanel: () => toggleNoticesPanel(),
+  submitFeedback: () => submitFeedback(),
+  markAllMessagesRead: () => markAllMessagesRead(),
+  markMessageRead: (_el, _ev, id) => markMessageRead(Number(id)),
+  renderTaskActive: () => renderTaskActive(),
+  discardActiveTask: () => discardActiveTask(),
+  renderTaskStart: () => renderTaskStart(),
+  doLogPendingCount: () => doLogPendingCount(),
+  togglePendingGraph: (_el, _ev, days) => togglePendingGraph(Number(days)),
+  setGroupFromSettings: () => setGroupFromSettings(),
+  openMyOptionsModal: () => openMyOptionsModal(),
+  renderChangePassword: () => renderChangePassword(),
+  doInviteUser: () => doInviteUser(),
+  navigate: (_el, _ev, href) => { window.location.href = href; },
+  renderDeleteAccount: () => renderDeleteAccount(),
+  doDeleteAccount: () => doDeleteAccount(),
+  setDuty: (_el, _ev, value) => setDuty(Boolean(value)),
+  startTaskWithDatePreset: (_el, _ev, preset) => startTaskWithDatePreset(preset),
+  handleQuickPick: (el) => handleQuickPick(el),
+  handleRunningOutcomePick: (el) => handleRunningOutcomePick(el),
+  showInterruptModal: () => showInterruptModal(),
+  renderTaskEnd: () => renderTaskEnd(),
+  cancelActiveTask: () => cancelActiveTask(),
+  resumeTask: (_el, _ev, saveAuto) => resumeTask(saveAuto),
+  showManualInterruptForm: () => showManualInterruptForm(),
+  discardFromModal: () => discardFromModal(),
+  saveInterruption: () => saveInterruption(),
+  removeInterruption: (_el, _ev, idx) => removeInterruption(Number(idx)),
+  setEditDuty: (_el, _ev, value) => setEditDuty(Boolean(value)),
+  suggestNewFlag: () => suggestNewFlag(),
+  submitTaskReview: (_el, _ev, id, saveOnly, next) => submitTaskReview(Number(id), Boolean(saveOnly), next),
+  discardFromEnd: (_el, _ev, id) => discardFromEnd(Number(id)),
+  submitNewOutcomeEnd: () => submitNewOutcomeEnd(),
+  setAnalyticsQuickFilter: (_el, _ev, preset) => setAnalyticsQuickFilter(preset),
+  toggleAnalyticsFilters: () => toggleAnalyticsFilters(),
+  setDatePreset: (_el, _ev, days) => setDatePreset(Number(days)),
+  applyHistoryFilters: () => applyHistoryFilters(),
+  loadAndEditTask: (_el, _ev, id) => loadAndEditTask(Number(id)),
+  deleteTask: (_el, _ev, id) => deleteTask(Number(id)),
+  downloadExport: () => downloadExport(),
+  exportAnalyticsReport: () => exportAnalyticsReport(),
+  toggleAnalyticsTasks: () => toggleAnalyticsTasks(),
+  clearAllTasks: () => clearAllTasks(),
+  unlockUser: (_el, _ev, id, username) => unlockUser(Number(id), username),
+  resetUserPw: (_el, _ev, id, username) => resetUserPw(Number(id), username),
+  deleteUser: (_el, _ev, id, username) => deleteUser(Number(id), username),
+  renameDropdown: (_el, _ev, id, value) => renameDropdown(Number(id), value),
+  deleteDropdown: (_el, _ev, id) => deleteDropdown(Number(id)),
+  addDropdown: (_el, _ev, field) => addDropdown(field),
+  dismissProposal: (_el, _ev, id) => dismissProposal(Number(id)),
+  renameFlagOption: (_el, _ev, id) => renameFlagOption(Number(id)),
+  deleteFlagOption: (_el, _ev, id) => deleteFlagOption(Number(id)),
+  editNotice: (_el, _ev, id) => editNotice(Number(id)),
+  toggleNotice: (_el, _ev, id, active) => toggleNotice(Number(id), Boolean(active)),
+  deleteNotice: (_el, _ev, id) => deleteNotice(Number(id)),
+  approvePendingUser: (_el, _ev, id) => approvePendingUser(Number(id)),
+  activateUser: (_el, _ev, id, username) => activateUser(Number(id), username),
+  showGroupDropdownModal: (_el, _ev, id, name) => showGroupDropdownModal(Number(id), name),
+  renameUserGroup: (_el, _ev, id, name) => renameUserGroup(Number(id), name),
+  deleteUserGroup: (_el, _ev, id, name) => deleteUserGroup(Number(id), name),
+  saveRegistrationSettings: () => saveRegistrationSettings(),
+  addUser: () => addUser(),
+  addUserGroup: () => addUserGroup(),
+  approvePendingGroup: (_el, _ev, id) => approvePendingGroup(Number(id)),
+  rejectPendingGroup: (_el, _ev, id) => rejectPendingGroup(Number(id)),
+  addFlagOption: () => addFlagOption(),
+  createNotice: () => createNotice(),
+  saveSmtpSettings: () => saveSmtpSettings(),
+  testSmtp: () => testSmtp(),
+  save2faSettings: () => save2faSettings(),
+  downloadBackup: () => downloadBackup(),
+  uploadRestore: (el) => uploadRestore(el),
+  closeGroupDropdownModal: () => document.getElementById('group-dd-modal')?.remove(),
+  saveGroupDropdowns: (_el, _ev, id) => saveGroupDropdowns(Number(id)),
+};
+
+function dispatchAction(event, attr, preventDefault = false) {
+  const target = event.target?.closest?.(`[${attr}]`);
+  if (!target) return;
+  const actionName = target.getAttribute(attr);
+  const handler = ACTION_HANDLERS[actionName];
+  if (!handler) return;
+  if (preventDefault) event.preventDefault();
+  handler(target, event, ...getActionArgs(target));
+}
+
+document.addEventListener('click', (event) => dispatchAction(event, 'data-action', true));
+document.addEventListener('mousedown', (event) => dispatchAction(event, 'data-action-mousedown', true));
+document.addEventListener('input', (event) => dispatchAction(event, 'data-action-input'));
+document.addEventListener('keydown', (event) => dispatchAction(event, 'data-action-keydown'));
+document.addEventListener('change', (event) => dispatchAction(event, 'data-action-change'));
 
 // ── Combobox (integrated searchable dropdown) ────────────────────────────────
 let _comboOpenId = null;
@@ -201,10 +348,10 @@ function renderComboOpts(id, field, hasNew, query) {
   } else {
     html = filtered.map((o,i) => {
       const isRecent = lastUsed && o === lastUsed;
-      return `<div class="combo-opt${isRecent ? ' combo-recent' : ''}" data-idx="${i}" onmousedown="selectComboOpt('${sid}','${sfield}','${esc(o)}')">${esc(o)}</div>`;
+      return `<div class="combo-opt${isRecent ? ' combo-recent' : ''}" data-idx="${i}" data-action-mousedown="selectComboOpt" data-arg="${sid}" data-arg2="${sfield}" data-arg3="${esc(o)}">${esc(o)}</div>`;
     }).join('');
   }
-  if (hasNew) html += `<div class="combo-opt combo-new" onmousedown="comboAddNew('${sid}','${sfield}')">+ Add new option…</div>`;
+  if (hasNew) html += `<div class="combo-opt combo-new" data-action-mousedown="comboAddNew" data-arg="${sid}" data-arg2="${sfield}">+ Add new option…</div>`;
   container.innerHTML = html;
 }
 
@@ -281,22 +428,22 @@ function buildComboBox(field, label, options, id, hasNew, current) {
     <div class="combo-wrap" id="${sid}-wrap">
       <button type="button" id="${sid}-btn"
               class="combo-btn${displayValue ? '' : ' placeholder'}"
-              onclick="openCombo('${sid}','${sfield}',${hasNew ? 'true' : 'false'})"
+              data-action="openCombo" data-arg="${sid}" data-arg2="${sfield}" data-arg3="${hasNew ? 'true' : 'false'}"
               aria-haspopup="listbox" aria-expanded="false">
         ${displayValue ? esc(displayValue) : `— Select ${esc(label)} —`}
       </button>
       <div class="combo-panel" id="${sid}-panel" role="listbox">
         <input class="combo-search" id="${sid}-search" type="text" autocomplete="off"
                placeholder="Search…"
-               oninput="filterCombo('${sid}','${sfield}',${hasNew ? 'true' : 'false'})"
-               onkeydown="comboKeydown(event,'${sid}','${sfield}',${hasNew ? 'true' : 'false'})">
+               data-action-input="filterCombo" data-arg="${sid}" data-arg2="${sfield}" data-arg3="${hasNew ? 'true' : 'false'}"
+               data-action-keydown="comboKeydown" data-arg="${sid}" data-arg2="${sfield}" data-arg3="${hasNew ? 'true' : 'false'}">
         <div class="combo-opts" id="${sid}-opts"></div>
       </div>
       <input type="hidden" id="${sid}-sel" value="${esc(displayValue)}">
     </div>
     ${hasNew ? `<div id="${sid}-new" style="display:none" class="add-new-row">
       <input id="${sid}-new-input" class="input" type="text" placeholder="Type new ${esc(label.toLowerCase())}…">
-      <button class="btn btn-outline btn-sm" onclick="submitNewOption('${sid}','${sfield}')">Submit</button>
+      <button class="btn btn-outline btn-sm" data-action="submitNewOption" data-arg="${sid}" data-arg2="${sfield}">Submit</button>
     </div>` : ''}
   </div>`;
 }
@@ -440,7 +587,7 @@ function renderInactivityLogout() {
       <p style="margin-bottom:8px">You have been logged out due to <strong>30 minutes of inactivity</strong>.</p>
       <p>Any task you were working on has been suspended.</p>
     </div>
-    <button class="btn btn-primary" onclick="returnToLogin()" style="min-width:220px">🔑 Click here to log in again</button>
+    <button class="btn btn-primary" data-action="returnToLogin" style="min-width:220px">🔑 Click here to log in again</button>
   </div>`;
 }
 
@@ -603,13 +750,13 @@ async function checkActiveTask() {
 // ── Bottom nav ───────────────────────────────────────────────────────────────
 function renderBottomNav(active) {
   return `<nav class="nav-bottom">
-    <button class="nav-btn ${active==='home'?'active':''}" onclick="renderHome()">
+    <button class="nav-btn ${active==='home'?'active':''}" data-action="renderHome">
       <span class="nav-icon">🏠</span><span>Home</span>
     </button>
-    <button class="nav-btn ${active==='analytics'?'active':''}" onclick="renderAnalyticsSession()">
+    <button class="nav-btn ${active==='analytics'?'active':''}" data-action="renderAnalyticsSession">
       <span class="nav-icon">📊</span><span>Analytics</span>
     </button>
-    <button class="nav-btn ${active==='settings'?'active':''}" onclick="renderSettings()">
+    <button class="nav-btn ${active==='settings'?'active':''}" data-action="renderSettings">
       <span class="nav-icon">⚙️</span><span>Settings</span>
     </button>
   </nav>`;
@@ -807,7 +954,7 @@ async function renderLanding() {
   <div class="landing">
     <div class="landing-hero">
       <nav class="landing-nav" aria-label="Primary">
-        <a class="landing-nav__brand" href="/" onclick="event.preventDefault();renderLanding()">Tasker</a>
+        <a class="landing-nav__brand" href="/" data-action="renderLanding">Tasker</a>
         <div class="landing-nav__links">
           <a href="/guide">Guide</a>
           <a href="/help">Help</a>
@@ -829,8 +976,8 @@ async function renderLanding() {
             <li>Installable PWA with analytics and export</li>
           </ul>
           <div class="hero-btns">
-            <button class="btn btn-white" onclick="renderLogin()">Log In</button>
-            ${showRegister ? `<button class="btn btn-outline-white" onclick="renderRegister()">Create Account</button>` : ''}
+            <button class="btn btn-white" data-action="renderLogin">Log In</button>
+            ${showRegister ? `<button class="btn btn-outline-white" data-action="renderRegister">Create Account</button>` : ''}
           </div>
           <div class="hero-link-row">
             <a href="/guide">See the workflow</a>
@@ -1026,8 +1173,8 @@ async function renderLanding() {
       <h2>Ready to evidence workload without expanding privacy risk?</h2>
       <p>Tasker gives healthcare teams a practical middle ground: faster than spreadsheets, lighter than enterprise workforce suites, and safer than cloud-first time trackers.</p>
       <div class="landing-cta-btns">
-        <button class="btn btn-white" onclick="renderLogin()">Log In</button>
-        ${showRegister ? `<button class="btn btn-outline-white" onclick="renderRegister()">Create Account</button>` : ''}
+        <button class="btn btn-white" data-action="renderLogin">Log In</button>
+        ${showRegister ? `<button class="btn btn-outline-white" data-action="renderRegister">Create Account</button>` : ''}
       </div>
       <div class="landing-footer-links">
         <a href="/guide">Quick Start Guide</a>
@@ -1127,14 +1274,14 @@ async function renderLogin() {
         <label for="l-pass">Password</label>
         <div class="pw-field">
           <input id="l-pass" class="input" type="password" autocomplete="current-password" placeholder="Your password">
-          <button class="pw-toggle" type="button" onclick="togglePw('l-pass',this)">👁️</button>
+          <button class="pw-toggle" type="button" data-action="togglePw" data-arg="l-pass">👁️</button>
         </div>
       </div>
       ${turnstileHTML}
-      <button class="btn btn-primary btn-full" id="l-btn" onclick="doLogin()"${state.turnstileConfig?.enabled ? ' disabled' : ''}>Log in</button>
+      <button class="btn btn-primary btn-full" id="l-btn" data-action="doLogin"${state.turnstileConfig?.enabled ? ' disabled' : ''}>Log in</button>
     </div>
     <div style="text-align:center;margin-top:16px;display:flex;flex-direction:column;gap:10px">
-      ${showRegister ? `<button class="link-btn" onclick="renderRegister()">Don't have an account? Register</button>` : ''}
+      ${showRegister ? `<button class="link-btn" data-action="renderRegister">Don't have an account? Register</button>` : ''}
       <a href="/policy" style="font-size:.85rem;color:#6b7280">Data &amp; Use Policy</a>
       <a href="/guide" style="font-size:.85rem;color:#1a56db;font-weight:600">📖 Quick Start Guide</a>
     </div>
@@ -1234,11 +1381,11 @@ async function render2faVerify(emailFailed = false) {
         <label for="tfa-code">Verification Code</label>
         <input id="tfa-code" class="input" type="text" inputmode="numeric" pattern="[0-9]*" autocomplete="one-time-code" maxlength="6" placeholder="6-digit code" style="letter-spacing:.2em;font-size:1.2rem;text-align:center">
       </div>
-      <button class="btn btn-primary btn-full" id="tfa-btn" onclick="do2faVerify()" style="margin-top:10px">✅ Verify</button>
-      <button class="btn btn-outline btn-full" id="tfa-resend-btn" onclick="do2faResend()" style="margin-top:8px">🔄 Resend Code</button>
+      <button class="btn btn-primary btn-full" id="tfa-btn" data-action="do2faVerify" style="margin-top:10px">✅ Verify</button>
+      <button class="btn btn-outline btn-full" id="tfa-resend-btn" data-action="do2faResend" style="margin-top:8px">🔄 Resend Code</button>
     </div>
     <div style="text-align:center;margin-top:16px">
-      <button class="link-btn" onclick="renderLogin()">← Back to Login</button>
+      <button class="link-btn" data-action="renderLogin">← Back to Login</button>
     </div>
     ${renderFooter()}
   </div>`;
@@ -1354,7 +1501,7 @@ async function renderGroupSelection(onContinue) {
     groups = d?.groups || [];
   } catch(e) {}
   const groupOpts = groups.map(g => `
-    <button class="card" id="gsel-${g.id}" onclick="selectGroupOption(${g.id})" style="padding:14px;cursor:pointer;border:2px solid #e5e7eb;margin-bottom:8px;width:100%;text-align:left;background:#fff;border-radius:8px">
+    <button class="card" id="gsel-${g.id}" data-action="selectGroupOption" data-arg="${g.id}" style="padding:14px;cursor:pointer;border:2px solid #e5e7eb;margin-bottom:8px;width:100%;text-align:left;background:#fff;border-radius:8px">
       <span style="font-weight:600;font-size:1rem">${esc(g.name)}</span>
     </button>`).join('');
   app().innerHTML = `
@@ -1370,15 +1517,15 @@ async function renderGroupSelection(onContinue) {
     <div id="group-alerts"></div>
     ${groupOpts || '<div class="alert alert-info">No user groups have been set up yet. Ask your administrator.</div>'}
     <div style="display:flex;gap:10px;margin-top:8px">
-      <button class="btn btn-primary btn-full" id="gsel-btn" onclick="doSetGroup()" ${groups.length ? '' : 'disabled'}>✓ Continue with selected group</button>
+      <button class="btn btn-primary btn-full" id="gsel-btn" data-action="doSetGroup" ${groups.length ? '' : 'disabled'}>✓ Continue with selected group</button>
     </div>
-    <button class="btn btn-secondary btn-full" style="margin-top:8px" onclick="skipGroupSelection()">Skip for now</button>
+    <button class="btn btn-secondary btn-full" style="margin-top:8px" data-action="skipGroupSelection">Skip for now</button>
     <div style="margin-top:20px;border-top:1px solid #e5e7eb;padding-top:16px">
       <p style="font-size:.85rem;color:#6b7280;margin-bottom:6px">Don't see your group? Suggest one for admin review.</p>
       <div class="alert alert-warning" style="font-size:.8rem;margin-bottom:8px">⚠️ Do not include any patient, staff, location, or other personally identifiable information in group names.</div>
       <div class="add-new-row">
         <input id="gsel-propose-input" class="input" style="flex:1" type="text" maxlength="100" placeholder="Suggest a group name…">
-        <button class="btn btn-outline btn-sm" onclick="proposeGroupName('group-alerts')">Suggest</button>
+        <button class="btn btn-outline btn-sm" data-action="proposeGroupName" data-arg="group-alerts">Suggest</button>
       </div>
     </div>
   </div>`;
@@ -1478,7 +1625,7 @@ function buildMyOptionsPage(groupName, options) {
       ${opts || '<p style="font-size:.85rem;color:#6b7280">No options available</p>'}
       <div class="add-new-row" style="margin-top:8px">
         <input id="co-new-${field}" class="input" style="flex:1" type="text" maxlength="100" placeholder="Suggest new ${fieldLabels[field].toLowerCase()}…">
-        <button class="btn btn-outline btn-sm" onclick="proposeOptionFromCustomise('${field}')">Suggest</button>
+        <button class="btn btn-outline btn-sm" data-action="proposeOptionFromCustomise" data-arg="${field}">Suggest</button>
       </div>
     </div>`;
   }).join('');
@@ -1496,8 +1643,8 @@ function buildMyOptionsPage(groupName, options) {
     ${sections || '<p style="color:#6b7280">No options available.</p>'}
     <div id="myopts-propose-alerts"></div>
     <div style="display:flex;flex-direction:column;gap:8px;margin-top:16px">
-      <button class="btn btn-primary btn-full" id="myopts-save-btn" onclick="doSaveMyOptions()">✓ Save and continue</button>
-      <button class="btn btn-secondary btn-full" onclick="skipMyOptions()">Use defaults as-is</button>
+      <button class="btn btn-primary btn-full" id="myopts-save-btn" data-action="doSaveMyOptions">✓ Save and continue</button>
+      <button class="btn btn-secondary btn-full" data-action="skipMyOptions">Use defaults as-is</button>
     </div>
   </div>`;
 }
@@ -1549,7 +1696,7 @@ function renderRegister() {
   app().innerHTML = `
   <div class="view">
     <div class="view-header">
-      <button class="btn btn-secondary btn-sm" onclick="renderLogin()">← Back</button>
+      <button class="btn btn-secondary btn-sm" data-action="renderLogin">← Back</button>
       <h1>Register</h1>
     </div>
     <div id="reg-alerts"></div>
@@ -1562,7 +1709,7 @@ function renderRegister() {
         <label for="r-pass">Choose a password</label>
         <div class="pw-field">
           <input id="r-pass" class="input" type="password" autocomplete="new-password" placeholder="Min 8 chars + special character">
-          <button class="pw-toggle" type="button" onclick="togglePw('r-pass',this)">👁️</button>
+          <button class="pw-toggle" type="button" data-action="togglePw" data-arg="r-pass">👁️</button>
         </div>
         <p style="font-size:.8rem;color:#6b7280;margin-top:4px">Min 8 characters, at least 1 special character (!@#$%…)</p>
       </div>
@@ -1578,7 +1725,7 @@ function renderRegister() {
         </label>
       </div>
       ${turnstileHTML}
-      <button class="btn btn-primary btn-full" id="r-btn" onclick="doRegister()"${state.turnstileConfig?.enabled ? ' disabled' : ''}>Register</button>
+      <button class="btn btn-primary btn-full" id="r-btn" data-action="doRegister"${state.turnstileConfig?.enabled ? ' disabled' : ''}>Register</button>
     </div>
     ${renderFooter()}
   </div>`;
@@ -1636,13 +1783,13 @@ function showRegisterPending(username) {
     <div class="username-box">
       <p style="font-size:.9rem;color:#374151;margin-bottom:4px">Your username is:</p>
       <span class="username-text">${esc(username)}</span>
-      <button class="btn btn-outline btn-sm" style="margin-top:10px" onclick="navigator.clipboard?.writeText('${esc(username)}').then(()=>showAlert('Copied!','success'))">📋 Copy</button>
+      <button class="btn btn-outline btn-sm" style="margin-top:10px" data-action="copyWithAlert" data-arg="${esc(username)}">📋 Copy</button>
     </div>
     <div class="alert alert-info" style="margin-top:16px">
       Your registration has been submitted and is awaiting administrator approval. 
       You will be able to log in once your account has been approved.
     </div>
-    <button class="btn btn-primary btn-full" onclick="renderLogin()">Go to Login</button>
+    <button class="btn btn-primary btn-full" data-action="renderLogin">Go to Login</button>
   </div>`;}
 
 function showRegisterSuccess(username) {
@@ -1655,12 +1802,12 @@ function showRegisterSuccess(username) {
     <div class="username-box">
       <p style="font-size:.9rem;color:#374151;margin-bottom:4px">Your username is:</p>
       <span class="username-text">${esc(username)}</span>
-      <button class="btn btn-outline btn-sm" style="margin-top:10px" onclick="navigator.clipboard?.writeText('${esc(username)}').then(()=>showAlert('Copied!','success'))">📋 Copy</button>
+      <button class="btn btn-outline btn-sm" style="margin-top:10px" data-action="copyWithAlert" data-arg="${esc(username)}">📋 Copy</button>
     </div>
     <p style="font-size:.9rem;color:#374151;margin-bottom:20px">
       Use this username every time you log in. It is anonymous — no one can link it to your real identity.
     </p>
-    <button class="btn btn-primary btn-full" onclick="renderLogin()">Go to Login</button>
+    <button class="btn btn-primary btn-full" data-action="renderLogin">Go to Login</button>
   </div>`;
 }
 
@@ -1679,13 +1826,13 @@ function renderAwaitActivation() {
     ${username ? `<div class="username-box">
       <p style="font-size:.9rem;color:#374151;margin-bottom:4px">Your username is:</p>
       <span class="username-text">${esc(username)}</span>
-      <button class="btn btn-outline btn-sm" style="margin-top:10px" onclick="navigator.clipboard?.writeText('${esc(username)}').then(()=>showAlert('Copied!','success','await-alerts'))">📋 Copy</button>
+      <button class="btn btn-outline btn-sm" style="margin-top:10px" data-action="copyWithAlert" data-arg="${esc(username)}" data-arg2="await-alerts">📋 Copy</button>
     </div>` : ''}
     <div id="await-alerts"></div>
     <div class="alert alert-info" style="margin-top:16px">
       Please check back later. Once activated, log in again to access Tasker.
     </div>
-    <button class="btn btn-secondary btn-full" style="margin-top:16px" onclick="doLogout()">🚪 Log Out</button>
+    <button class="btn btn-secondary btn-full" style="margin-top:16px" data-action="doLogout">🚪 Log Out</button>
     ${renderFooter()}
   </div>`;
 }
@@ -1698,7 +1845,7 @@ function renderChangePassword() {
   app().innerHTML = `
   <div class="view">
     <div class="view-header">
-      ${!isForced ? `<button class="btn btn-secondary btn-sm" onclick="${state.user?.isAdmin ? 'renderAdmin' : 'renderHome'}()">← Back</button>` : ''}
+      ${!isForced ? `<button class="btn btn-secondary btn-sm" data-action="${state.user?.isAdmin ? 'renderAdmin' : 'renderHome'}">← Back</button>` : ''}
       <h1>Change Password</h1>
     </div>
     ${isForced ? '<div class="alert alert-warning">⚠️ You must set a new password before continuing.</div>' : ''}
@@ -1709,21 +1856,21 @@ function renderChangePassword() {
         <label for="cp-old">Current password</label>
         <div class="pw-field">
           <input id="cp-old" class="input" type="password" autocomplete="current-password">
-          <button class="pw-toggle" type="button" onclick="togglePw('cp-old',this)">👁️</button>
+          <button class="pw-toggle" type="button" data-action="togglePw" data-arg="cp-old">👁️</button>
         </div>
       </div>` : ''}
       <div class="form-group">
         <label for="cp-new">New password</label>
         <div class="pw-field">
           <input id="cp-new" class="input" type="password" autocomplete="new-password" placeholder="Min 8 chars + special character">
-          <button class="pw-toggle" type="button" onclick="togglePw('cp-new',this)">👁️</button>
+          <button class="pw-toggle" type="button" data-action="togglePw" data-arg="cp-new">👁️</button>
         </div>
       </div>
       <div class="form-group">
         <label for="cp-new2">Confirm new password</label>
         <input id="cp-new2" class="input" type="password" autocomplete="new-password">
       </div>
-      <button class="btn btn-primary btn-full" id="cp-btn" onclick="doChangePassword(${isForced})">Save new password</button>
+      <button class="btn btn-primary btn-full" id="cp-btn" data-action="doChangePassword" data-arg="${isForced}">Save new password</button>
     </div>
     ${renderFooter()}
   </div>`;
@@ -1771,7 +1918,7 @@ function renderHomeHTML() {
   const unreadNoticeCount = countUnreadNotices();
   const noticesPanelHtml = `
     <div class="card" style="margin-top:12px;border-left:4px solid #1a56db">
-      <div style="display:flex;justify-content:space-between;align-items:center;cursor:pointer" onclick="toggleNoticesPanel()">
+      <div style="display:flex;justify-content:space-between;align-items:center;cursor:pointer" data-action="toggleNoticesPanel">
         <div class="card-title" style="color:#1a56db;margin:0">📢 Notices and Feedback${unreadNoticeCount > 0 ? ` <span class="badge badge-warn" style="margin-left:6px">${unreadNoticeCount}</span>` : ''}</div>
         <span style="font-size:.85rem;color:#6b7280">${state.noticesPanelOpen ? '▲' : '▼'}</span>
       </div>
@@ -1783,7 +1930,7 @@ function renderHomeHTML() {
           <p style="font-size:.8rem;color:#b45309;background:#fffbeb;border:1px solid #fcd34d;border-radius:6px;padding:8px 10px;margin-bottom:8px">⚠️ Do <strong>NOT</strong> submit any patient, location, or staff-identifiable work information here. Your suggestion will be sent to an NHS.net email address — please treat it accordingly. If you would like a reply, you are welcome to include your email address.</p>
           <textarea id="feedback-text" class="textarea" placeholder="Type your suggestion or feedback…" style="margin-bottom:8px;min-height:70px"></textarea>
           <div id="feedback-alerts"></div>
-          <button class="btn btn-outline btn-sm" onclick="submitFeedback()">Send</button>
+          <button class="btn btn-outline btn-sm" data-action="submitFeedback">Send</button>
         </div>
       </div>` : ''}
     </div>`;
@@ -1794,12 +1941,12 @@ function renderHomeHTML() {
     <div class="card" style="margin-top:12px;border-left:4px solid #10b981">
       <div style="display:flex;justify-content:space-between;align-items:center">
         <div class="card-title" style="color:#10b981">📬 Messages (${unread.length})</div>
-        <button class="btn btn-outline btn-sm" onclick="markAllMessagesRead()">Mark all read</button>
+        <button class="btn btn-outline btn-sm" data-action="markAllMessagesRead">Mark all read</button>
       </div>
       ${unread.map(m => `
       <div style="font-size:.9rem;color:#374151;margin-bottom:8px;border-bottom:1px solid #f3f4f6;padding-bottom:8px;display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
         <span>${esc(m.message)}</span>
-        <button class="btn btn-outline btn-sm" style="flex-shrink:0" onclick="markMessageRead(${m.id})">✓</button>
+        <button class="btn btn-outline btn-sm" style="flex-shrink:0" data-action="markMessageRead" data-arg="${m.id}">✓</button>
       </div>`).join('')}
     </div>` : '';
 
@@ -1824,11 +1971,11 @@ function renderHomeHTML() {
       <p style="font-size:.85rem;color:#6b7280;margin-bottom:4px">Started: ${formatTimeShort(t.start_time)}</p>
       ${t.interruptions?.length ? `<p style="font-size:.85rem;color:#d97706;margin-bottom:4px">⚠️ ${t.interruptions.length} interruption(s) recorded</p>` : ''}
       <div style="display:flex;gap:8px;margin-top:12px">
-        <button class="btn btn-primary" style="flex:1" onclick="renderTaskActive()">▶ Resume</button>
-        <button class="btn btn-secondary" style="flex:1" onclick="discardActiveTask()">✕ Abandon</button>
+        <button class="btn btn-primary" style="flex:1" data-action="renderTaskActive">▶ Resume</button>
+        <button class="btn btn-secondary" style="flex:1" data-action="discardActiveTask">✕ Abandon</button>
       </div>
     </div>` : `
-    <button class="btn btn-primary btn-full" style="font-size:1.1rem;padding:18px;margin-top:12px" onclick="renderTaskStart()">
+    <button class="btn btn-primary btn-full" style="font-size:1.1rem;padding:18px;margin-top:12px" data-action="renderTaskStart">
       ▶ Log Task
     </button>`}
     ${statsHTML}
@@ -1839,12 +1986,12 @@ function renderHomeHTML() {
       ${state.recentHandledCount !== null ? `<p style="font-size:.85rem;color:#6b7280;margin-bottom:8px">Tasks handled (last 7 days): <strong>${state.recentHandledCount}</strong></p>` : ''}
       <div style="display:flex;gap:8px;align-items:center">
         <input id="pending-count-input" class="input" type="number" min="0" max="9999" placeholder="Enter count…" style="flex:1">
-        <button class="btn btn-primary" onclick="doLogPendingCount()">Log</button>
+        <button class="btn btn-primary" data-action="doLogPendingCount">Log</button>
       </div>
       <div id="pending-count-alerts" style="margin-top:8px"></div>
       <div style="display:flex;gap:8px;margin-top:12px">
-        <button class="btn btn-sm ${state.pendingGraphDays === 7 ? 'btn-primary' : 'btn-secondary'}" onclick="togglePendingGraph(7)">📈 7 days</button>
-        <button class="btn btn-sm ${state.pendingGraphDays === 30 ? 'btn-primary' : 'btn-secondary'}" onclick="togglePendingGraph(30)">📈 30 days</button>
+        <button class="btn btn-sm ${state.pendingGraphDays === 7 ? 'btn-primary' : 'btn-secondary'}" data-action="togglePendingGraph" data-arg="7">📈 7 days</button>
+        <button class="btn btn-sm ${state.pendingGraphDays === 30 ? 'btn-primary' : 'btn-secondary'}" data-action="togglePendingGraph" data-arg="30">📈 30 days</button>
       </div>
       ${state.pendingGraphDays ? `<div class="chart-container" style="height:180px;margin-top:12px"><canvas id="chart-pending"></canvas></div>` : ''}
     </div>
@@ -2014,17 +2161,17 @@ function renderSettings() {
       <div class="divider"></div>
       <div style="margin-bottom:14px">
         <p style="font-size:.85rem;color:#374151;margin-bottom:6px">👥 My User Group: <strong>${groupName ? esc(groupName) : 'Not set'}</strong></p>
-        <button class="btn btn-outline btn-full" style="margin-bottom:6px" onclick="setGroupFromSettings()">${groupName ? '🔄 Change Group' : '👥 Select Group'}</button>
-        ${groupName ? `<button class="btn btn-outline btn-full" onclick="openMyOptionsModal()">⚙️ Customise My Options</button>` : ''}
+        <button class="btn btn-outline btn-full" style="margin-bottom:6px" data-action="setGroupFromSettings">${groupName ? '🔄 Change Group' : '👥 Select Group'}</button>
+        ${groupName ? `<button class="btn btn-outline btn-full" data-action="openMyOptionsModal">⚙️ Customise My Options</button>` : ''}
       </div>
       <div class="divider"></div>
-      <button class="btn btn-outline btn-full" style="margin-bottom:10px" onclick="renderChangePassword()">🔑 Change Password</button>
-      ${showInvite ? `<button class="btn btn-outline btn-full" style="margin-bottom:10px" id="invite-btn" onclick="doInviteUser()">👤 Invite a User</button>` : ''}
-      <button class="btn btn-secondary btn-full" style="margin-bottom:10px" onclick="window.location.href='/policy'">📄 Data &amp; Use Policy</button>
-      <button class="btn btn-secondary btn-full" style="margin-bottom:10px" onclick="window.location.href='/help'">❓ Help &amp; User Guide</button>
-      <button class="btn btn-danger btn-full" style="margin-bottom:10px" onclick="doLogout()">🚪 Log Out</button>
+      <button class="btn btn-outline btn-full" style="margin-bottom:10px" data-action="renderChangePassword">🔑 Change Password</button>
+      ${showInvite ? `<button class="btn btn-outline btn-full" style="margin-bottom:10px" id="invite-btn" data-action="doInviteUser">👤 Invite a User</button>` : ''}
+      <button class="btn btn-secondary btn-full" style="margin-bottom:10px" data-action="navigate" data-arg="/policy">📄 Data &amp; Use Policy</button>
+      <button class="btn btn-secondary btn-full" style="margin-bottom:10px" data-action="navigate" data-arg="/help">❓ Help &amp; User Guide</button>
+      <button class="btn btn-danger btn-full" style="margin-bottom:10px" data-action="doLogout">🚪 Log Out</button>
       <div class="divider"></div>
-      <button class="btn btn-danger btn-full" onclick="renderDeleteAccount()">🗑️ Delete My Account</button>
+      <button class="btn btn-danger btn-full" data-action="renderDeleteAccount">🗑️ Delete My Account</button>
     </div>
   ${renderFooter()}
   </div>
@@ -2097,7 +2244,7 @@ function renderDeleteAccount() {
   app().innerHTML = `
   <div class="view">
     <div class="view-header">
-      <button class="btn btn-secondary btn-sm" onclick="renderSettings()">← Back</button>
+      <button class="btn btn-secondary btn-sm" data-action="renderSettings">← Back</button>
       <h1>Delete Account</h1>
     </div>
     <div class="alert alert-warning" style="margin-bottom:16px">⚠️ <strong>This cannot be undone.</strong> All your tasks and data will be permanently deleted.</div>
@@ -2111,10 +2258,10 @@ function renderDeleteAccount() {
         <label for="da-pass">Enter your password</label>
         <div class="pw-field">
           <input id="da-pass" class="input" type="password" autocomplete="current-password">
-          <button class="pw-toggle" type="button" onclick="togglePw('da-pass',this)">👁️</button>
+          <button class="pw-toggle" type="button" data-action="togglePw" data-arg="da-pass">👁️</button>
         </div>
       </div>
-      <button class="btn btn-danger btn-full" id="da-btn" onclick="doDeleteAccount()">🗑️ Permanently Delete My Account</button>
+      <button class="btn btn-danger btn-full" id="da-btn" data-action="doDeleteAccount">🗑️ Permanently Delete My Account</button>
     </div>
   </div>`;
   const daEnter = e => { if (e.key === 'Enter') doDeleteAccount(); };
@@ -2152,15 +2299,15 @@ function renderTaskStart() {
   app().innerHTML = `
   <div class="view">
     <div class="view-header">
-      <button class="btn btn-secondary btn-sm" onclick="renderHome()">← Back</button>
+      <button class="btn btn-secondary btn-sm" data-action="renderHome">← Back</button>
       <h1>Log Task</h1>
     </div>
     <div id="ts-alerts"></div>
     <div class="form-group">
       <label>Task type</label>
       <div class="toggle-group">
-        <button class="toggle-btn" id="tb-personal" onclick="setDuty(false)">👤 Personal</button>
-        <button class="toggle-btn" id="tb-duty" onclick="setDuty(true)">🏥 My Group</button>
+        <button class="toggle-btn" id="tb-personal" data-action="setDuty" data-arg="false">👤 Personal</button>
+        <button class="toggle-btn" id="tb-duty" data-action="setDuty" data-arg="true">🏥 My Group</button>
       </div>
     </div>
     ${buildDropdownGroup('category','Task From', state.dropdowns.category, 'ts-cat')}
@@ -2172,9 +2319,9 @@ function renderTaskStart() {
       <input id="ts-assigned" class="input" type="date" value="${today}">
     </div>
     <div class="date-preset-group task-start-date-actions">
-      <button class="btn btn-sm task-date-btn task-date-btn--previous" aria-label="${esc(previousAria)}" ${hasPreviousAssigned ? '' : 'disabled title="No previous task date available"'} onclick="startTaskWithDatePreset('previous')">🟢 Prev (${esc(previousLabel)})</button>
-      <button class="btn btn-sm task-date-btn task-date-btn--yesterday" onclick="startTaskWithDatePreset('yesterday')">🟡 Yesterday</button>
-      <button class="btn btn-sm btn-primary task-date-btn" onclick="startTaskWithDatePreset('selected')">▶ Selected Date</button>
+      <button class="btn btn-sm task-date-btn task-date-btn--previous" aria-label="${esc(previousAria)}" ${hasPreviousAssigned ? '' : 'disabled title="No previous task date available"'} data-action="startTaskWithDatePreset" data-arg="previous">🟢 Prev (${esc(previousLabel)})</button>
+      <button class="btn btn-sm task-date-btn task-date-btn--yesterday" data-action="startTaskWithDatePreset" data-arg="yesterday">🟡 Yesterday</button>
+      <button class="btn btn-sm btn-primary task-date-btn" data-action="startTaskWithDatePreset" data-arg="selected">▶ Selected Date</button>
     </div>
   </div>`;
 }
@@ -2194,7 +2341,7 @@ function buildQuickPickRow(field, containerId, values, cols, selectedValue = nul
   const colClass = cols === 3 ? ' quick-pick-grid--3col' : '';
   const max = 9;
   const items = values.slice(0, max).map((v, idx) =>
-    `<button type="button" class="quick-pick-btn${selectedValue === v ? ' qp-selected' : ''}${idx === 0 ? ' qp-recent' : ''}" data-container="${safeId(containerId)}" data-field="${safeId(field)}" data-value="${esc(v)}" onclick="handleQuickPick(this)">${esc(v)}</button>`
+    `<button type="button" class="quick-pick-btn${selectedValue === v ? ' qp-selected' : ''}${idx === 0 ? ' qp-recent' : ''}" data-container="${safeId(containerId)}" data-field="${safeId(field)}" data-value="${esc(v)}" data-action="handleQuickPick">${esc(v)}</button>`
   ).join('');
   return `<div class="quick-pick-grid${colClass}">${items}</div>`;
 }
@@ -2262,7 +2409,7 @@ function buildRunningOutcomeGroup(options, current) {
   const picks = (state.commonFields.outcome || []).slice(0, 9);
   const picksHtml = picks.length ? `
   <div id="tr-outcome-picks" class="quick-pick-grid quick-pick-grid--3col" style="margin-bottom:8px">
-    ${picks.map(v => `<button type="button" class="quick-pick-btn${displayValue === v ? ' qp-selected' : ''}" data-value="${esc(v)}" onclick="handleRunningOutcomePick(this)">${esc(v)}</button>`).join('')}
+    ${picks.map(v => `<button type="button" class="quick-pick-btn${displayValue === v ? ' qp-selected' : ''}" data-value="${esc(v)}" data-action="handleRunningOutcomePick">${esc(v)}</button>`).join('')}
   </div>` : '';
   return `
   <div class="form-group" style="margin-top:4px">
@@ -2271,15 +2418,15 @@ function buildRunningOutcomeGroup(options, current) {
     <div class="combo-wrap" id="${sid}">
       <button type="button" id="${sid}-btn"
               class="combo-btn${displayValue ? '' : ' placeholder'}"
-              onclick="openCombo('${sid}','outcome',false)"
+              data-action="openCombo" data-arg="${sid}" data-arg2="outcome" data-arg3="false"
               aria-haspopup="listbox" aria-expanded="false">
         ${displayValue ? esc(displayValue) : '— Select Outcome —'}
       </button>
       <div class="combo-panel" id="${sid}-panel" role="listbox">
         <input class="combo-search" id="${sid}-search" type="text" autocomplete="off"
                placeholder="Search…"
-               oninput="filterCombo('${sid}','outcome',false)"
-               onkeydown="comboKeydown(event,'${sid}','outcome',false)">
+               data-action-input="filterCombo" data-arg="${sid}" data-arg2="outcome" data-arg3="false"
+               data-action-keydown="comboKeydown" data-arg="${sid}" data-arg2="outcome" data-arg3="false">
         <div class="combo-opts" id="${sid}-opts"></div>
       </div>
       <input type="hidden" id="${sid}-sel" value="${esc(displayValue)}">
@@ -2374,9 +2521,9 @@ function renderTaskActive() {
       ${t.interruptions?.length ? ` · ${t.interruptions.length} interruption(s)` : ''}
     </div>
     ${buildRunningOutcomeGroup(state.dropdowns.outcome, t.outcome || null)}
-    <button class="btn btn-secondary btn-full" style="margin-bottom:10px" onclick="showInterruptModal()">⏸️ Interrupted</button>
-    <button class="btn btn-primary btn-full" style="margin-bottom:10px" onclick="renderTaskEnd()">⏹️ End Task</button>
-    <button class="btn btn-danger btn-full" onclick="cancelActiveTask()">✕ Cancel Task</button>
+    <button class="btn btn-secondary btn-full" style="margin-bottom:10px" data-action="showInterruptModal">⏸️ Interrupted</button>
+    <button class="btn btn-primary btn-full" style="margin-bottom:10px" data-action="renderTaskEnd">⏹️ End Task</button>
+    <button class="btn btn-danger btn-full" data-action="cancelActiveTask">✕ Cancel Task</button>
   </div>`;
 
   // Start live timer
@@ -2436,13 +2583,13 @@ function showInterruptModal() {
   <div class="modal-sheet">
     <div class="modal-title">⏸️ Interrupted</div>
     <p style="font-size:.9rem;color:#555;margin-bottom:20px">What would you like to do?</p>
-    <button class="btn btn-primary btn-full" style="margin-bottom:10px" onclick="resumeTask()">
+    <button class="btn btn-primary btn-full" style="margin-bottom:10px" data-action="resumeTask">
       ▶ Resume — continue from here
     </button>
-    <button class="btn btn-secondary btn-full" style="margin-bottom:10px" onclick="showManualInterruptForm()">
+    <button class="btn btn-secondary btn-full" style="margin-bottom:10px" data-action="showManualInterruptForm">
       📝 Enter interruption times manually
     </button>
-    <button class="btn btn-danger btn-full" onclick="discardFromModal()">
+    <button class="btn btn-danger btn-full" data-action="discardFromModal">
       🗑 Discard this task
     </button>
   </div>`;
@@ -2484,8 +2631,8 @@ function showManualInterruptForm() {
     <label>Interruption ended</label>
     <input id="intr-end" class="input" type="datetime-local" value="${formatDatetimeLocal(new Date().toISOString())}">
   </div>
-  <button class="btn btn-primary btn-full" onclick="saveInterruption()">Save &amp; Resume</button>
-  <button class="btn btn-secondary btn-full" style="margin-top:8px" onclick="resumeTask(false)">Cancel — resume without recording</button>`;
+  <button class="btn btn-primary btn-full" data-action="saveInterruption">Save &amp; Resume</button>
+  <button class="btn btn-secondary btn-full" style="margin-top:8px" data-action="resumeTask" data-arg="false">Cancel — resume without recording</button>`;
 }
 
 async function saveInterruption() {
@@ -2556,7 +2703,7 @@ function renderTaskReview(t, isEdit) {
       <div style="font-weight:600;font-size:.85rem">Interruption ${idx+1}</div>
       <div style="font-size:.8rem;color:#555">${formatTimeShort(i.start)} — ${formatTimeShort(i.end)}</div>
     </div>
-    <button class="btn btn-danger btn-sm" onclick="removeInterruption(${idx})">✕</button>
+    <button class="btn btn-danger btn-sm" data-action="removeInterruption" data-arg="${idx}">✕</button>
   </div>`).join('') : '<p style="font-size:.85rem;color:#6b7280">No interruptions recorded.</p>';
 
   const taskSummaryHtml = !isEdit ? `
@@ -2568,8 +2715,8 @@ function renderTaskReview(t, isEdit) {
       <div class="form-group">
         <label>Task type</label>
         <div class="toggle-group">
-          <button class="toggle-btn ${t.is_duty ? 'active' : ''}" id="te-duty" onclick="setEditDuty(true)">🏥 My Group</button>
-          <button class="toggle-btn ${!t.is_duty ? 'active' : ''}" id="te-personal" onclick="setEditDuty(false)">👤 Personal</button>
+          <button class="toggle-btn ${t.is_duty ? 'active' : ''}" id="te-duty" data-action="setEditDuty" data-arg="true">🏥 My Group</button>
+          <button class="toggle-btn ${!t.is_duty ? 'active' : ''}" id="te-personal" data-action="setEditDuty" data-arg="false">👤 Personal</button>
         </div>
       </div>
       ${buildReviewDropdown('category', 'Task From', state.dropdowns.category, t.category)}
@@ -2594,7 +2741,7 @@ function renderTaskReview(t, isEdit) {
           </div>
           <div id="te-flag-new" style="margin-top:8px;display:flex;gap:6px">
             <input id="te-flag-new-input" class="input" type="text" placeholder="Suggest a new flag…" style="flex:1">
-            <button class="btn btn-outline btn-sm" onclick="suggestNewFlag()">Send</button>
+            <button class="btn btn-outline btn-sm" data-action="suggestNewFlag">Send</button>
           </div>
         </details>
       </div>` : '';
@@ -2602,7 +2749,7 @@ function renderTaskReview(t, isEdit) {
   app().innerHTML = `
   <div class="view">
     <div class="view-header">
-      <button class="btn btn-secondary btn-sm" onclick="${isEdit ? 'renderAnalyticsSession()' : 'renderTaskActive()'}">← Back</button>
+      <button class="btn btn-secondary btn-sm" data-action="${isEdit ? 'renderAnalyticsSession' : 'renderTaskActive'}">← Back</button>
       <h1>${isEdit ? '✏️ Edit Task' : '⏹️ End Task'}</h1>
     </div>
     <div id="te-alerts"></div>
@@ -2629,11 +2776,11 @@ function renderTaskReview(t, isEdit) {
     </div>
     <div style="display:flex;gap:10px;margin-bottom:80px">
       ${isEdit ? `
-        <button class="btn btn-primary" style="flex:1" onclick="submitTaskReview(${t.id}, true)">💾 Save changes</button>
+        <button class="btn btn-primary" style="flex:1" data-action="submitTaskReview" data-arg="${t.id}" data-arg2="true">💾 Save changes</button>
       ` : `
-        <button class="btn btn-primary" style="flex:1" onclick="submitTaskReview(${t.id}, false, 'start')">➕ Submit &amp; add another</button>
-        <button class="btn btn-secondary" style="flex:1" onclick="submitTaskReview(${t.id}, false, 'analytics')">📊 Submit &amp; analytics</button>
-        <button class="btn btn-danger btn-sm" onclick="discardFromEnd(${t.id})">🗑</button>
+        <button class="btn btn-primary" style="flex:1" data-action="submitTaskReview" data-arg="${t.id}" data-arg2="false" data-arg3="start">➕ Submit &amp; add another</button>
+        <button class="btn btn-secondary" style="flex:1" data-action="submitTaskReview" data-arg="${t.id}" data-arg2="false" data-arg3="analytics">📊 Submit &amp; analytics</button>
+        <button class="btn btn-danger btn-sm" data-action="discardFromEnd" data-arg="${t.id}">🗑</button>
       `}
     </div>
   </div>`;
@@ -2655,22 +2802,22 @@ function buildReviewOutcomeGroup(options, current) {
     <div class="combo-wrap" id="te-outcome">
       <button type="button" id="te-outcome-btn"
               class="combo-btn${displayValue ? '' : ' placeholder'}"
-              onclick="openCombo('te-outcome','outcome',true)"
+              data-action="openCombo" data-arg="te-outcome" data-arg2="outcome" data-arg3="true"
               aria-haspopup="listbox" aria-expanded="false">
         ${displayValue ? esc(displayValue) : '— Select Outcome —'}
       </button>
       <div class="combo-panel" id="te-outcome-panel" role="listbox">
         <input class="combo-search" id="te-outcome-search" type="text" autocomplete="off"
                placeholder="Search…"
-               oninput="filterCombo('te-outcome','outcome',true)"
-               onkeydown="comboKeydown(event,'te-outcome','outcome',true)">
+               data-action-input="filterCombo" data-arg="te-outcome" data-arg2="outcome" data-arg3="true"
+               data-action-keydown="comboKeydown" data-arg="te-outcome" data-arg2="outcome" data-arg3="true">
         <div class="combo-opts" id="te-outcome-opts"></div>
       </div>
       <input type="hidden" id="te-outcome-sel" value="${esc(displayValue)}">
     </div>
     <div id="te-outcome-new" style="display:none" class="add-new-row">
       <input id="te-outcome-new-input" class="input" type="text" placeholder="Type new outcome…">
-      <button class="btn btn-outline btn-sm" onclick="submitNewOutcomeEnd()">Add</button>
+      <button class="btn btn-outline btn-sm" data-action="submitNewOutcomeEnd">Add</button>
     </div>
   </div>`;
 }
@@ -2912,24 +3059,24 @@ function renderAnalyticsContent(data, mode, pendingLog) {
   const qp = state.analyticsQuickPeriod;
   const timingBar = `
   <div class="date-preset-group" style="margin-bottom:14px">
-    <button class="btn btn-sm ${qp === 'today' ? 'btn-primary' : 'btn-secondary'}" onclick="setAnalyticsQuickFilter('today')">Today</button>
-    <button class="btn btn-sm ${qp === '7d' ? 'btn-primary' : 'btn-secondary'}" onclick="setAnalyticsQuickFilter('7d')">Last 7 days</button>
-    <button class="btn btn-sm ${qp === '30d' ? 'btn-primary' : 'btn-secondary'}" onclick="setAnalyticsQuickFilter('30d')">Last 30 days</button>
+    <button class="btn btn-sm ${qp === 'today' ? 'btn-primary' : 'btn-secondary'}" data-action="setAnalyticsQuickFilter" data-arg="today">Today</button>
+    <button class="btn btn-sm ${qp === '7d' ? 'btn-primary' : 'btn-secondary'}" data-action="setAnalyticsQuickFilter" data-arg="7d">Last 7 days</button>
+    <button class="btn btn-sm ${qp === '30d' ? 'btn-primary' : 'btn-secondary'}" data-action="setAnalyticsQuickFilter" data-arg="30d">Last 30 days</button>
   </div>`;
 
   const filtersExpanded = state.analyticsFiltersExpanded;
   const filterBar = `
   <div class="card filter-card" style="margin-bottom:14px">
-    <div class="card-title" style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;margin-bottom:0" onclick="toggleAnalyticsFilters()">
+    <div class="card-title" style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;margin-bottom:0" data-action="toggleAnalyticsFilters">
       <span>🔍 Advanced Filters</span>
       <button type="button" class="btn btn-outline btn-sm" style="pointer-events:none">${filtersExpanded ? '▲ Collapse' : '▼ Expand'}</button>
     </div>
     ${filtersExpanded ? `
     <div style="margin-top:12px">
     <div class="date-preset-group">
-      <button class="btn btn-sm btn-secondary" onclick="setDatePreset(7)">7 days</button>
-      <button class="btn btn-sm btn-secondary" onclick="setDatePreset(14)">14 days</button>
-      <button class="btn btn-sm btn-secondary" onclick="setDatePreset(30)">30 days</button>
+      <button class="btn btn-sm btn-secondary" data-action="setDatePreset" data-arg="7">7 days</button>
+      <button class="btn btn-sm btn-secondary" data-action="setDatePreset" data-arg="14">14 days</button>
+      <button class="btn btn-sm btn-secondary" data-action="setDatePreset" data-arg="30">30 days</button>
     </div>
     <div class="filter-bar" style="margin-bottom:0">
       <div class="form-group" style="margin-bottom:0">
@@ -2969,7 +3116,7 @@ function renderAnalyticsContent(data, mode, pendingLog) {
           ${state.dropdowns.outcome.map(o => `<option value="${esc(o)}" ${state.analyticsFilterOutcome === o ? 'selected' : ''}>${esc(o)}</option>`).join('')}
         </select>
       </div>
-      <button class="btn btn-primary btn-full" onclick="applyHistoryFilters()">Apply Filters</button>
+      <button class="btn btn-primary btn-full" data-action="applyHistoryFilters">Apply Filters</button>
     </div>
     </div>` : ''}
   </div>`;
@@ -2997,8 +3144,8 @@ function renderAnalyticsContent(data, mode, pendingLog) {
           ${t.interruptions?.length ? `<div class="task-card-meta">⚠️ ${t.interruptions.length} interruption(s)</div>` : ''}
           ${t.flag_labels?.length ? `<div class="task-card-meta" style="color:#dc2626">🚩 ${t.flag_labels.map(f => esc(f)).join(', ')}</div>` : ''}
           <div class="task-card-actions">
-            <button class="btn btn-outline btn-sm" onclick="loadAndEditTask(${t.id})">✏️ Edit</button>
-            <button class="btn btn-danger btn-sm" onclick="deleteTask(${t.id})">🗑️ Delete</button>
+            <button class="btn btn-outline btn-sm" data-action="loadAndEditTask" data-arg="${t.id}">✏️ Edit</button>
+            <button class="btn btn-danger btn-sm" data-action="deleteTask" data-arg="${t.id}">🗑️ Delete</button>
           </div>
         </div>`;
       }).join('')}
@@ -3152,15 +3299,15 @@ function renderAnalyticsContent(data, mode, pendingLog) {
     </div>` : ''}
     ` : '<div class="card"><p style="color:#6b7280;text-align:center;padding:20px">No completed tasks yet.</p></div>'}
     <div style="display:flex;gap:10px;margin-bottom:12px;flex-wrap:wrap">
-      <button class="btn btn-secondary" style="flex:1" onclick="downloadExport()">⬇️ Download Log (.xlsx)</button>
-      <button class="btn btn-secondary" style="flex:1" onclick="exportAnalyticsReport()">📊 Download Analytics (.xlsx)</button>
+      <button class="btn btn-secondary" style="flex:1" data-action="downloadExport">⬇️ Download Log (.xlsx)</button>
+      <button class="btn btn-secondary" style="flex:1" data-action="exportAnalyticsReport">📊 Download Analytics (.xlsx)</button>
     </div>
     <div style="display:flex;align-items:center;justify-content:space-between;margin:20px 0 10px">
       <div class="section-heading" style="margin:0">Tasks</div>
-      <button class="btn btn-outline btn-sm" onclick="toggleAnalyticsTasks()">${state.analyticsTasksExpanded ? '▲ Collapse' : '▼ Expand'}</button>
+      <button class="btn btn-outline btn-sm" data-action="toggleAnalyticsTasks">${state.analyticsTasksExpanded ? '▲ Collapse' : '▼ Expand'}</button>
     </div>
     ${state.analyticsTasksExpanded ? `
-      ${tasks.length > 0 ? `<div style="display:flex;justify-content:flex-end;margin-bottom:8px"><button class="btn btn-danger btn-sm" onclick="clearAllTasks()">🗑️ Clear All</button></div>` : ''}
+      ${tasks.length > 0 ? `<div style="display:flex;justify-content:flex-end;margin-bottom:8px"><button class="btn btn-danger btn-sm" data-action="clearAllTasks">🗑️ Clear All</button></div>` : ''}
       ${groupedTaskCards}
     ` : ''}
   ${renderFooter()}
@@ -3566,9 +3713,9 @@ function renderAdminContent(stats, users, dropOpts, settings, pendingUsers, awai
         ${u.is_locked ? '<span class="badge badge-danger" style="margin-left:6px">🔒 Locked</span>' : ''}
       </div>
       <div style="display:flex;gap:6px;flex-wrap:wrap">
-        ${u.is_locked ? `<button class="btn btn-outline btn-sm" onclick="unlockUser(${u.id}, '${esc(u.username)}')">🔓 Unlock</button>` : ''}
-        <button class="btn btn-outline btn-sm" onclick="resetUserPw(${u.id}, '${esc(u.username)}')">🔑 Reset</button>
-        <button class="btn btn-danger btn-sm" onclick="deleteUser(${u.id}, '${esc(u.username)}')">🗑</button>
+        ${u.is_locked ? `<button class="btn btn-outline btn-sm" data-action="unlockUser" data-arg="${u.id}" data-arg2="${esc(u.username)}">🔓 Unlock</button>` : ''}
+        <button class="btn btn-outline btn-sm" data-action="resetUserPw" data-arg="${u.id}" data-arg2="${esc(u.username)}">🔑 Reset</button>
+        <button class="btn btn-danger btn-sm" data-action="deleteUser" data-arg="${u.id}" data-arg2="${esc(u.username)}">🗑</button>
       </div>
     </div>
   </div>`).join('');
@@ -3584,8 +3731,8 @@ function renderAdminContent(stats, users, dropOpts, settings, pendingUsers, awai
     <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid #f3f4f6">
       <span style="font-size:.9rem">${esc(o.value)}</span>
       <div style="display:flex;gap:4px">
-        <button class="btn btn-outline btn-sm" onclick="renameDropdown(${o.id}, '${esc(o.value)}')">✏️</button>
-        <button class="btn btn-danger btn-sm" onclick="deleteDropdown(${o.id})">✕</button>
+        <button class="btn btn-outline btn-sm" data-action="renameDropdown" data-arg="${o.id}" data-arg2="${esc(o.value)}">✏️</button>
+        <button class="btn btn-danger btn-sm" data-action="deleteDropdown" data-arg="${o.id}">✕</button>
       </div>
     </div>`).join('');
     return `
@@ -3594,7 +3741,7 @@ function renderAdminContent(stats, users, dropOpts, settings, pendingUsers, awai
       ${items || '<p style="font-size:.85rem;color:#6b7280">No options.</p>'}
       <div class="add-new-row" style="margin-top:10px">
         <input id="add-${field}" class="input" type="text" placeholder="New ${field}…">
-        <button class="btn btn-outline btn-sm" onclick="addDropdown('${field}')">Add</button>
+        <button class="btn btn-outline btn-sm" data-action="addDropdown" data-arg="${field}">Add</button>
       </div>
     </div>`;
   }).join('');
@@ -3608,7 +3755,7 @@ function renderAdminContent(stats, users, dropOpts, settings, pendingUsers, awai
         <span style="font-size:.75rem;color:#6b7280;display:block;margin-top:2px">Submitted ${new Date(p.created_at+'Z').toLocaleString()}</span>
         ${p.review_token ? `<a href="/suggest/review?token=${p.review_token}" target="_blank" class="btn btn-outline btn-sm" style="margin-top:6px;display:inline-block">🔗 Review suggestion</a>` : ''}
       </div>
-      <button class="btn btn-outline btn-sm" onclick="dismissProposal(${p.id})">✓ Done</button>
+      <button class="btn btn-outline btn-sm" data-action="dismissProposal" data-arg="${p.id}">✓ Done</button>
     </div>
   </div>`).join('') : '<p style="font-size:.85rem;color:#6b7280">No pending email proposals.</p>';
 
@@ -3617,8 +3764,8 @@ function renderAdminContent(stats, users, dropOpts, settings, pendingUsers, awai
   <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid #f3f4f6">
     <span style="font-size:.9rem">${esc(f.value)}</span>
     <div style="display:flex;gap:4px">
-      <button class="btn btn-outline btn-sm" onclick="renameFlagOption(${f.id})">✏️</button>
-      <button class="btn btn-danger btn-sm" onclick="deleteFlagOption(${f.id})">✕</button>
+      <button class="btn btn-outline btn-sm" data-action="renameFlagOption" data-arg="${f.id}">✏️</button>
+      <button class="btn btn-danger btn-sm" data-action="deleteFlagOption" data-arg="${f.id}">✕</button>
     </div>
   </div>`).join('');
 
@@ -3631,9 +3778,9 @@ function renderAdminContent(stats, users, dropOpts, settings, pendingUsers, awai
         <span style="font-size:.75rem;color:#6b7280">${n.active ? '✅ Active' : '⏸️ Inactive'} · ${new Date(n.created_at+'Z').toLocaleDateString()}</span>
       </div>
       <div style="display:flex;gap:4px;flex-shrink:0">
-        <button class="btn btn-outline btn-sm" onclick="editNotice(${n.id})">✏️</button>
-        <button class="btn ${n.active ? 'btn-secondary' : 'btn-primary'} btn-sm" onclick="toggleNotice(${n.id}, ${n.active})">${n.active ? 'Deactivate' : 'Activate'}</button>
-        <button class="btn btn-danger btn-sm" onclick="deleteNotice(${n.id})">✕</button>
+        <button class="btn btn-outline btn-sm" data-action="editNotice" data-arg="${n.id}">✏️</button>
+        <button class="btn ${n.active ? 'btn-secondary' : 'btn-primary'} btn-sm" data-action="toggleNotice" data-arg="${n.id}" data-arg2="${n.active}">${n.active ? 'Deactivate' : 'Activate'}</button>
+        <button class="btn btn-danger btn-sm" data-action="deleteNotice" data-arg="${n.id}">✕</button>
       </div>
     </div>
   </div>`).join('');
@@ -3652,8 +3799,8 @@ function renderAdminContent(stats, users, dropOpts, settings, pendingUsers, awai
         <span style="font-size:.75rem;color:#6b7280;display:block;margin-top:2px">Registered ${new Date(u.created_at+'Z').toLocaleDateString()}</span>
       </div>
       <div style="display:flex;gap:6px">
-        <button class="btn btn-primary btn-sm" onclick="approvePendingUser(${u.id})">✓ Approve</button>
-        <button class="btn btn-danger btn-sm" onclick="deleteUser(${u.id}, '${esc(u.username)}')">✗ Reject</button>
+        <button class="btn btn-primary btn-sm" data-action="approvePendingUser" data-arg="${u.id}">✓ Approve</button>
+        <button class="btn btn-danger btn-sm" data-action="deleteUser" data-arg="${u.id}" data-arg2="${esc(u.username)}">✗ Reject</button>
       </div>
     </div>
   </div>`).join('') : '<p style="font-size:.85rem;color:#6b7280">No pending users.</p>';
@@ -3667,8 +3814,8 @@ function renderAdminContent(stats, users, dropOpts, settings, pendingUsers, awai
         <span style="font-size:.75rem;color:#6b7280;display:block;margin-top:2px">Invited ${new Date(u.created_at+'Z').toLocaleDateString()}</span>
       </div>
       <div style="display:flex;gap:6px">
-        <button class="btn btn-primary btn-sm" onclick="activateUser(${u.id}, '${esc(u.username)}')">✓ Activate</button>
-        <button class="btn btn-danger btn-sm" onclick="deleteUser(${u.id}, '${esc(u.username)}')">✗ Reject</button>
+        <button class="btn btn-primary btn-sm" data-action="activateUser" data-arg="${u.id}" data-arg2="${esc(u.username)}">✓ Activate</button>
+        <button class="btn btn-danger btn-sm" data-action="deleteUser" data-arg="${u.id}" data-arg2="${esc(u.username)}">✗ Reject</button>
       </div>
     </div>
   </div>`).join('') : '<p style="font-size:.85rem;color:#6b7280">No users awaiting activation.</p>';
@@ -3681,9 +3828,9 @@ function renderAdminContent(stats, users, dropOpts, settings, pendingUsers, awai
         <span style="font-size:.75rem;color:#6b7280;margin-left:6px">${g.user_count} user${g.user_count !== 1 ? 's' : ''}</span>
       </div>
       <div style="display:flex;gap:6px;flex-wrap:wrap">
-        <button class="btn btn-outline btn-sm" onclick="showGroupDropdownModal(${g.id}, '${esc(g.name)}')">⚙️ Options</button>
-        <button class="btn btn-outline btn-sm" onclick="renameUserGroup(${g.id}, '${esc(g.name)}')">✏️ Rename</button>
-        <button class="btn btn-danger btn-sm" onclick="deleteUserGroup(${g.id}, '${esc(g.name)}')">🗑</button>
+        <button class="btn btn-outline btn-sm" data-action="showGroupDropdownModal" data-arg="${g.id}" data-arg2="${esc(g.name)}">⚙️ Options</button>
+        <button class="btn btn-outline btn-sm" data-action="renameUserGroup" data-arg="${g.id}" data-arg2="${esc(g.name)}">✏️ Rename</button>
+        <button class="btn btn-danger btn-sm" data-action="deleteUserGroup" data-arg="${g.id}" data-arg2="${esc(g.name)}">🗑</button>
       </div>
     </div>
   </div>`).join('');
@@ -3713,7 +3860,7 @@ function renderAdminContent(stats, users, dropOpts, settings, pendingUsers, awai
           ${modeOpts('user_invite', settings?.userInvite)}
         </select>
       </div>
-      <button class="btn btn-primary btn-full" style="margin-top:12px" id="reg-settings-btn" onclick="saveRegistrationSettings()">💾 Save Settings</button>
+      <button class="btn btn-primary btn-full" style="margin-top:12px" id="reg-settings-btn" data-action="saveRegistrationSettings">💾 Save Settings</button>
     </div>
 
     <div class="admin-desktop-grid">
@@ -3725,14 +3872,14 @@ function renderAdminContent(stats, users, dropOpts, settings, pendingUsers, awai
         ${awaitingUserCards}
 
         <div class="section-heading">Users</div>
-        <button class="btn btn-primary btn-full" style="margin-bottom:14px" onclick="addUser()">➕ Add User</button>
+        <button class="btn btn-primary btn-full" style="margin-bottom:14px" data-action="addUser">➕ Add User</button>
         ${userCards || '<p style="font-size:.85rem;color:#6b7280;margin-bottom:14px">No users yet.</p>'}
       </div>
 
       <div>
         <div class="section-heading">User Groups</div>
         <p style="font-size:.85rem;color:#6b7280;margin-bottom:10px">Groups control which dropdown options users see. Users select their own group for privacy reasons.</p>
-        <button class="btn btn-primary btn-full" style="margin-bottom:14px" onclick="addUserGroup()">➕ Add User Group</button>
+        <button class="btn btn-primary btn-full" style="margin-bottom:14px" data-action="addUserGroup">➕ Add User Group</button>
         ${groupCards || '<p style="font-size:.85rem;color:#6b7280;margin-bottom:14px">No user groups yet.</p>'}
       </div>
     </div>
@@ -3755,8 +3902,8 @@ function renderAdminContent(stats, users, dropOpts, settings, pendingUsers, awai
           <span style="font-weight:700;margin-left:8px">${esc(g.name)}</span>
         </div>
         <div style="display:flex;gap:6px">
-          <button class="btn btn-primary btn-sm" onclick="approvePendingGroup(${g.id})">✓ Approve</button>
-          <button class="btn btn-danger btn-sm" onclick="rejectPendingGroup(${g.id})">✗ Reject</button>
+          <button class="btn btn-primary btn-sm" data-action="approvePendingGroup" data-arg="${g.id}">✓ Approve</button>
+          <button class="btn btn-danger btn-sm" data-action="rejectPendingGroup" data-arg="${g.id}">✗ Reject</button>
         </div>
       </div>
     </div>`).join('') : '<p style="font-size:.85rem;color:#6b7280">No pending group suggestions.</p>'}
@@ -3767,7 +3914,7 @@ function renderAdminContent(stats, users, dropOpts, settings, pendingUsers, awai
       ${flagOptionItems || '<p style="font-size:.85rem;color:#6b7280">No flag options.</p>'}
       <div class="add-new-row" style="margin-top:10px">
         <input id="add-flag" class="input" type="text" placeholder="New flag option…">
-        <button class="btn btn-outline btn-sm" onclick="addFlagOption()">Add</button>
+        <button class="btn btn-outline btn-sm" data-action="addFlagOption">Add</button>
       </div>
     </div>
 
@@ -3776,7 +3923,7 @@ function renderAdminContent(stats, users, dropOpts, settings, pendingUsers, awai
     ${noticeItems || '<p style="font-size:.85rem;color:#6b7280;margin-bottom:10px">No notices yet.</p>'}
     <div class="card">
       <textarea id="new-notice-text" class="textarea" placeholder="Type a notice to display to all users…" style="margin-bottom:8px"></textarea>
-      <button class="btn btn-primary btn-full" onclick="createNotice()">📢 Post Notice</button>
+      <button class="btn btn-primary btn-full" data-action="createNotice">📢 Post Notice</button>
     </div>
 
     <div class="section-heading">SMTP Email Settings</div>
@@ -3816,8 +3963,8 @@ function renderAdminContent(stats, users, dropOpts, settings, pendingUsers, awai
         <input id="smtp-to" class="input" type="email" value="${esc(smtpSettings.to || '')}" placeholder="you@nhs.net" style="margin-top:4px">
       </div>
       <div style="display:flex;gap:8px;margin-top:12px">
-        <button class="btn btn-primary" style="flex:1" onclick="saveSmtpSettings()">💾 Save SMTP Settings</button>
-        <button class="btn btn-outline" onclick="testSmtp()">🔧 Test</button>
+        <button class="btn btn-primary" style="flex:1" data-action="saveSmtpSettings">💾 Save SMTP Settings</button>
+        <button class="btn btn-outline" data-action="testSmtp">🔧 Test</button>
       </div>
       <div id="smtp-alerts" style="margin-top:8px"></div>
     </div>
@@ -3839,7 +3986,7 @@ function renderAdminContent(stats, users, dropOpts, settings, pendingUsers, awai
         <input id="tfa-enabled" type="checkbox" ${twoFaSettings.enabled ? 'checked' : ''} style="width:18px;height:18px;flex-shrink:0">
         <label for="tfa-enabled" style="font-size:.9rem;font-weight:400">Enable 2FA for admin login</label>
       </div>
-      <button class="btn btn-primary btn-full" style="margin-top:12px" onclick="save2faSettings()">🔒 Save 2FA Settings</button>
+      <button class="btn btn-primary btn-full" style="margin-top:12px" data-action="save2faSettings">🔒 Save 2FA Settings</button>
       <div id="tfa-admin-alerts" style="margin-top:8px"></div>
     </div>
 
@@ -3848,11 +3995,11 @@ function renderAdminContent(stats, users, dropOpts, settings, pendingUsers, awai
         <div class="section-heading">Database</div>
         <div class="card">
           <div style="display:flex;flex-direction:column;gap:10px">
-            <button class="btn btn-outline btn-full" onclick="downloadBackup()">💾 Download Backup</button>
+            <button class="btn btn-outline btn-full" data-action="downloadBackup">💾 Download Backup</button>
             <div>
               <label class="btn btn-secondary btn-full" style="cursor:pointer">
                 📤 Restore from Backup
-                <input type="file" accept=".db" style="display:none" onchange="uploadRestore(this)">
+                <input type="file" accept=".db" style="display:none" data-action-change="uploadRestore">
               </label>
               <p style="font-size:.75rem;color:#dc2626;margin-top:4px">⚠️ This replaces the current database immediately.</p>
             </div>
@@ -3862,13 +4009,13 @@ function renderAdminContent(stats, users, dropOpts, settings, pendingUsers, awai
       <div>
         <div class="section-heading">My Account</div>
         <div class="card">
-          <button class="btn btn-outline btn-full" onclick="renderChangePassword()">🔑 Change My Password</button>
+          <button class="btn btn-outline btn-full" data-action="renderChangePassword">🔑 Change My Password</button>
         </div>
       </div>
     </div>
 
     <div class="divider"></div>
-    <button class="btn btn-secondary btn-full" style="margin-bottom:16px" onclick="doLogout()">🚪 Log Out</button>
+    <button class="btn btn-secondary btn-full" style="margin-bottom:16px" data-action="doLogout">🚪 Log Out</button>
     ${renderFooter()}
   </div>`;
 }
@@ -3879,6 +4026,14 @@ function copyToClipboard(btn, text, successLabel) {
     btn.textContent = successLabel;
     setTimeout(() => { btn.textContent = orig; }, 2000);
   }).catch(() => {});
+}
+
+function copyWithAlert(text, alertId) {
+  navigator.clipboard?.writeText(text).then(() => {
+    showAlert('Copied!', 'success', alertId || null);
+  }).catch(() => {
+    showAlert('Copy failed.', 'error', alertId || null);
+  });
 }
 
 function showTempPassword(label, username, tempPassword) {
@@ -4211,7 +4366,7 @@ async function showGroupDropdownModal(groupId, groupName) {
   modal.id = 'group-dd-modal';
   modal.innerHTML = `<div class="modal-sheet">
     <div class="modal-body"><div class="modal-title">⚙️ Options for ${esc(groupName)}</div><p class="loading">Loading…</p></div>
-    <div class="modal-footer"><button class="btn btn-secondary" style="flex:1" onclick="document.getElementById('group-dd-modal')?.remove()">Cancel</button></div>
+    <div class="modal-footer"><button class="btn btn-secondary" style="flex:1" data-action="closeGroupDropdownModal">Cancel</button></div>
   </div>`;
   document.body.appendChild(modal);
   try {
@@ -4238,11 +4393,11 @@ async function showGroupDropdownModal(groupId, groupName) {
       <p style="font-size:.85rem;color:#6b7280;margin-bottom:16px">Tick the options that should appear in dropdown lists for users in this group.</p>
       ${sections || '<p style="color:#6b7280">No dropdown options exist yet.</p>'}`;
     modal.querySelector('.modal-footer').innerHTML = `
-      <button class="btn btn-primary" style="flex:1" onclick="saveGroupDropdowns(${groupId})">💾 Save</button>
-      <button class="btn btn-secondary" style="flex:1" onclick="document.getElementById('group-dd-modal')?.remove()">Cancel</button>`;
+      <button class="btn btn-primary" style="flex:1" data-action="saveGroupDropdowns" data-arg="${groupId}">💾 Save</button>
+      <button class="btn btn-secondary" style="flex:1" data-action="closeGroupDropdownModal">Cancel</button>`;
   } catch(e) {
     modal.querySelector('.modal-body').innerHTML = `<div class="alert alert-error">${esc(e.message)}</div>`;
-    modal.querySelector('.modal-footer').innerHTML = `<button class="btn btn-secondary btn-full" onclick="document.getElementById('group-dd-modal')?.remove()">Close</button>`;
+    modal.querySelector('.modal-footer').innerHTML = `<button class="btn btn-secondary btn-full" data-action="closeGroupDropdownModal">Close</button>`;
   }
 }
 

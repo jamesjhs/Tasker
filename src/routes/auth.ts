@@ -1,4 +1,5 @@
 import { Router, Request, Response } from 'express';
+import rateLimit from 'express-rate-limit';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import { getDb, getSetting } from '../db';
@@ -9,6 +10,25 @@ import { isTurnstileEnabled, verifyTurnstileToken } from '../turnstile';
 
 const router = Router();
 const PASSWORD_RE = /^(?=.*[!@#$%^&*()\-_=+\[\]{};:'",.<>/?\\|`~]).{8,}$/;
+const ALLOW_2FA_LOG_FALLBACK = process.env['ALLOW_2FA_LOG_FALLBACK'] === 'true';
+
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 25,
+  skipSuccessfulRequests: true,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many login attempts. Please wait and try again.' },
+});
+
+const twoFaLimiter = rateLimit({
+  windowMs: 10 * 60 * 1000,
+  max: 5,
+  skipSuccessfulRequests: true,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many verification attempts. Please wait and try again.' },
+});
 
 router.get('/csrf-token', (req: Request, res: Response) => {
   const s = req.session as any;
@@ -100,7 +120,7 @@ router.post('/invite', requireAuth, validateCsrf, async (req: Request, res: Resp
   }
 });
 
-router.post('/login', validateCsrf, async (req: Request, res: Response) => {
+router.post('/login', loginLimiter, validateCsrf, async (req: Request, res: Response) => {
   // Verify Turnstile CAPTCHA when enabled
   if (isTurnstileEnabled()) {
     const token = (req.body as any)['cf-turnstile-response'] || '';
@@ -176,6 +196,11 @@ router.post('/login', validateCsrf, async (req: Request, res: Response) => {
     } catch (e: any) {
       console.error('[Tasker] 2FA email error — could not send verification code to:', recipients);
       console.error('[Tasker] SMTP error detail:', e?.message || e);
+      if (!ALLOW_2FA_LOG_FALLBACK) {
+        delete s.mfaPendingUserId; delete s.mfaCode; delete s.mfaCodeExpiry; delete s.mfaAttempts;
+        res.status(503).json({ error: '2FA delivery failed. Please contact an administrator.' });
+        return;
+      }
       console.warn(`[Tasker] 2FA FALLBACK — verification code for user ${user.username}: ${code} (expires in 10 minutes)`);
       res.json({ requires2fa: true, emailFailed: true });
       return;
@@ -208,7 +233,7 @@ router.post('/login', validateCsrf, async (req: Request, res: Response) => {
   });
 });
 
-router.post('/verify-2fa', validateCsrf, async (req: Request, res: Response) => {
+router.post('/verify-2fa', twoFaLimiter, validateCsrf, async (req: Request, res: Response) => {
   const s = req.session as any;
   if (!s.mfaPendingUserId || !s.mfaCode) {
     res.status(400).json({ error: 'No pending 2FA session. Please log in again.' });
@@ -306,12 +331,17 @@ router.post('/resend-2fa', validateCsrf, async (req: Request, res: Response) => 
   } catch (e: any) {
     console.error('[Tasker] Resend 2FA email error — could not send verification code to:', recipients);
     console.error('[Tasker] SMTP error detail:', e?.message || e);
+    if (!ALLOW_2FA_LOG_FALLBACK) {
+      delete s.mfaPendingUserId; delete s.mfaCode; delete s.mfaCodeExpiry; delete s.mfaAttempts;
+      res.status(503).json({ error: '2FA delivery failed. Please contact an administrator.' });
+      return;
+    }
     console.warn(`[Tasker] 2FA FALLBACK — verification code for user ${user.username}: ${code} (expires in 10 minutes)`);
     res.json({ success: true, emailFailed: true });
   }
 });
 
-router.post('/logout', (req: Request, res: Response) => {
+router.post('/logout', validateCsrf, (req: Request, res: Response) => {
   req.session.destroy(() => res.json({ success: true }));
 });
 

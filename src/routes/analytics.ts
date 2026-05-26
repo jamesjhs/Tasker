@@ -38,7 +38,8 @@ function sanitizeForExcel(value: string | null | undefined): string {
   const rest = value.slice(leadingWhitespace.length);
   if (!rest) return value;
   if (rest.startsWith("'")) return value;
-  const needsEscape = /^[=+\-@]/.test(rest) || /[\t\r]/.test(leadingWhitespace);
+  // Leading control whitespace can still trigger Excel formula parsing after trimming.
+  const needsEscape = /^[=+\-@]/.test(rest) || /[\t\r\n]/.test(leadingWhitespace);
   if (needsEscape) return `${leadingWhitespace}'${rest}`;
   return value;
 }

@@ -106,6 +106,7 @@ nano .env          # or use your preferred editor
 | `SSL_KEY` | Full path to the private key file | `$SSL_CERT_DIR/privkey.pem` |
 | `TURNSTILE_SITE_KEY` | Cloudflare Turnstile site key. When set (alongside `TURNSTILE_SECRET_KEY`), a CAPTCHA widget is displayed on the login and registration forms. Omit to disable Turnstile entirely. | — |
 | `TURNSTILE_SECRET_KEY` | Cloudflare Turnstile secret key. Required when `TURNSTILE_SITE_KEY` is set. | — |
+| `ALLOW_2FA_LOG_FALLBACK` | Debug-only: when `true`, logs admin 2FA codes if SMTP delivery fails. **Do not enable in production.** | — |
 
 > **Upgrade note:** From v1.14.1 onward, set `TRUST_PROXY=1` (or `true`) if Tasker sits behind a reverse proxy. Otherwise Express will not trust forwarded client IP headers.
 
