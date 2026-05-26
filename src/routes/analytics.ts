@@ -32,7 +32,7 @@ function parseAssignedDate(d: string): Date {
 }
 
 function sanitizeForExcel(value: string): string {
-  if (value == null || value === '') return value;
+  if (value === null || value === undefined || value === '') return value;
   const trimmed = value.trimStart();
   if (!trimmed) return value;
   const first = trimmed[0];
@@ -321,18 +321,16 @@ router.get('/report', async (req: Request, res: Response) => {
   ) {
     if (rowLabels.length === 0 || colLabels.length === 0) return;
     const ws = wb.addWorksheet(name);
-    const safeCols = colLabels.map((label, idx) => ({
-      label,
-      key: `col_${idx}`,
-      header: sanitizeForExcel(label),
-    }));
+    const safeHeaders = colLabels.map(label => sanitizeForExcel(label));
     ws.columns = [
       { header: rowHeader, key: '__row', width: 28 },
-      ...safeCols.map(c => ({ header: c.header, key: c.key, width: 18 })),
+      ...safeHeaders.map((header, idx) => ({ header, key: `col_${idx}`, width: 18 })),
     ];
     for (const row of rowLabels) {
       const r: Record<string, any> = { __row: sanitizeForExcel(row) };
-      for (const col of safeCols) r[col.key] = getData(row, col.label);
+      colLabels.forEach((col, idx) => {
+        r[`col_${idx}`] = getData(row, col);
+      });
       ws.addRow(r);
     }
     styleHeader(ws);
