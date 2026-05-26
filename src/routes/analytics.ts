@@ -31,8 +31,9 @@ function parseAssignedDate(d: string): Date {
   return new Date(/^\d{4}-\d{2}-\d{2}$/.test(d) ? d + 'T00:00:00' : d);
 }
 
-function sanitizeForExcel(value: string): string {
-  if (value === null || value === undefined || value === '') return value;
+function sanitizeForExcel(value: string | null | undefined): string {
+  if (value === null || value === undefined) return '';
+  if (value === '') return value;
   const trimmed = value.trimStart();
   if (!trimmed) return value;
   const first = trimmed[0];
@@ -329,7 +330,7 @@ router.get('/report', async (req: Request, res: Response) => {
     for (const row of rowLabels) {
       const r: Record<string, any> = { __row: sanitizeForExcel(row) };
       colLabels.forEach((col, idx) => {
-        r[`col_${idx}`] = getData(row, col);
+        r[`col_${idx}`] = safeExcelCell(getData(row, col));
       });
       ws.addRow(r);
     }
