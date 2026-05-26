@@ -26,7 +26,21 @@ import type { NextFunction, Request } from 'express';
 const SqliteStoreFactory = require('better-sqlite3-session-store');
 const Store = SqliteStoreFactory(session);
 const app = express();
-app.set('trust proxy', 1);
+const trustProxyEnv = (process.env['TRUST_PROXY'] || '').trim();
+if (!trustProxyEnv) {
+  app.set('trust proxy', false);
+} else {
+  const lower = trustProxyEnv.toLowerCase();
+  if (lower === 'true') {
+    app.set('trust proxy', 1);
+  } else if (lower === 'false') {
+    app.set('trust proxy', false);
+  } else if (/^\d+$/.test(lower)) {
+    app.set('trust proxy', Number(lower));
+  } else {
+    app.set('trust proxy', trustProxyEnv);
+  }
+}
 const PORT = process.env['PORT'] || 3020;
 const SESSION_SECRET = process.env['SESSION_SECRET'] || crypto.randomBytes(64).toString('hex');
 const APP_URL = (process.env['APP_URL'] || '').trim().replace(/\/+$/, '');

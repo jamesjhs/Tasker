@@ -1,6 +1,6 @@
 # Tasker — Installation Manual
 
-**Version 1.14.0 — May 2026**
+**Version 1.14.1 — May 2026**
 
 ---
 
@@ -99,6 +99,7 @@ nano .env          # or use your preferred editor
 | `PORT` | Port the application listens on | `3020` |
 | `SESSION_SECRET` | A long, random secret string used to sign session cookies. **Must be set in production.** | Random (changes on every restart) |
 | `NODE_ENV` | Set to `production` to enable secure (HTTPS-only) cookies | — |
+| `TRUST_PROXY` | Express trust proxy setting. Leave empty when Tasker is directly exposed. Set to `true` or a hop count (e.g. `1`) when behind a reverse proxy so `X-Forwarded-For` and scheme headers are trusted. | — |
 | `APP_URL` | Full public URL of the server (no trailing slash). Used to generate clickable review links in suggestion emails, plus canonical and crawler-facing URLs for the homepage, llms.txt, robots.txt, and sitemap.xml. | — |
 | `SSL_CERT_DIR` | Directory containing Let's Encrypt certificate files | `/etc/letsencrypt/live/yourdomain` |
 | `SSL_CERT` | Full path to the certificate chain file | `$SSL_CERT_DIR/fullchain.pem` |
@@ -120,6 +121,7 @@ Copy the output into your `.env` file as the `SESSION_SECRET` value.
 PORT=3020
 SESSION_SECRET=<output of the command above>
 NODE_ENV=production
+TRUST_PROXY=1
 APP_URL=https://tasker.jahosi.co.uk
 SSL_CERT_DIR=/etc/letsencrypt/live/yourdomain.example.com
 ```
@@ -285,7 +287,7 @@ The server detects SSL certificates automatically. If both `SSL_CERT` and `SSL_K
 
 ### Running behind a reverse proxy (HTTP internally)
 
-If you terminate SSL at Nginx or Caddy and forward plain HTTP to Tasker, **do not** set `SSL_CERT` / `SSL_KEY` in `.env`. The application will listen on plain HTTP internally. The `trust proxy` setting is already configured so that `X-Forwarded-For` headers are respected.
+If you terminate SSL at Nginx or Caddy and forward plain HTTP to Tasker, **do not** set `SSL_CERT` / `SSL_KEY` in `.env`. The application will listen on plain HTTP internally. Set `TRUST_PROXY=1` (or `true`) so that `X-Forwarded-For` and scheme headers are respected by Express.
 
 ---
 
