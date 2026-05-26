@@ -32,11 +32,13 @@ function parseAssignedDate(d: string): Date {
 }
 
 function sanitizeForExcel(value: string): string {
-  if (!value) return value;
+  if (value == null || value === '') return value;
   const trimmed = value.trimStart();
   if (!trimmed) return value;
-  if (trimmed.startsWith("'")) return value;
-  if (['=', '+', '-', '@'].includes(trimmed[0])) return `'${value}`;
+  const first = trimmed[0];
+  if (first === "'") return trimmed;
+  const leadingControl = value.startsWith('\t') || value.startsWith('\r');
+  if (leadingControl || ['=', '+', '-', '@'].includes(first)) return `'${trimmed}`;
   return value;
 }
 

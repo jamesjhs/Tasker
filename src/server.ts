@@ -26,19 +26,20 @@ import type { NextFunction, Request } from 'express';
 const SqliteStoreFactory = require('better-sqlite3-session-store');
 const Store = SqliteStoreFactory(session);
 const app = express();
-const trustProxyEnv = (process.env['TRUST_PROXY'] || '').trim();
-if (!trustProxyEnv) {
+const trustProxyEnv = process.env['TRUST_PROXY'];
+const trustProxyValue = (trustProxyEnv || '').trim();
+if (!trustProxyValue) {
   app.set('trust proxy', false);
 } else {
-  const lower = trustProxyEnv.toLowerCase();
+  const lower = trustProxyValue.toLowerCase();
   if (lower === 'true') {
     app.set('trust proxy', 1);
   } else if (lower === 'false') {
     app.set('trust proxy', false);
-  } else if (/^\d+$/.test(lower)) {
-    app.set('trust proxy', Number(lower));
+  } else if (/^\d+$/.test(trustProxyValue)) {
+    app.set('trust proxy', Number(trustProxyValue));
   } else {
-    app.set('trust proxy', trustProxyEnv);
+    app.set('trust proxy', trustProxyValue);
   }
 }
 const PORT = process.env['PORT'] || 3020;
