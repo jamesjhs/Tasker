@@ -107,6 +107,8 @@ nano .env          # or use your preferred editor
 | `TURNSTILE_SITE_KEY` | Cloudflare Turnstile site key. When set (alongside `TURNSTILE_SECRET_KEY`), a CAPTCHA widget is displayed on the login and registration forms. Omit to disable Turnstile entirely. | — |
 | `TURNSTILE_SECRET_KEY` | Cloudflare Turnstile secret key. Required when `TURNSTILE_SITE_KEY` is set. | — |
 
+> **Upgrade note:** From v1.14.1 onward, set `TRUST_PROXY=1` (or `true`) if Tasker sits behind a reverse proxy. Otherwise Express will not trust forwarded client IP headers.
+
 ### Generating a session secret
 
 ```bash

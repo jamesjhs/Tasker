@@ -34,12 +34,12 @@ function parseAssignedDate(d: string): Date {
 function sanitizeForExcel(value: string | null | undefined): string {
   if (value === null || value === undefined) return '';
   if (value === '') return value;
-  const trimmed = value.trimStart();
-  if (!trimmed) return value;
-  const first = trimmed[0];
-  if (first === "'") return trimmed;
-  const leadingControl = value.startsWith('\t') || value.startsWith('\r');
-  if (leadingControl || ['=', '+', '-', '@'].includes(first)) return `'${trimmed}`;
+  const leadingWhitespace = value.match(/^\s*/)?.[0] ?? '';
+  const rest = value.slice(leadingWhitespace.length);
+  if (!rest) return value;
+  if (rest.startsWith("'")) return value;
+  const needsEscape = /^[=+\-@]/.test(rest) || /[\t\r]/.test(leadingWhitespace);
+  if (needsEscape) return `${leadingWhitespace}'${rest}`;
   return value;
 }
 
@@ -323,6 +323,7 @@ router.get('/report', async (req: Request, res: Response) => {
     if (rowLabels.length === 0 || colLabels.length === 0) return;
     const ws = wb.addWorksheet(name);
     const safeHeaders = colLabels.map(label => sanitizeForExcel(label));
+    // Use numeric keys to avoid collisions if labels are duplicated or sanitized.
     ws.columns = [
       { header: rowHeader, key: '__row', width: 28 },
       ...safeHeaders.map((header, idx) => ({ header, key: `col_${idx}`, width: 18 })),
