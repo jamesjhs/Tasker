@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Tasker — Technical Reference Manual v1.14.0</title>
+  <title>Tasker — Technical Reference Manual v1.14.1</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; }
     body {
@@ -107,7 +107,7 @@
 <div class="page">
 
 <h1>Tasker — Technical Reference Manual</h1>
-<p class="subtitle">Version 1.14.0 &nbsp;·&nbsp; May 2026 &nbsp;·&nbsp; <em>Prepared in the role of Professor of Digital Engineering Product Design</em></p>
+<p class="subtitle">Version 1.14.1 &nbsp;·&nbsp; May 2026 &nbsp;·&nbsp; <em>Prepared in the role of Professor of Digital Engineering Product Design</em></p>
 
 <div class="toc">
   <h2>Table of Contents</h2>
@@ -291,6 +291,7 @@
     <tr><td><code>APP_URL</code></td><td>Recommended</td><td>Full public base URL. Used for suggestion-review links plus canonical, Open Graph, <code>robots.txt</code>, <code>sitemap.xml</code>, and <code>llms.txt</code> output.</td></tr>
     <tr><td><code>SESSION_SECRET</code></td><td><strong>Yes</strong></td><td>64+ random hex characters used to sign session cookies. If omitted, a random value is generated each restart — invalidating all sessions on every restart.</td></tr>
     <tr><td><code>NODE_ENV</code></td><td><strong>Yes</strong></td><td>Set to <code>production</code> to enable <code>secure: true</code> on session cookies (HTTPS-only cookies).</td></tr>
+    <tr><td><code>TRUST_PROXY</code></td><td>No</td><td>Express trust proxy setting. Leave unset when Tasker is directly exposed; set to <code>true</code> or a hop count (e.g. <code>1</code>) when behind a reverse proxy so <code>X-Forwarded-For</code> and scheme headers are trusted.</td></tr>
     <tr><td><code>ENCRYPTION_KEY</code></td><td>Recommended</td><td>64 hex characters (32 bytes). If set, task <code>notes</code> are encrypted with AES-256-GCM. If absent, notes are stored as plaintext.</td></tr>
     <tr><td><code>SSL_CERT</code></td><td>For TLS</td><td>Path to PEM certificate file. If both <code>SSL_CERT</code> and <code>SSL_KEY</code> exist on disk, the server starts in HTTPS mode.</td></tr>
     <tr><td><code>SSL_KEY</code></td><td>For TLS</td><td>Path to PEM private key file.</td></tr>
@@ -298,6 +299,7 @@
     <tr><td><code>TASKER_DB_PATH</code></td><td>Tests only</td><td>Override the database path (e.g. <code>:memory:</code> or a temp file). Used by the test harness.</td></tr>
     <tr><td><code>TURNSTILE_SITE_KEY</code></td><td>No</td><td>Cloudflare Turnstile site key. When both this and <code>TURNSTILE_SECRET_KEY</code> are set, a CAPTCHA widget is rendered on the login and registration forms. Omit to disable Turnstile entirely.</td></tr>
     <tr><td><code>TURNSTILE_SECRET_KEY</code></td><td>No</td><td>Cloudflare Turnstile secret key used for server-side token verification. Required alongside <code>TURNSTILE_SITE_KEY</code>.</td></tr>
+    <tr><td><code>ALLOW_2FA_LOG_FALLBACK</code></td><td>No</td><td>Debug-only flag. When set to <code>true</code>, admin 2FA codes are logged if SMTP delivery fails. Do not enable in production.</td></tr>
   </tbody>
 </table>
 
@@ -308,7 +310,7 @@
 <h3>6.1 Startup Sequence</h3>
 <ol>
   <li><strong><code>dotenv/config</code></strong> is imported first as a side-effect, loading <code>.env</code> into <code>process.env</code>.</li>
-  <li>The Express <code>app</code> object is created and <code>trust proxy</code> is set to <code>1</code>, enabling correct IP detection behind a reverse proxy.</li>
+  <li>The Express <code>app</code> object is created and <code>trust proxy</code> is configured from <code>TRUST_PROXY</code> (or disabled by default), controlling whether <code>X-Forwarded-For</code> headers are trusted.</li>
   <li><strong>SSL detection</strong>: The process checks whether both <code>SSL_CERT</code> and <code>SSL_KEY</code> files exist on disk. The <code>useHttps</code> boolean controls subsequent TLS-related behaviour.</li>
   <li><strong>Helmet</strong> applies security headers. The CSP allows <code>'unsafe-inline'</code> for scripts (required by vanilla-JS inline event handlers in <code>app.js</code>) and <code>cdn.jsdelivr.net</code> (Chart.js). <code>upgradeInsecureRequests</code> is only included when running over HTTPS.</li>
   <li><strong>JSON and URL-encoded body parsers</strong> are registered with a 1 MB request size limit.</li>
@@ -916,7 +918,7 @@ R²        = 1 - SS_res / SS_tot</code></pre>
 
 <hr>
 <p style="text-align:center;font-size:.85rem;color:#9ca3af;margin-top:40px">
-  Tasker Technical Reference Manual &nbsp;·&nbsp; v1.14.0 &nbsp;·&nbsp; May 2026<br>
+  Tasker Technical Reference Manual &nbsp;·&nbsp; v1.14.1 &nbsp;·&nbsp; May 2026<br>
   This document is stored in <code>docs/</code> and is not served by the application.
 </p>
 

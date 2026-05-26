@@ -31,6 +31,23 @@ function parseAssignedDate(d: string): Date {
   return new Date(/^\d{4}-\d{2}-\d{2}$/.test(d) ? d + 'T00:00:00' : d);
 }
 
+function sanitizeForExcel(value: string | null | undefined): string {
+  if (value === null || value === undefined) return '';
+  if (value === '') return value;
+  const leadingWhitespace = value.match(/^\s*/)?.[0] ?? '';
+  const rest = value.slice(leadingWhitespace.length);
+  if (!rest) return value;
+  if (rest.startsWith("'")) return value;
+  // Leading control whitespace can still trigger Excel formula parsing after trimming.
+  const needsEscape = /^[=+\-@]/.test(rest) || /[\t\r\n]/.test(leadingWhitespace);
+  if (needsEscape) return `${leadingWhitespace}'${rest}`;
+  return value;
+}
+
+function safeExcelCell(value: unknown): unknown {
+  return typeof value === 'string' ? sanitizeForExcel(value) : value;
+}
+
 function buildSummary(tasks: any[]) {
   const duty = tasks.filter(t => t.is_duty === 1);
   const personal = tasks.filter(t => t.is_duty === 0);
@@ -306,13 +323,17 @@ router.get('/report', async (req: Request, res: Response) => {
   ) {
     if (rowLabels.length === 0 || colLabels.length === 0) return;
     const ws = wb.addWorksheet(name);
+    const safeHeaders = colLabels.map(label => sanitizeForExcel(label));
+    // Use numeric keys to avoid collisions if labels are duplicated or sanitized.
     ws.columns = [
       { header: rowHeader, key: '__row', width: 28 },
-      ...colLabels.map(c => ({ header: c, key: c, width: 18 })),
+      ...safeHeaders.map((header, idx) => ({ header, key: `col_${idx}`, width: 18 })),
     ];
     for (const row of rowLabels) {
-      const r: Record<string, any> = { __row: row };
-      for (const col of colLabels) r[col] = getData(row, col);
+      const r: Record<string, any> = { __row: sanitizeForExcel(row) };
+      colLabels.forEach((col, idx) => {
+        r[`col_${idx}`] = safeExcelCell(getData(row, col));
+      });
       ws.addRow(r);
     }
     styleHeader(ws);
@@ -354,7 +375,7 @@ router.get('/report', async (req: Request, res: Response) => {
       ];
       for (const cat of cats) {
         const v = sum.byCategory[cat];
-        ws.addRow({ Category: cat, Count: v.count, Minutes: v.minutes, AvgMins: v.count > 0 ? Math.round(v.minutes / v.count) : 0 });
+        ws.addRow({ Category: safeExcelCell(cat), Count: v.count, Minutes: v.minutes, AvgMins: v.count > 0 ? Math.round(v.minutes / v.count) : 0 });
       }
       styleHeader(ws);
     }
@@ -384,7 +405,7 @@ router.get('/report', async (req: Request, res: Response) => {
         { header: 'Outcome', key: 'Outcome', width: 20 },
         { header: 'Count',   key: 'Count',   width: 12 },
       ];
-      for (const out of outcomes) ws.addRow({ Outcome: out, Count: sum.byOutcome[out] });
+      for (const out of outcomes) ws.addRow({ Outcome: safeExcelCell(out), Count: sum.byOutcome[out] });
       styleHeader(ws);
     }
   }
@@ -414,7 +435,7 @@ router.get('/report', async (req: Request, res: Response) => {
       ];
       for (const cat of cats) {
         const v = sum.byCategory[cat];
-        ws.addRow({ Category: cat, AvgMins: v.count > 0 ? Math.round(v.minutes / v.count) : 0 });
+        ws.addRow({ Category: safeExcelCell(cat), AvgMins: v.count > 0 ? Math.round(v.minutes / v.count) : 0 });
       }
       styleHeader(ws);
     }
@@ -433,7 +454,7 @@ router.get('/report', async (req: Request, res: Response) => {
       ];
       for (const sub of subs) {
         const v = sum.bySubcategory[sub];
-        ws.addRow({ Type: sub, Count: v.count, Minutes: v.minutes, AvgMins: v.count > 0 ? Math.round(v.minutes / v.count) : 0 });
+        ws.addRow({ Type: safeExcelCell(sub), Count: v.count, Minutes: v.minutes, AvgMins: v.count > 0 ? Math.round(v.minutes / v.count) : 0 });
       }
       styleHeader(ws);
     }
@@ -448,7 +469,7 @@ router.get('/report', async (req: Request, res: Response) => {
         { header: 'Task Type',   key: 'Type',    width: 28 },
         { header: 'Avg Minutes', key: 'AvgMins', width: 16 },
       ];
-      for (const sub of subs) ws.addRow({ Type: sub, AvgMins: sum.avgDurBySubcategory[sub] });
+      for (const sub of subs) ws.addRow({ Type: safeExcelCell(sub), AvgMins: sum.avgDurBySubcategory[sub] });
       styleHeader(ws);
     }
   }
@@ -477,7 +498,7 @@ router.get('/report', async (req: Request, res: Response) => {
         { header: 'Flag',  key: 'Flag',  width: 28 },
         { header: 'Count', key: 'Count', width: 12 },
       ];
-      for (const flag of flags) ws.addRow({ Flag: flag, Count: sum.byFlag[flag] });
+      for (const flag of flags) ws.addRow({ Flag: safeExcelCell(flag), Count: sum.byFlag[flag] });
       styleHeader(ws);
     }
   }
@@ -674,16 +695,16 @@ router.get('/export', async (req: Request, res: Response) => {
   ).all(s.userId) as any[]).map(t => ({ ...t, interruptions: JSON.parse(t.interruptions || '[]') }));
   const tasksWithFlags = attachFlagLabels(db, raw);
   const tasks = tasksWithFlags.map(t => ({
-    'Type': t.is_duty ? 'Duty' : 'Personal',
-    'Task From': t.category || '',
-    'Task Type': t.subcategory || '',
-    'Outcome': t.outcome || '',
+    'Type': safeExcelCell(t.is_duty ? 'Duty' : 'Personal'),
+    'Task From': safeExcelCell(t.category || ''),
+    'Task Type': safeExcelCell(t.subcategory || ''),
+    'Outcome': safeExcelCell(t.outcome || ''),
     'Date Assigned': t.assigned_date ? new Date(/^\d{4}-\d{2}-\d{2}$/.test(t.assigned_date) ? t.assigned_date + 'T00:00:00' : t.assigned_date) : '',
     'Start Time': t.start_time ? new Date(t.start_time) : '',
     'End Time': t.end_time ? new Date(t.end_time) : '',
     'Duration (secs)': secs(t.start_time, t.end_time, t.interruptions),
     'Interruptions': t.interruptions.length,
-    'Flags': (t.flag_labels as string[]).join('; '),
+    'Flags': safeExcelCell((t.flag_labels as string[]).join('; ')),
   }));
 
   const pendingLog = db.prepare(
