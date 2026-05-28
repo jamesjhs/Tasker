@@ -2569,7 +2569,7 @@ function formatDatetimeLocal(iso) {
   if (!iso) return '';
   const d = new Date(iso);
   const pad = n => String(n).padStart(2,'0');
-  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
 }
 
 // ── INTERRUPT MODAL ──────────────────────────────────────────────────────────
@@ -2625,11 +2625,11 @@ function showManualInterruptForm() {
   <p style="font-size:.85rem;color:#555;margin-bottom:16px">Enter when the interruption started and ended.</p>
   <div class="form-group">
     <label>Interruption started</label>
-    <input id="intr-start" class="input" type="datetime-local" value="${formatDatetimeLocal(interruptStart)}">
+    <input id="intr-start" class="input" type="datetime-local" step="1" value="${formatDatetimeLocal(interruptStart)}">
   </div>
   <div class="form-group">
     <label>Interruption ended</label>
-    <input id="intr-end" class="input" type="datetime-local" value="${formatDatetimeLocal(new Date().toISOString())}">
+    <input id="intr-end" class="input" type="datetime-local" step="1" value="${formatDatetimeLocal(new Date().toISOString())}">
   </div>
   <button class="btn btn-primary btn-full" data-action="saveInterruption">Save &amp; Resume</button>
   <button class="btn btn-secondary btn-full" style="margin-top:8px" data-action="resumeTask" data-arg="false">Cancel — resume without recording</button>`;
@@ -2758,12 +2758,11 @@ function renderTaskReview(t, isEdit) {
       ${outcomeHtml}
       <div class="form-group">
         <label for="te-start">Start time</label>
-        <input id="te-start" class="input" type="datetime-local" value="${formatDatetimeLocal(t.start_time)}">
+        <input id="te-start" class="input" type="datetime-local" step="1" value="${formatDatetimeLocal(t.start_time)}">
       </div>
       <div class="form-group">
         <label for="te-end">End time</label>
-        <input id="te-end" class="input" type="datetime-local" value="${formatDatetimeLocal(t.end_time)}">
-      </div>
+        <input id="te-end" class="input" type="datetime-local" step="1" value="${formatDatetimeLocal(t.end_time)}">      </div>
       <div class="form-group">
         <label for="te-assigned">Date assigned</label>
         <input id="te-assigned" class="input" type="date" value="${t.assigned_date || new Date().toISOString().split('T')[0]}">
