@@ -1017,7 +1017,7 @@ async function renderLanding() {
       <div class="section-inner section-inner--wide">
         <p class="section-eyebrow">Why Tasker</p>
         <h2 class="section-title">Built for the gap between spreadsheets, cloud trackers, and enterprise workforce suites</h2>
-        <p class="section-sub">Tasker is not a rostering platform and it is not a generic SaaS timer. It is a focused operational tool for understanding workload safely, quickly, and on your own infrastructure. Its design is aligned with peer-reviewed primary-care evidence on rising consultation burden and time pressure in general practice (Hobbs et al., <em>The Lancet</em>, 2016; Irving et al., <em>BMJ Open</em>, 2017).</p>
+        <p class="section-sub">Tasker is not a rostering platform and it is not a generic SaaS timer. It is a focused operational tool for understanding workload safely, quickly, and on your own infrastructure. Its design is aligned with peer-reviewed primary-care evidence on rising consultation burden and time pressure in general practice (Hobbs et al., <cite role="doc-biblioref">Clinical workload in UK primary care: a retrospective analysis of 100 million consultations in England, 2007–14</cite>, <em>The Lancet</em>, 2016; Irving et al., <cite role="doc-biblioref">International variations in primary care physician consultation time: a systematic review of 67 countries</cite>, <em>BMJ Open</em>, 2017).</p>
         <div class="comparison-grid">
           <article class="comparison-card">
             <h3>Manual logs and spreadsheets</h3>
