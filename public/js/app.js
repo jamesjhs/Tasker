@@ -2762,7 +2762,8 @@ function renderTaskReview(t, isEdit) {
       </div>
       <div class="form-group">
         <label for="te-end">End time</label>
-        <input id="te-end" class="input" type="datetime-local" step="1" value="${formatDatetimeLocal(t.end_time)}">      </div>
+        <input id="te-end" class="input" type="datetime-local" step="1" value="${formatDatetimeLocal(t.end_time)}">
+      </div>
       <div class="form-group">
         <label for="te-assigned">Date assigned</label>
         <input id="te-assigned" class="input" type="date" value="${t.assigned_date || new Date().toISOString().split('T')[0]}">
