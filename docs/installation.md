@@ -1,6 +1,6 @@
 # Tasker — Installation Manual
 
-**Version 1.14.1 — May 2026**
+**Version 1.14.2 — May 2026**
 
 ---
 
