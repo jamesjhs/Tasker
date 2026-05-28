@@ -968,12 +968,12 @@ async function renderLanding() {
         <div class="hero-copy">
           <p class="section-eyebrow section-eyebrow--hero">Anonymous workload intelligence for NHS and healthcare teams</p>
           <h1>See where the day goes — without storing who the work was for.</h1>
-          <p class="tagline">Tasker is a self-hosted, privacy-first PWA for teams that need to log work in real time, measure interruptions, and export evidence-ready analytics while keeping patient data, staff identities, and vendor-hosted cloud records out of the workflow.</p>
+          <p class="tagline">Tasker is a self-hosted, privacy-first standalone web-app for teams that need to log work in real time, measure interruptions, and export evidence-ready analytics while keeping patient data, staff identities, and vendor-hosted cloud records out of the workflow.</p>
           <ul class="hero-trust-pills" aria-label="Tasker trust points">
-            <li>Self-hosted Node.js + SQLite</li>
+            <li>Self-hosted on organisation-controlled infrastructure</li>
             <li>Anonymous usernames by design</li>
             <li>30-day automatic task deletion</li>
-            <li>Installable PWA with analytics and export</li>
+            <li>Installable standalone web-app with analytics and export</li>
           </ul>
           <div class="hero-btns">
             <button class="btn btn-white" data-action="renderLogin">Log In</button>
@@ -1017,7 +1017,7 @@ async function renderLanding() {
       <div class="section-inner section-inner--wide">
         <p class="section-eyebrow">Why Tasker</p>
         <h2 class="section-title">Built for the gap between spreadsheets, cloud trackers, and enterprise workforce suites</h2>
-        <p class="section-sub">Tasker is not a rostering platform and it is not a generic SaaS timer. It is a focused operational tool for understanding workload safely, quickly, and on your own infrastructure.</p>
+        <p class="section-sub">Tasker is not a rostering platform and it is not a generic SaaS timer. It is a focused operational tool for understanding workload safely, quickly, and on your own infrastructure. Its design is aligned with peer-reviewed primary-care evidence on rising consultation burden and time pressure in general practice (Hobbs et al., <em>The Lancet</em>, 2016; Irving et al., <em>BMJ Open</em>, 2017).</p>
         <div class="comparison-grid">
           <article class="comparison-card">
             <h3>Manual logs and spreadsheets</h3>
@@ -1050,7 +1050,7 @@ async function renderLanding() {
           </article>
           <article class="feature-panel">
             <h3>Measure hidden workload</h3>
-            <p>Capture interruptions and pending-task snapshots so teams can demonstrate the operational cost of context switching and backlog pressure.</p>
+            <p>Capture interruptions and pending-task snapshots so teams can evidence hidden coordination work and work intensification, not only direct task minutes.</p>
           </article>
           <article class="feature-panel">
             <h3>Review and export evidence</h3>
@@ -1114,8 +1114,8 @@ async function renderLanding() {
           <article class="principle-card">
             <h3>Simple deployment</h3>
             <ul>
-              <li>Self-hosted Node.js and SQLite stack</li>
-              <li>Installable PWA for mobile-friendly access</li>
+              <li>Self-hosted, organisation-controlled deployment</li>
+              <li>Installable standalone web-app for mobile-friendly access</li>
               <li>Guide, help page, policy, and DPIA published alongside the app</li>
             </ul>
           </article>
@@ -1159,7 +1159,7 @@ async function renderLanding() {
           </article>
           <article class="faq-card">
             <h3>Where is the data kept?</h3>
-            <p>On the organisation’s own server. Tasker runs on Node.js with SQLite rather than relying on a third-party hosted database service.</p>
+            <p>On the organisation’s own infrastructure, under local governance, rather than relying on a third-party hosted database service.</p>
           </article>
           <article class="faq-card">
             <h3>What helps rollout and governance?</h3>
