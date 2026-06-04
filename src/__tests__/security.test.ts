@@ -276,6 +276,35 @@ describe('Input validation', () => {
     expect(res.body.error).toMatch(/today/i);
   });
 
+  test('Task start: future start_time rejected', async () => {
+    const a = agent();
+    const { csrf } = await createUserSession(a);
+    const res = await a.post('/api/tasks/start')
+      .set('X-CSRF-Token', csrf)
+      .send({
+        category: 'Clinical', subcategory: 'Handover',
+        start_time: new Date(Date.now() + 60_000).toISOString(),
+        assigned_date: new Date().toISOString().split('T')[0],
+      });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/future/i);
+  });
+
+  test('Task start: future assigned_date rejected', async () => {
+    const a = agent();
+    const { csrf } = await createUserSession(a);
+    const tomorrow = new Date(Date.now() + 86_400_000).toISOString().split('T')[0];
+    const res = await a.post('/api/tasks/start')
+      .set('X-CSRF-Token', csrf)
+      .send({
+        category: 'Clinical', subcategory: 'Handover',
+        start_time: new Date().toISOString(),
+        assigned_date: tomorrow,
+      });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/future/i);
+  });
+
   test('Task start: notes field is ignored (no longer used)', async () => {
     const a = agent();
     const { csrf } = await createUserSession(a);
@@ -546,6 +575,70 @@ describe('Temporal consistency checks', () => {
     expect(patchRes.status).toBe(400);
     expect(patchRes.body.error).toMatch(/start time must be before/i);
   });
+
+  test('Task PATCH: future end_time rejected', async () => {
+    const a = agent();
+    const { csrf } = await createUserSession(a);
+    const startRes = await a.post('/api/tasks/start')
+      .set('X-CSRF-Token', csrf)
+      .send({
+        category: 'Clinical', subcategory: 'Handover',
+        start_time: new Date().toISOString(),
+        assigned_date: new Date().toISOString().split('T')[0],
+      });
+    const taskId = startRes.body.taskId;
+    const patchRes = await a.patch(`/api/tasks/${taskId}`)
+      .set('X-CSRF-Token', csrf)
+      .send({
+        status: 'completed',
+        outcome: 'Completed',
+        end_time: new Date(Date.now() + 60_000).toISOString(),
+      });
+    expect(patchRes.status).toBe(400);
+    expect(patchRes.body.error).toMatch(/future/i);
+  });
+
+  test('Task PATCH: future assigned_date rejected', async () => {
+    const a = agent();
+    const { csrf } = await createUserSession(a);
+    const startRes = await a.post('/api/tasks/start')
+      .set('X-CSRF-Token', csrf)
+      .send({
+        category: 'Clinical', subcategory: 'Handover',
+        start_time: new Date().toISOString(),
+        assigned_date: new Date().toISOString().split('T')[0],
+      });
+    const taskId = startRes.body.taskId;
+    const tomorrow = new Date(Date.now() + 86_400_000).toISOString().split('T')[0];
+    const patchRes = await a.patch(`/api/tasks/${taskId}`)
+      .set('X-CSRF-Token', csrf)
+      .send({ assigned_date: tomorrow });
+    expect(patchRes.status).toBe(400);
+    expect(patchRes.body.error).toMatch(/future/i);
+  });
+
+  test('Task PATCH: future interruption times rejected', async () => {
+    const a = agent();
+    const { csrf } = await createUserSession(a);
+    const startRes = await a.post('/api/tasks/start')
+      .set('X-CSRF-Token', csrf)
+      .send({
+        category: 'Clinical', subcategory: 'Handover',
+        start_time: new Date().toISOString(),
+        assigned_date: new Date().toISOString().split('T')[0],
+      });
+    const taskId = startRes.body.taskId;
+    const patchRes = await a.patch(`/api/tasks/${taskId}`)
+      .set('X-CSRF-Token', csrf)
+      .send({
+        interruptions: [{
+          start: new Date().toISOString(),
+          end: new Date(Date.now() + 60_000).toISOString(),
+        }],
+      });
+    expect(patchRes.status).toBe(400);
+    expect(patchRes.body.error).toMatch(/future/i);
+  });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -688,7 +781,8 @@ describe('Task flags', () => {
   test('Flag propose without SMTP configured → 503', async () => {
     const a = agent();
     const { csrf } = await createUserSession(a);
-    // No SMTP configured in test environment
+    const db = getDb();
+    db.prepare('DELETE FROM settings WHERE key IN (?,?)').run('smtp_host', 'smtp_to');
     const res = await a.post('/api/flags/propose').set('X-CSRF-Token', csrf).send({ value: 'My flag suggestion' });
     expect(res.status).toBe(503);
     expect(res.body.error).toMatch(/smtp/i);
@@ -729,7 +823,7 @@ describe('Task flags', () => {
     expect(flagId).toBeTruthy();
 
     // Patch the task with flags
-    const end = new Date(Date.now() + 60000).toISOString();
+    const end = new Date().toISOString();
     const patchRes = await a.patch(`/api/tasks/${taskId}`)
       .set('X-CSRF-Token', csrf)
       .send({ status: 'completed', outcome: 'Completed', end_time: end, flag_ids: [flagId] });
@@ -749,7 +843,7 @@ describe('Task flags', () => {
       start_time: new Date().toISOString(), assigned_date: new Date().toISOString().split('T')[0],
     });
     const taskId = startRes.body.taskId;
-    const end = new Date(Date.now() + 60000).toISOString();
+    const end = new Date().toISOString();
     const patchRes = await a.patch(`/api/tasks/${taskId}`)
       .set('X-CSRF-Token', csrf)
       .send({ status: 'completed', outcome: 'Completed', end_time: end, flag_ids: ['<script>', -1, 0.5, null] });
@@ -1229,7 +1323,7 @@ describe('Analytics with flags', () => {
     // Complete task with a flag
     await a.patch(`/api/tasks/${taskId}`).set('X-CSRF-Token', csrf).send({
       status: 'completed', outcome: 'Completed',
-      end_time: new Date(Date.now() + 60000).toISOString(),
+      end_time: new Date().toISOString(),
       flag_ids: [flag.id],
     });
 
@@ -1297,7 +1391,7 @@ describe('Intended user flows', () => {
     // Complete with flags
     const patchRes = await a.patch(`/api/tasks/${taskId}`).set('X-CSRF-Token', csrf).send({
       status: 'completed', outcome: 'Completed',
-      end_time: new Date(Date.now() + 120000).toISOString(),
+      end_time: new Date().toISOString(),
       flag_ids: [flagId],
     });
     expect(patchRes.status).toBe(200);
@@ -1390,7 +1484,7 @@ describe('Unintended use / edge cases', () => {
       start_time: new Date().toISOString(), assigned_date: new Date().toISOString().split('T')[0],
     });
     const taskId = startRes.body.taskId;
-    const end = new Date(Date.now() + 60000).toISOString();
+    const end = new Date().toISOString();
     const patchRes = await a.patch(`/api/tasks/${taskId}`).set('X-CSRF-Token', csrf).send({
       status: 'completed', outcome: 'Completed', end_time: end,
       flag_ids: ["'; DROP TABLE task_flag_options; --", 999999, "1 OR 1=1"],
@@ -1438,7 +1532,7 @@ describe('Unintended use / edge cases', () => {
       start_time: new Date().toISOString(), assigned_date: new Date().toISOString().split('T')[0],
     });
     const taskId = startRes.body.taskId;
-    const end = new Date(Date.now() + 60000).toISOString();
+    const end = new Date().toISOString();
     // flag_ids as a string (not array) — should not crash
     const patchRes = await a.patch(`/api/tasks/${taskId}`).set('X-CSRF-Token', csrf).send({
       status: 'completed', outcome: 'Completed', end_time: end,

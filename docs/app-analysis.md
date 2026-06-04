@@ -1,6 +1,6 @@
 # Tasker — Detailed Application Analysis
 
-> Generated May 2026. Covers repository state at v1.14.2.
+> Generated June 2026. Covers repository state at v1.14.3.
 > Intended for non-developer stakeholders and external analysis engines.
 
 ---

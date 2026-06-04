@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Tasker — Technical Reference Manual v1.14.2</title>
+  <title>Tasker — Technical Reference Manual v1.14.3</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; }
     body {
@@ -107,7 +107,7 @@
 <div class="page">
 
 <h1>Tasker — Technical Reference Manual</h1>
-<p class="subtitle">Version 1.14.2 &nbsp;·&nbsp; May 2026 &nbsp;·&nbsp; <em>Prepared in the role of Professor of Digital Engineering Product Design</em></p>
+<p class="subtitle">Version 1.14.3 &nbsp;·&nbsp; June 2026 &nbsp;·&nbsp; <em>Prepared in the role of Professor of Digital Engineering Product Design</em></p>
 
 <div class="toc">
   <h2>Table of Contents</h2>
@@ -480,8 +480,8 @@
     <tr><td><code>GET /api/tasks/recent-count</code></td><td>Count of tasks completed in the last 7 days.</td></tr>
     <tr><td><code>GET/POST /api/tasks/pending-count</code></td><td>Log or retrieve timestamped snapshots of the user's pending task backlog (0–9999).</td></tr>
     <tr><td><code>GET /api/tasks/common-fields</code></td><td>Returns quick-pick suggestions for category/subcategory/outcome (up to 9 each), frequency-ordered with most-recent-first pinning, plus the most recent task assigned date used by Log Task date presets.</td></tr>
-    <tr><td><code>POST /api/tasks/start</code></td><td>Creates a task with <code>status = 'in_progress'</code>. Enforces single active task per user. Validates start_time is today. Encrypts notes.</td></tr>
-    <tr><td><code>PATCH /api/tasks/:id</code></td><td>Main task update. Dynamic SET clause. Validates temporal consistency, notes length (2000 chars), date-of-today constraints. Encrypts notes on write. Logs event on completion/discard.</td></tr>
+    <tr><td><code>POST /api/tasks/start</code></td><td>Creates a task with <code>status = 'in_progress'</code>. Enforces single active task per user. Validates <code>start_time</code> is today and not in the future, and rejects future <code>assigned_date</code> values.</td></tr>
+    <tr><td><code>PATCH /api/tasks/:id</code></td><td>Main task update. Dynamic SET clause. Validates temporal consistency, date-of-today constraints for active task times, and rejects future <code>start_time</code>, <code>end_time</code>, <code>assigned_date</code>, and interruption timestamps. Logs event on completion/discard.</td></tr>
     <tr><td><code>GET /api/tasks/</code></td><td>All non-discarded tasks with optional query-string filtering.</td></tr>
     <tr><td><code>GET /api/tasks/:id</code></td><td>Single task by ID, ownership-checked.</td></tr>
     <tr><td><code>DELETE /api/tasks/</code></td><td>Bulk delete all non-in-progress tasks for the user.</td></tr>
@@ -769,6 +769,7 @@ User taps "End Task"
 → checkInactivityInterruption()
 → PATCH /api/tasks/:id { interruptions: [...current, { start: lastActive, end: now }] }
 → UI updated to show new interruption count</code></pre>
+<p>Task date/time validation is enforced in both the client and <code>src/routes/tasks.ts</code>. Shared route helpers parse candidate date values, compare task date/time fields against the current server time, compare date-only values against today's ISO date, and scan submitted interruption ranges so no task or task-adjacent time can be stored in the future.</p>
 
 <hr>
 
@@ -918,7 +919,7 @@ R²        = 1 - SS_res / SS_tot</code></pre>
 
 <hr>
 <p style="text-align:center;font-size:.85rem;color:#9ca3af;margin-top:40px">
-  Tasker Technical Reference Manual &nbsp;·&nbsp; v1.14.2 &nbsp;·&nbsp; May 2026<br>
+  Tasker Technical Reference Manual &nbsp;·&nbsp; v1.14.3 &nbsp;·&nbsp; June 2026<br>
   This document is stored in <code>docs/</code> and is not served by the application.
 </p>
 

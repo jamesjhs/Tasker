@@ -594,7 +594,8 @@ describe('app.js: checkAssetVersion', () => {
     // On a fresh install, stored is null. The function must write the current version
     // to localStorage and return false (no banner) so new visitors see the app directly.
     const fnStart = appJsSrc.indexOf('async function checkAssetVersion()');
-    const fnEnd   = appJsSrc.indexOf('return false;\n  } catch', fnStart) + 50;
+    const fnEndMatch = appJsSrc.slice(fnStart).match(/return false;\r?\n\s*\} catch/);
+    const fnEnd = fnEndMatch ? fnStart + fnEndMatch.index! + fnEndMatch[0].length + 40 : fnStart;
     const fnBody  = appJsSrc.slice(fnStart, fnEnd);
     // Must have a null-guard that seeds the version and returns false:
     expect(fnBody).toMatch(/stored\s*===\s*null/);

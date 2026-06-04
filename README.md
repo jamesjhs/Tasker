@@ -1,6 +1,6 @@
 # Tasker
 
-**v1.14.2** — A self-hosted, anonymous workload-logging PWA for NHS and healthcare teams. Built with TypeScript, Express 5, SQLite, and vanilla JS.
+**v1.14.3** — A self-hosted, anonymous workload-logging PWA for NHS and healthcare teams. Built with TypeScript, Express 5, SQLite, and vanilla JS.
 
 ---
 
@@ -24,7 +24,7 @@
 - **30-day data retention** — task data is automatically deleted after 30 days.
 - **Health-check endpoint** — `GET /readyz` returns a JSON status response for uptime/heartbeat monitoring.
 - **Landing, SEO & crawler-ready homepage** — homepage now includes semantic marketing copy, structured data, Open Graph/Twitter cards, `robots.txt`, `sitemap.xml`, and `llms.txt`.
-- **Asset version endpoint** — `GET /api/version` returns `{"version":"1.14.2"}` for client-side cache-busting.
+- **Asset version endpoint** — `GET /api/version` returns `{"version":"1.14.3"}` for client-side cache-busting.
 - **Cloudflare Turnstile CAPTCHA** — optional bot-protection for login and self-registration. When `TURNSTILE_SITE_KEY` and `TURNSTILE_SECRET_KEY` are set, Turnstile widgets are rendered on the login and registration forms; tokens are verified server-side before credentials are checked. The feature is fully disabled (and invisible) when the environment variables are not set.
 
 ---
@@ -103,7 +103,7 @@ src/
   middleware/index.ts     requireAuth, requireAdmin, CSRF, logEvent
   routes/
     auth.ts               /api/auth/* — register, login, logout, change-password, me, account delete, invite, user-groups, set-group, propose-group, my-options, turnstile-config
-    tasks.ts              /api/tasks/* — start, active, PATCH, GET
+    tasks.ts              /api/tasks/* — start, active, PATCH, GET; validates task start/end, assigned date, and interruption times are not future-dated
     analytics.ts          /api/analytics/* — session, history, export (xlsx)
     dropdowns.ts          /api/dropdowns/* — list, propose, admin CRUD
     admin.ts              /api/admin/* — stats, users, pending-users, approve, settings, backup, restore, user-groups, pending-groups
@@ -165,6 +165,12 @@ See [`/policy`](/policy) for the full Data and Use Policy.
 ---
 
 ## Changelog
+
+### v1.14.3 (June 2026) — Future date/time validation
+
+- **Task submission validation** — task start, end, assigned date, and interruption date/time fields now reject future values in the browser and at the API layer.
+- **Route helper documentation** — repository documentation updated to reflect the new task temporal validation functions.
+- **Version bump** — incremented the bugfix release to 1.14.3 in package metadata and runtime version surfaces.
 
 ### v1.14.2 (May 2026) — Bugfix version and documentation alignment
 

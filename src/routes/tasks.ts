@@ -7,6 +7,40 @@ router.use(requireAuth);
 router.use(requirePasswordChange);
 router.use(requireActivation);
 
+function parseDateValue(value: unknown): Date | null {
+  if (typeof value !== 'string' || !value.trim()) return null;
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+function isFutureDateTime(value: unknown, now = new Date()): boolean {
+  const d = parseDateValue(value);
+  return !!d && d.getTime() > now.getTime();
+}
+
+function isFutureDateOnly(value: unknown, today = new Date().toISOString().split('T')[0]): boolean {
+  return typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value) && value > today;
+}
+
+function validateNoFutureTaskValues(values: {
+  start_time?: unknown;
+  end_time?: unknown;
+  assigned_date?: unknown;
+  interruptions?: unknown;
+}): string | null {
+  const now = new Date();
+  const today = now.toISOString().split('T')[0];
+  if (values.start_time !== undefined && isFutureDateTime(values.start_time, now)) return 'Task start time cannot be in the future.';
+  if (values.end_time !== undefined && isFutureDateTime(values.end_time, now)) return 'Task end time cannot be in the future.';
+  if (values.assigned_date !== undefined && values.assigned_date && isFutureDateOnly(values.assigned_date, today)) return 'Date assigned cannot be in the future.';
+  if (values.interruptions !== undefined && Array.isArray(values.interruptions)) {
+    for (const i of values.interruptions) {
+      if (isFutureDateTime(i?.start, now) || isFutureDateTime(i?.end, now)) return 'Interruption times cannot be in the future.';
+    }
+  }
+  return null;
+}
+
 router.get('/recent-count', (req: Request, res: Response) => {
   const s = req.session as any;
   const row = getDb().prepare(
@@ -66,6 +100,8 @@ router.post('/start', validateCsrf, (req: Request, res: Response) => {
   if (active) { res.status(409).json({ error: 'You already have an active task. Complete or discard it first.' }); return; }
   const { is_duty, category, subcategory, outcome, start_time, assigned_date } = req.body as any;
   const now = start_time || new Date().toISOString();
+  const futureError = validateNoFutureTaskValues({ start_time: now, assigned_date });
+  if (futureError) { res.status(400).json({ error: futureError }); return; }
   if (new Date(now).toDateString() !== new Date().toDateString()) {
     res.status(400).json({ error: 'Task start time must be today.' }); return;
   }
@@ -84,6 +120,8 @@ router.patch('/:id', validateCsrf, (req: Request, res: Response) => {
   const task = db.prepare('SELECT * FROM tasks WHERE id=? AND user_id=?').get(taskId, s.userId) as any;
   if (!task) { res.status(404).json({ error: 'Task not found.' }); return; }
   const { status, end_time, start_time, category, subcategory, outcome, flag_ids, interruptions, is_duty, assigned_date } = req.body as any;
+  const futureError = validateNoFutureTaskValues({ start_time, end_time, assigned_date, interruptions });
+  if (futureError) { res.status(400).json({ error: futureError }); return; }
   // Only enforce today's date for end_time when the task is still in-progress (i.e. being completed now)
   if (end_time && task.status === 'in_progress' && new Date(end_time).toDateString() !== new Date().toDateString()) {
     res.status(400).json({ error: 'Task end time must be today.' }); return;

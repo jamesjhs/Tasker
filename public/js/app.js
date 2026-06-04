@@ -2316,7 +2316,7 @@ function renderTaskStart() {
     ${buildQuickPickRow('subcategory', 'ts-sub', state.commonFields.subcategory, 3)}
     <div class="form-group">
       <label for="ts-assigned">Date assigned</label>
-      <input id="ts-assigned" class="input" type="date" value="${today}">
+      <input id="ts-assigned" class="input" type="date" value="${today}" max="${today}">
     </div>
     <div class="date-preset-group task-start-date-actions">
       <button class="btn btn-sm task-date-btn task-date-btn--previous" aria-label="${esc(previousAria)}" ${hasPreviousAssigned ? '' : 'disabled title="No previous task date available"'} data-action="startTaskWithDatePreset" data-arg="previous">🟢 Prev (${esc(previousLabel)})</button>
@@ -2370,6 +2370,10 @@ function formatDateDDMM(isoDate) {
 
 function getTodayISO() {
   return new Date().toISOString().split('T')[0];
+}
+
+function isFutureDateOnly(value) {
+  return !!value && /^\d{4}-\d{2}-\d{2}$/.test(value) && value > getTodayISO();
 }
 
 function getYesterdayDate() {
@@ -2485,6 +2489,7 @@ async function doStartTask(forcedAssignedDate = null) {
   const subcategory = document.getElementById('ts-sub-sel')?.value || null;
   const assigned_date = forcedAssignedDate || document.getElementById('ts-assigned')?.value || getTodayISO();
   const is_duty = state.taskForm.is_duty;
+  if (isFutureDateOnly(assigned_date)) { showAlert('Date assigned cannot be in the future.', 'error', 'ts-alerts'); return; }
   if (!category) { showAlert('Please select a Task From.', 'error', 'ts-alerts'); return; }
   if (!subcategory) { showAlert('Please select a Task Type.', 'error', 'ts-alerts'); return; }
   if (is_duty === null) { showAlert('Please select My Group or Personal.', 'error', 'ts-alerts'); return; }
@@ -2572,6 +2577,14 @@ function formatDatetimeLocal(iso) {
   return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
 }
 
+function getNowDatetimeLocal() {
+  return formatDatetimeLocal(new Date().toISOString());
+}
+
+function isFutureDatetimeLocal(value) {
+  return !!value && new Date(value).getTime() > Date.now();
+}
+
 // ── INTERRUPT MODAL ──────────────────────────────────────────────────────────
 function showInterruptModal() {
   stopTimer();
@@ -2620,16 +2633,17 @@ function showManualInterruptForm() {
   const interruptStart = state.interruptStart || new Date().toISOString();
   const modal = document.getElementById('intr-modal');
   if (!modal) return;
+  const nowMax = getNowDatetimeLocal();
   modal.querySelector('.modal-sheet').innerHTML = `
   <div class="modal-title">📝 Interruption Times</div>
   <p style="font-size:.85rem;color:#555;margin-bottom:16px">Enter when the interruption started and ended.</p>
   <div class="form-group">
     <label>Interruption started</label>
-    <input id="intr-start" class="input" type="datetime-local" step="1" value="${formatDatetimeLocal(interruptStart)}">
+    <input id="intr-start" class="input" type="datetime-local" step="1" value="${formatDatetimeLocal(interruptStart)}" max="${nowMax}">
   </div>
   <div class="form-group">
     <label>Interruption ended</label>
-    <input id="intr-end" class="input" type="datetime-local" step="1" value="${formatDatetimeLocal(new Date().toISOString())}">
+    <input id="intr-end" class="input" type="datetime-local" step="1" value="${nowMax}" max="${nowMax}">
   </div>
   <button class="btn btn-primary btn-full" data-action="saveInterruption">Save &amp; Resume</button>
   <button class="btn btn-secondary btn-full" style="margin-top:8px" data-action="resumeTask" data-arg="false">Cancel — resume without recording</button>`;
@@ -2639,6 +2653,7 @@ async function saveInterruption() {
   const start = document.getElementById('intr-start')?.value;
   const end = document.getElementById('intr-end')?.value;
   if (!start || !end) { alert('Please enter both times.'); return; }
+  if (isFutureDatetimeLocal(start) || isFutureDatetimeLocal(end)) { alert('Interruption times cannot be in the future.'); return; }
   const t = state.activeTask;
   const interruptions = [...(t.interruptions || []), {
     start: new Date(start).toISOString(),
@@ -2746,6 +2761,8 @@ function renderTaskReview(t, isEdit) {
         </details>
       </div>` : '';
 
+  const nowMax = getNowDatetimeLocal();
+  const todayMax = getTodayISO();
   app().innerHTML = `
   <div class="view">
     <div class="view-header">
@@ -2758,15 +2775,15 @@ function renderTaskReview(t, isEdit) {
       ${outcomeHtml}
       <div class="form-group">
         <label for="te-start">Start time</label>
-        <input id="te-start" class="input" type="datetime-local" step="1" value="${formatDatetimeLocal(t.start_time)}">
+        <input id="te-start" class="input" type="datetime-local" step="1" value="${formatDatetimeLocal(t.start_time)}" max="${nowMax}">
       </div>
       <div class="form-group">
         <label for="te-end">End time</label>
-        <input id="te-end" class="input" type="datetime-local" step="1" value="${formatDatetimeLocal(t.end_time)}">
+        <input id="te-end" class="input" type="datetime-local" step="1" value="${formatDatetimeLocal(t.end_time)}" max="${nowMax}">
       </div>
       <div class="form-group">
         <label for="te-assigned">Date assigned</label>
-        <input id="te-assigned" class="input" type="date" value="${t.assigned_date || new Date().toISOString().split('T')[0]}">
+        <input id="te-assigned" class="input" type="date" value="${t.assigned_date || todayMax}" max="${todayMax}">
       </div>
       ${flagsHtml}
     </div>
@@ -2868,6 +2885,10 @@ async function submitTaskReview(taskId, isEdit, dest) {
   const start = document.getElementById('te-start')?.value;
   const end = document.getElementById('te-end')?.value;
   if (!end) { showAlert('Please set an end time.', 'error', 'te-alerts'); return; }
+  const assignedDate = document.getElementById('te-assigned')?.value || t.assigned_date || null;
+  if (isFutureDatetimeLocal(start)) { showAlert('Task start time cannot be in the future.', 'error', 'te-alerts'); return; }
+  if (isFutureDatetimeLocal(end)) { showAlert('Task end time cannot be in the future.', 'error', 'te-alerts'); return; }
+  if (isFutureDateOnly(assignedDate)) { showAlert('Date assigned cannot be in the future.', 'error', 'te-alerts'); return; }
   const outcome = document.getElementById('te-outcome-sel')?.value || null;
   if (!outcome) { showAlert('Please select an Outcome.', 'error', 'te-alerts'); return; }
   const dutyEl = document.getElementById('te-duty');
@@ -2890,7 +2911,7 @@ async function submitTaskReview(taskId, isEdit, dest) {
     start_time: start ? new Date(start).toISOString() : t.start_time,
     end_time: new Date(end).toISOString(),
     interruptions: t.interruptions || [],
-    assigned_date: document.getElementById('te-assigned')?.value || t.assigned_date || null,
+    assigned_date: assignedDate,
   };
   try {
     await api('PATCH', `/api/tasks/${taskId}`, body);
