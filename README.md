@@ -1,6 +1,6 @@
 # Tasker
 
-**v1.14.3** — A self-hosted, anonymous workload-logging PWA for NHS and healthcare teams. Built with TypeScript, Express 5, SQLite, and vanilla JS.
+**v1.15.3** — A self-hosted, anonymous workload-logging PWA for NHS and healthcare teams. Built with TypeScript, Express 5, SQLite, and vanilla JS.
 
 ---
 
@@ -24,7 +24,7 @@
 - **30-day data retention** — task data is automatically deleted after 30 days.
 - **Health-check endpoint** — `GET /readyz` returns a JSON status response for uptime/heartbeat monitoring.
 - **Landing, SEO & crawler-ready homepage** — homepage now includes semantic marketing copy, structured data, Open Graph/Twitter cards, `robots.txt`, `sitemap.xml`, and `llms.txt`.
-- **Asset version endpoint** — `GET /api/version` returns `{"version":"1.14.3"}` for client-side cache-busting.
+- **Asset version endpoint** — `GET /api/version` returns `{"version":"1.15.3"}` for client-side cache-busting.
 - **Cloudflare Turnstile CAPTCHA** — optional bot-protection for login and self-registration. When `TURNSTILE_SITE_KEY` and `TURNSTILE_SECRET_KEY` are set, Turnstile widgets are rendered on the login and registration forms; tokens are verified server-side before credentials are checked. The feature is fully disabled (and invisible) when the environment variables are not set.
 
 ---
@@ -165,6 +165,12 @@ See [`/policy`](/policy) for the full Data and Use Policy.
 ---
 
 ## Changelog
+
+### v1.15.3 (June 2026) — Static-first homepage and SEO alignment
+
+- **Version bump** — incremented the minor release to 1.15.3 in package metadata and runtime version surfaces.
+- **SEO-first homepage rendering** — kept the public homepage content in static HTML and limited JavaScript to progressively enhancing the app launch controls.
+- **Landing page cleanup** — simplified homepage calls to action and launch controls while preserving login, signup, and Turnstile flows.
 
 ### v1.14.3 (June 2026) — Future date/time validation
 

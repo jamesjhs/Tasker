@@ -698,7 +698,7 @@ async function init() {
       setLoadingStatus('Rendering…');
       await (state.user.isAdmin ? renderAdmin() : renderHome());
     } else {
-      await renderLanding();
+      await enhanceLanding();
     }
   } catch(e) {
     showLoadingError(`Initialization failed: ${e.message || e}`);
@@ -936,256 +936,38 @@ function mockupPendingTasksScreen() {
     </div>`);
 }
 
-async function renderLanding() {
+async function enhanceLanding() {
   stopTimer(); stopActivityTracking(); clearCharts(); state.currentView = 'landing';
   replaceHistory('landing');
+
   try {
-    const [cfgRes, statsRes] = await Promise.all([
-      fetch('/api/auth/registration-config', { credentials: 'same-origin' }),
-      fetch('/api/auth/stats', { credentials: 'same-origin' }),
-    ]);
+    const cfgRes = await fetch('/api/auth/registration-config', { credentials: 'same-origin' });
     if (cfgRes.ok) state.registrationConfig = await cfgRes.json();
-    if (statsRes.ok) state.appStats = await statsRes.json();
   } catch (e) {}
+
   const showRegister = state.registrationConfig?.selfRegistration !== 'disabled';
-  const stats = state.appStats;
+  const loadingStatus = document.getElementById('loading-status');
+  const loadingError = document.getElementById('loading-error');
+  const loadingActions = document.getElementById('loading-actions');
+  const spinner = document.querySelector('#app-launch-panel .loading-spinner');
 
-  app().innerHTML = `
-  <div class="landing">
-    <div class="landing-hero">
-      <nav class="landing-nav" aria-label="Primary">
-        <a class="landing-nav__brand" href="/" data-action="renderLanding">Tasker</a>
-        <div class="landing-nav__links">
-          <a href="/guide">Guide</a>
-          <a href="/help">Help</a>
-          <a href="/policy">Policy</a>
-          <a href="/dpia">DPIA</a>
-          <a href="https://github.com/jamesjhs/Tasker" target="_blank" rel="noreferrer">GitHub</a>
-        </div>
-      </nav>
+  if (loadingStatus) loadingStatus.remove();
+  if (loadingError) { loadingError.hidden = true; loadingError.textContent = ''; }
+  if (spinner) spinner.remove();
+  if (loadingActions) {
+    loadingActions.hidden = false;
+    loadingActions.innerHTML =
+      '<button class="btn btn-primary" data-action="renderLogin">Open Tasker</button>' +
+      (showRegister ? '<button class="btn btn-secondary" data-action="renderRegister">Create an Account</button>' : '');
+  }
+}
 
-      <div class="hero-grid">
-        <div class="hero-copy">
-          <p class="section-eyebrow section-eyebrow--hero">Anonymous workload intelligence for NHS and healthcare teams</p>
-          <h1>See where the day goes — without storing who the work was for.</h1>
-          <p class="tagline">Tasker is a self-hosted, privacy-first standalone web-app for teams that need to log work in real time, measure interruptions, and export evidence-ready analytics while keeping patient data, staff identities, and vendor-hosted cloud records out of the workflow.</p>
-          <ul class="hero-trust-pills" aria-label="Tasker trust points">
-            <li>Self-hosted on organisation-controlled infrastructure</li>
-            <li>Anonymous usernames by design</li>
-            <li>30-day automatic task deletion</li>
-            <li>Installable standalone web-app with analytics and export</li>
-          </ul>
-          <div class="hero-btns">
-            <button class="btn btn-white" data-action="renderLogin">Log In</button>
-            ${showRegister ? `<button class="btn btn-outline-white" data-action="renderRegister">Create Account</button>` : ''}
-          </div>
-          <div class="hero-link-row">
-            <a href="/guide">See the workflow</a>
-            <a href="/policy">Read the data &amp; use policy</a>
-            <a href="/dpia">Read the DPIA</a>
-          </div>
-          ${stats ? `
-          <div class="hero-stats">
-            <div class="hero-stat">
-              <div class="hero-stat-num">${Number(stats.userCount).toLocaleString()}</div>
-              <div class="hero-stat-label">Approved user accounts</div>
-            </div>
-            <div class="hero-stat">
-              <div class="hero-stat-num">${Number(stats.taskCount).toLocaleString()}</div>
-              <div class="hero-stat-label">Completed tasks logged</div>
-            </div>
-          </div>` : ''}
-        </div>
-
-        <aside class="hero-aside">
-          <div class="hero-panel">
-            <p class="hero-panel-eyebrow">Why teams switch to Tasker</p>
-            <h2 class="hero-panel-title">Purpose-built for operational evidence, not surveillance or vendor lock-in.</h2>
-            <p class="hero-panel-text">Tasker is strongest when a team wants to understand workload safely: quick task timing, interruption evidence, pending-task snapshots, 30-day analytics, and exports — all on infrastructure the organisation controls.</p>
-            <div class="hero-panel-links">
-              <a href="/guide">Quick start guide</a>
-              <a href="/help">User help</a>
-              <a href="/policy">Privacy policy</a>
-              <a href="/dpia">Data protection impact assessment</a>
-            </div>
-          </div>
-        </aside>
-      </div>
-    </div>
-
-    <div class="landing-section landing-section--alt">
-      <div class="section-inner section-inner--wide">
-        <p class="section-eyebrow">Why Tasker</p>
-        <h2 class="section-title">Built for the gap between spreadsheets, cloud trackers, and enterprise workforce suites</h2>
-        <p class="section-sub">Tasker is not a rostering platform and it is not a generic SaaS timer. It is a focused operational tool for understanding workload safely, quickly, and on your own infrastructure. Its design is aligned with peer-reviewed primary-care evidence on rising consultation burden and time pressure in general practice (Hobbs et al., <cite role="doc-biblioref">Clinical workload in UK primary care: a retrospective analysis of 100 million consultations in England, 2007–14</cite>, <em>The Lancet</em>, 2016; Irving et al., <cite role="doc-biblioref">International variations in primary care physician consultation time: a systematic review of 67 countries</cite>, <em>BMJ Open</em>, 2017).</p>
-        <div class="comparison-grid">
-          <article class="comparison-card">
-            <h3>Manual logs and spreadsheets</h3>
-            <p>Low cost, but slow to maintain, easy to abandon, and weak for consistent categorisation, trend analysis, and evidence-ready reporting.</p>
-          </article>
-          <article class="comparison-card">
-            <h3>Generic cloud time trackers</h3>
-            <p>Polished reporting, but usually tied to email identities, vendor-hosted storage, and workflows that were not designed for privacy-sensitive healthcare settings.</p>
-          </article>
-          <article class="comparison-card">
-            <h3>Enterprise workforce suites</h3>
-            <p>Useful for rostering and organisation-wide workforce management, but heavyweight when the real need is fast task-level workload evidence.</p>
-          </article>
-          <article class="comparison-card comparison-card--featured">
-            <h3>Tasker</h3>
-            <p>Self-hosted, anonymous, mobile-first workload logging with analytics, exports, admin controls, and privacy documentation already built in.</p>
-          </article>
-        </div>
-      </div>
-    </div>
-
-    <div class="landing-section" style="background:#fff">
-      <div class="section-inner section-inner--wide">
-        <p class="section-eyebrow">What the app actually does</p>
-        <h2 class="section-title">Task logging, interruption evidence, analytics, and rollout controls in one place</h2>
-        <div class="feature-row feature-row--light">
-          <article class="feature-panel">
-            <h3>Log work live</h3>
-            <p>Start a task when work begins, stop it when it ends, assign outcomes, and keep category choices fast with searchable comboboxes and quick-pick shortcuts.</p>
-          </article>
-          <article class="feature-panel">
-            <h3>Measure hidden workload</h3>
-            <p>Capture interruptions and pending-task snapshots so teams can evidence hidden coordination work and work intensification, not only direct task minutes.</p>
-          </article>
-          <article class="feature-panel">
-            <h3>Review and export evidence</h3>
-            <p>Use session and 30-day analytics, trendlines, and XLSX exports to support audits, service redesign, appraisals, and workforce planning conversations.</p>
-          </article>
-          <article class="feature-panel">
-            <h3>Roll out safely</h3>
-            <p>Admins can manage groups, dropdowns, notices, messages, backup/restore, registration rules, optional Turnstile CAPTCHA, and admin email 2FA.</p>
-          </article>
-        </div>
-      </div>
-    </div>
-
-    <div class="landing-section landing-section--alt">
-      <div class="section-inner section-inner--wide">
-        <p class="section-eyebrow">Preview the workflow</p>
-        <h2 class="section-title">Purpose-built for quick adoption on mobile</h2>
-        <p class="section-sub">Every screen below uses example-only data. They show how Tasker helps teams go from live logging to trend analysis without expanding the data-risk surface.</p>
-        <div class="mockup-grid">
-          ${mockupHomeScreen()}
-          ${mockupLogTaskScreen()}
-          ${mockupAnalyticsScreen()}
-          ${mockupTaskActiveScreen()}
-        </div>
-        <div class="mockup-grid" style="margin-top:24px">
-          ${mockupPendingTasksScreen()}
-          ${mockupSettingsScreen()}
-          <div class="phone-wrap" style="grid-column:span 2;align-items:center;justify-content:center">
-            <div style="background:#fff;border-radius:18px;padding:22px 24px;max-width:320px;text-align:center;box-shadow:0 6px 20px rgba(15,23,42,.08)">
-              <div style="font-size:2rem;margin-bottom:8px">📖</div>
-              <div style="font-weight:700;font-size:1rem;margin-bottom:6px">Quick Start Guide</div>
-              <p style="font-size:.86rem;color:#6b7280;margin-bottom:14px;line-height:1.7">Need to see the onboarding path first? The guide covers registration, first login, task logging, analytics, and safe use rules.</p>
-              <a href="/guide" class="btn btn-primary btn-sm">Read the Guide</a>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <div class="landing-section" style="background:#fff">
-      <div class="section-inner section-inner--wide">
-        <p class="section-eyebrow">Core operating principles</p>
-        <h2 class="section-title">The product is designed around privacy, evidence, and low-friction adoption</h2>
-        <div class="principles-grid">
-          <article class="principle-card">
-            <h3>Privacy first</h3>
-            <ul>
-              <li>Generated usernames instead of named user profiles</li>
-              <li>No patient data or real-name workflow required</li>
-              <li>30-day retention to keep the exposure window small</li>
-            </ul>
-          </article>
-          <article class="principle-card">
-            <h3>Evidence over anecdote</h3>
-            <ul>
-              <li>Live timing with structured outcomes</li>
-              <li>Pending workload snapshots and interruption logging</li>
-              <li>Analytics and exportable reports for decision-making</li>
-            </ul>
-          </article>
-          <article class="principle-card">
-            <h3>Simple deployment</h3>
-            <ul>
-              <li>Self-hosted, organisation-controlled deployment</li>
-              <li>Installable standalone web-app for mobile-friendly access</li>
-              <li>Guide, help page, policy, and DPIA published alongside the app</li>
-            </ul>
-          </article>
-        </div>
-      </div>
-    </div>
-
-    <div class="landing-section landing-section--alt">
-      <div class="section-inner section-inner--wide">
-        <p class="section-eyebrow">Who it fits best</p>
-        <h2 class="section-title">Designed for teams that need operational clarity without data sprawl</h2>
-        <div class="fit-grid">
-          <article class="fit-card">
-            <h3>Healthcare admin teams</h3>
-            <p>Ideal when reception, referrals, correspondence, medicines admin, or coordination work needs clearer evidence than a spreadsheet can provide.</p>
-          </article>
-          <article class="fit-card">
-            <h3>Clinical support workflows</h3>
-            <p>Useful when clinicians or mixed teams need a simple way to separate direct task effort, interruptions, and outcome patterns without using the clinical record.</p>
-          </article>
-          <article class="fit-card">
-            <h3>Service improvement programmes</h3>
-            <p>Strong for pilots, redesign work, backlog reviews, and operational conversations where privacy, ownership, and low rollout cost matter.</p>
-          </article>
-        </div>
-      </div>
-    </div>
-
-    <div class="landing-section landing-section--dark">
-      <div class="section-inner section-inner--wide">
-        <p class="section-eyebrow">Common questions</p>
-        <h2 class="section-title">FAQ</h2>
-        <div class="faq-grid">
-          <article class="faq-card">
-            <h3>Is Tasker a clinical record system?</h3>
-            <p>No. It is a workload-logging tool for operational evidence. It should not be used to store patient records or identifiable clinical information.</p>
-          </article>
-          <article class="faq-card">
-            <h3>Can standard users stay anonymous?</h3>
-            <p>Yes. The app is built around generated usernames and avoids requiring real names or email addresses for ordinary user accounts.</p>
-          </article>
-          <article class="faq-card">
-            <h3>Where is the data kept?</h3>
-            <p>On the organisation’s own infrastructure, under local governance, rather than relying on a third-party hosted database service.</p>
-          </article>
-          <article class="faq-card">
-            <h3>What helps rollout and governance?</h3>
-            <p>Tasker ships with an installation guide, user help, public policy, DPIA, admin controls, backup/restore tooling, and configurable registration rules.</p>
-          </article>
-        </div>
-      </div>
-    </div>
-
-    <div class="landing-cta">
-      <h2>Ready to evidence workload without expanding privacy risk?</h2>
-      <p>Tasker gives healthcare teams a practical middle ground: faster than spreadsheets, lighter than enterprise workforce suites, and safer than cloud-first time trackers.</p>
-      <div class="landing-cta-btns">
-        <button class="btn btn-white" data-action="renderLogin">Log In</button>
-        ${showRegister ? `<button class="btn btn-outline-white" data-action="renderRegister">Create Account</button>` : ''}
-      </div>
-      <div class="landing-footer-links">
-        <a href="/guide">Quick Start Guide</a>
-        <a href="/help">Help</a>
-        <a href="/policy">Policy</a>
-        <a href="/dpia">DPIA</a>
-      </div>
-    </div>
-
-    ${renderFooter()}
-  </div>`;
+async function renderLanding() {
+  if (!document.getElementById('app-launch-panel')) {
+    window.location.href = '/';
+    return;
+  }
+  await enhanceLanding();
 }
 
 // ── TURNSTILE CAPTCHA ─────────────────────────────────────────────────────────
@@ -4487,7 +4269,7 @@ window.addEventListener('popstate', async (e) => {
 // ── Bootstrap ────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('loading-retry-btn')?.addEventListener('click', init);
-  document.getElementById('loading-login-btn')?.addEventListener('click', renderLanding);
+  document.getElementById('loading-login-btn')?.addEventListener('click', renderLogin);
   init();
 });
 

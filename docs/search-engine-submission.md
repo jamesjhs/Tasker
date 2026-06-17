@@ -1,6 +1,6 @@
 # Tasker — Search Engine and Discovery Submission Guide
 
-**Version 1.14.3 — June 2026**
+**Version 1.15.3 — June 2026**
 
 ---
 
