@@ -2151,7 +2151,12 @@ function formatDateDDMM(isoDate) {
 }
 
 function getTodayISO() {
-  return new Date().toISOString().split('T')[0];
+  return formatLocalDateISO(new Date());
+}
+
+function formatLocalDateISO(date) {
+  const pad = n => String(n).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
 }
 
 function isFutureDateOnly(value) {
@@ -2161,7 +2166,7 @@ function isFutureDateOnly(value) {
 function getYesterdayDate() {
   const d = new Date();
   d.setDate(d.getDate() - 1);
-  return d.toISOString().split('T')[0];
+  return formatLocalDateISO(d);
 }
 
 function moveValueToFront(list, value, limit = 9) {
@@ -2815,7 +2820,7 @@ function setDatePreset(days) {
   const to = new Date();
   const from = new Date();
   from.setDate(from.getDate() - days + 1);
-  const fmt = d => d.toISOString().split('T')[0];
+  const fmt = formatLocalDateISO;
   state.analyticsQuickPeriod = null;
   state.analyticsQuickFrom = '';
   state.analyticsQuickTo = '';
@@ -2835,7 +2840,7 @@ function setAnalyticsQuickFilter(period) {
   state.analyticsFilterFrom = '';
   state.analyticsFilterTo = '';
   if (period === 'today') {
-    const today = new Date().toISOString().split('T')[0];
+    const today = getTodayISO();
     state.analyticsQuickFrom = today;
     state.analyticsQuickTo = today;
     renderAnalyticsHistory();
@@ -2844,7 +2849,7 @@ function setAnalyticsQuickFilter(period) {
     const to = new Date();
     const from = new Date();
     from.setDate(from.getDate() - days + 1);
-    const fmt = d => d.toISOString().split('T')[0];
+    const fmt = formatLocalDateISO;
     state.analyticsQuickFrom = fmt(from);
     state.analyticsQuickTo = fmt(to);
     renderAnalyticsHistory();

@@ -276,18 +276,23 @@ describe('Input validation', () => {
     expect(res.body.error).toMatch(/today/i);
   });
 
-  test('Task start: future start_time rejected', async () => {
+  test('Task start: same-day future client start_time uses server time', async () => {
     const a = agent();
     const { csrf } = await createUserSession(a);
+    const clientFuture = new Date(Date.now() + 60_000).toISOString();
+    const requestStartedAt = Date.now();
     const res = await a.post('/api/tasks/start')
       .set('X-CSRF-Token', csrf)
       .send({
         category: 'Clinical', subcategory: 'Handover',
-        start_time: new Date(Date.now() + 60_000).toISOString(),
+        start_time: clientFuture,
         assigned_date: new Date().toISOString().split('T')[0],
       });
-    expect(res.status).toBe(400);
-    expect(res.body.error).toMatch(/future/i);
+    expect(res.status).toBe(200);
+    const row = getDb().prepare('SELECT start_time FROM tasks WHERE id=?').get(res.body.taskId) as any;
+    expect(row.start_time).not.toBe(clientFuture);
+    expect(new Date(row.start_time).getTime()).toBeGreaterThanOrEqual(requestStartedAt - 1000);
+    expect(new Date(row.start_time).getTime()).toBeLessThanOrEqual(Date.now() + 1000);
   });
 
   test('Task start: future assigned_date rejected', async () => {

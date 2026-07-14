@@ -18,7 +18,12 @@ function isFutureDateTime(value: unknown, now = new Date()): boolean {
   return !!d && d.getTime() > now.getTime();
 }
 
-function isFutureDateOnly(value: unknown, today = new Date().toISOString().split('T')[0]): boolean {
+function localDateISO(date = new Date()): string {
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+
+function isFutureDateOnly(value: unknown, today = localDateISO()): boolean {
   return typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value) && value > today;
 }
 
@@ -29,7 +34,7 @@ function validateNoFutureTaskValues(values: {
   interruptions?: unknown;
 }): string | null {
   const now = new Date();
-  const today = now.toISOString().split('T')[0];
+  const today = localDateISO(now);
   if (values.start_time !== undefined && isFutureDateTime(values.start_time, now)) return 'Task start time cannot be in the future.';
   if (values.end_time !== undefined && isFutureDateTime(values.end_time, now)) return 'Task end time cannot be in the future.';
   if (values.assigned_date !== undefined && values.assigned_date && isFutureDateOnly(values.assigned_date, today)) return 'Date assigned cannot be in the future.';
@@ -99,12 +104,14 @@ router.post('/start', validateCsrf, (req: Request, res: Response) => {
   const active = db.prepare(`SELECT id FROM tasks WHERE user_id=? AND status='in_progress'`).get(s.userId);
   if (active) { res.status(409).json({ error: 'You already have an active task. Complete or discard it first.' }); return; }
   const { is_duty, category, subcategory, outcome, start_time, assigned_date } = req.body as any;
-  const now = start_time || new Date().toISOString();
-  const futureError = validateNoFutureTaskValues({ start_time: now, assigned_date });
+  const serverNow = new Date();
+  const futureError = validateNoFutureTaskValues({ assigned_date });
   if (futureError) { res.status(400).json({ error: futureError }); return; }
-  if (new Date(now).toDateString() !== new Date().toDateString()) {
+  const requestedStart = parseDateValue(start_time);
+  if (requestedStart && requestedStart.toDateString() !== serverNow.toDateString()) {
     res.status(400).json({ error: 'Task start time must be today.' }); return;
   }
+  const now = serverNow.toISOString();
   const r = db.prepare(
     `INSERT INTO tasks (user_id,is_duty,assigned_date,start_time,category,subcategory,outcome,status)
      VALUES (?,?,?,?,?,?,?,'in_progress')`
