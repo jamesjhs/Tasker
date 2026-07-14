@@ -768,7 +768,7 @@ function renderStatsCards(stats, marginTop = '20px') {
   return `
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:${marginTop}">
       <div class="stat-card"><div class="stat-number">${stats.userCount}</div><div class="stat-label">Registered users</div></div>
-      <div class="stat-card"><div class="stat-number">${stats.taskCount}</div><div class="stat-label">Tasks logged</div></div>
+      <div class="stat-card"><div class="stat-number">${stats.taskCount}</div><div class="stat-label">Recent tasks logged</div></div>
     </div>`;
 }
 
@@ -802,7 +802,7 @@ function mockupHomeScreen() {
       </div>
       <div style="background:#fff;border-radius:7px;padding:7px;text-align:center;box-shadow:0 1px 5px rgba(0,0,0,.09)">
         <div style="font-size:15px;font-weight:800;color:#1a56db">1,247</div>
-        <div style="font-size:7px;color:#6b7280;margin-top:1px">Tasks logged</div>
+        <div style="font-size:7px;color:#6b7280;margin-top:1px">Recent tasks logged</div>
       </div>
     </div>
     <div style="background:#fff;border-radius:7px;padding:7px;box-shadow:0 1px 5px rgba(0,0,0,.09)">
@@ -1886,6 +1886,7 @@ async function doLogPendingCount() {
     if (!d) return;
     state.pendingTaskLog = d;
     if (input) input.value = '';
+    app().innerHTML = renderHomeHTML();
     showAlert('Pending task count logged.', 'success', 'pending-count-alerts');
     if (state.pendingGraphDays) await renderPendingChart(state.pendingGraphDays);
   } catch(e) { showAlert(e.message, 'error', 'pending-count-alerts'); }
@@ -3408,6 +3409,10 @@ const COLORS = ['#1a56db','#7c3aed','#059669','#d97706','#dc2626','#0891b2','#65
 function renderChart(canvasId, type, labels, datasets, options) {
   const canvas = document.getElementById(canvasId);
   if (!canvas) return;
+  if (state.charts[canvasId]) {
+    try { state.charts[canvasId].destroy(); } catch(e) {}
+    delete state.charts[canvasId];
+  }
   const ctx = canvas.getContext('2d');
   state.charts[canvasId] = new Chart(ctx, {
     type,
@@ -3651,7 +3656,7 @@ function renderAdminContent(stats, users, dropOpts, settings, pendingUsers, awai
     <div id="admin-alerts"></div>
     <div class="stat-grid">
       <div class="stat-card"><div class="stat-number">${stats?.userCount ?? '?'}</div><div class="stat-label">Registered users</div></div>
-      <div class="stat-card"><div class="stat-number">${stats?.taskCount ?? '?'}</div><div class="stat-label">Tasks logged</div></div>
+      <div class="stat-card"><div class="stat-number">${stats?.taskCount ?? '?'}</div><div class="stat-label">Recent tasks logged</div></div>
     </div>
 
     <div class="section-heading">Registration Settings</div>
