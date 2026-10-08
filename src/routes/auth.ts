@@ -5,12 +5,50 @@ import crypto from 'crypto';
 import { getDb, getSetting } from '../db';
 import { generateUsername } from '../words';
 import { requireAuth, validateCsrf, logEvent, requirePasswordChange, requireActivation } from '../middleware/index';
-import { sendEmail } from '../email';
+import { getSmtpConfig, sendEmail, sendEmailTo } from '../email';
 import { isTurnstileEnabled, verifyTurnstileToken } from '../turnstile';
 
 const router = Router();
 const PASSWORD_RE = /^(?=.*[!@#$%^&*()\-_=+\[\]{};:'",.<>/?\\|`~]).{8,}$/;
 const ALLOW_2FA_LOG_FALLBACK = process.env['ALLOW_2FA_LOG_FALLBACK'] === 'true';
+
+function getPublicOrigin(req: Request): string {
+  const appUrl = (process.env['APP_URL'] || '').trim().replace(/\/+$/, '');
+  return appUrl || `${req.protocol}://${req.get('host')}`;
+}
+
+function log2faFallback(req: Request, username: string, code: string, reason: string): void {
+  const link = `${getPublicOrigin(req)}/api/auth/verify-2fa-link?code=${encodeURIComponent(code)}`;
+  console.warn(`[Tasker] 2FA LOG FALLBACK (${reason}) — user=${username}; code=${code}; expires=10 minutes; link=${link}`);
+}
+
+async function complete2faLogin(req: Request, res: Response, user: any, redirect = false): Promise<void> {
+  await new Promise<void>((resolve, reject) => req.session.regenerate(err => err ? reject(err) : resolve()));
+  const newS = req.session as any;
+  newS.userId = user.id;
+  newS.isAdmin = user.is_admin === 1;
+  newS.mustChangePassword = user.must_change_password === 1;
+  newS.pendingActivation = user.must_change_password === 0 && user.pending_activation === 1;
+  newS.lastActivity = Date.now();
+  newS.sessionDate = new Date().toISOString().split('T')[0];
+  newS.csrfToken = crypto.randomBytes(32).toString('hex');
+  logEvent('user_login');
+  if (redirect) {
+    res.redirect('/');
+    return;
+  }
+  const groupInfo = getDb().prepare(
+    'SELECT u.user_group_id, ug.name as user_group_name FROM users u LEFT JOIN user_groups ug ON ug.id=u.user_group_id WHERE u.id=?'
+  ).get(user.id) as { user_group_id: number | null; user_group_name: string | null } | undefined;
+  res.json({
+    success: true,
+    isAdmin: user.is_admin === 1,
+    mustChangePassword: user.must_change_password === 1,
+    pendingActivation: user.must_change_password === 0 && user.pending_activation === 1,
+    userGroupId: groupInfo?.user_group_id ?? null,
+    userGroupName: groupInfo?.user_group_name ?? null,
+  });
+}
 
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -182,16 +220,22 @@ router.post('/login', loginLimiter, validateCsrf, async (req: Request, res: Resp
     const adminEmail = getSetting('smtp_to') || '';
     const backupEmail = user.mfa_backup_email || '';
     const recipients = [adminEmail, backupEmail].filter(Boolean).join(', ');
+    const smtpConfig = getSmtpConfig();
+    if (!smtpConfig) {
+      log2faFallback(req, user.username, code, 'SMTP not configured');
+      res.json({ requires2fa: true, emailFailed: true });
+      return;
+    }
     if (!recipients) {
-      res.status(503).json({ error: '2FA is enabled but no admin email address is configured. Configure SMTP settings first.' });
+      res.status(503).json({ error: '2FA is enabled but no admin email address is configured.' });
       return;
     }
     try {
-      const { sendEmailTo } = await import('../email');
       await sendEmailTo(
         recipients,
         'Tasker Admin Login — Verification Code',
         `Your Tasker admin login verification code is:\n\n  ${code}\n\nThis code expires in 10 minutes. Do not share it with anyone.`,
+        smtpConfig,
       );
     } catch (e: any) {
       console.error('[Tasker] 2FA email error — could not send verification code to:', recipients);
@@ -201,7 +245,7 @@ router.post('/login', loginLimiter, validateCsrf, async (req: Request, res: Resp
         res.status(503).json({ error: '2FA delivery failed. Please contact an administrator.' });
         return;
       }
-      console.warn(`[Tasker] 2FA FALLBACK — verification code for user ${user.username}: ${code} (expires in 10 minutes)`);
+      log2faFallback(req, user.username, code, 'SMTP delivery failed');
       res.json({ requires2fa: true, emailFailed: true });
       return;
     }
@@ -274,28 +318,36 @@ router.post('/verify-2fa', twoFaLimiter, validateCsrf, async (req: Request, res:
     res.status(404).json({ error: 'User not found.' }); return;
   }
 
-  // Regenerate session to prevent session fixation after successful 2FA
-  await new Promise<void>((resolve, reject) => req.session.regenerate(err => err ? reject(err) : resolve()));
-  const newS = req.session as any;
-  newS.userId = user.id;
-  newS.isAdmin = user.is_admin === 1;
-  newS.mustChangePassword = user.must_change_password === 1;
-  newS.pendingActivation = user.must_change_password === 0 && user.pending_activation === 1;
-  newS.lastActivity = Date.now();
-  newS.sessionDate = new Date().toISOString().split('T')[0];
-  newS.csrfToken = crypto.randomBytes(32).toString('hex');
-  logEvent('user_login');
-  const groupInfo = db.prepare(
-    'SELECT u.user_group_id, ug.name as user_group_name FROM users u LEFT JOIN user_groups ug ON ug.id=u.user_group_id WHERE u.id=?'
-  ).get(user.id) as { user_group_id: number | null; user_group_name: string | null } | undefined;
-  res.json({
-    success: true,
-    isAdmin: user.is_admin === 1,
-    mustChangePassword: user.must_change_password === 1,
-    pendingActivation: user.must_change_password === 0 && user.pending_activation === 1,
-    userGroupId: groupInfo?.user_group_id ?? null,
-    userGroupName: groupInfo?.user_group_name ?? null,
-  });
+  await complete2faLogin(req, res, user);
+});
+
+router.get('/verify-2fa-link', async (req: Request, res: Response) => {
+  const s = req.session as any;
+  const code = String(req.query['code'] || '').trim();
+  if (!s.mfaPendingUserId || !s.mfaCode) {
+    res.status(400).send('No pending 2FA session. Please log in again.');
+    return;
+  }
+  if (Date.now() > s.mfaCodeExpiry) {
+    delete s.mfaPendingUserId; delete s.mfaCode; delete s.mfaCodeExpiry; delete s.mfaAttempts;
+    res.status(401).send('Verification link has expired. Please log in again.');
+    return;
+  }
+  const inputNorm = code.slice(0, 6).padEnd(6, '\x00');
+  const expectedNorm = (s.mfaCode || '').slice(0, 6).padEnd(6, '\x00');
+  const codeMatch = crypto.timingSafeEqual(Buffer.from(inputNorm), Buffer.from(expectedNorm))
+    && code.length === 6;
+  if (!codeMatch) {
+    res.status(401).send('Invalid verification link.');
+    return;
+  }
+  const user = getDb().prepare('SELECT * FROM users WHERE id=?').get(s.mfaPendingUserId) as any;
+  if (!user) {
+    delete s.mfaPendingUserId; delete s.mfaCode; delete s.mfaCodeExpiry; delete s.mfaAttempts;
+    res.status(404).send('User not found.');
+    return;
+  }
+  await complete2faLogin(req, res, user, true);
 });
 
 router.post('/resend-2fa', validateCsrf, async (req: Request, res: Response) => {
@@ -316,16 +368,22 @@ router.post('/resend-2fa', validateCsrf, async (req: Request, res: Response) => 
   const adminEmail = getSetting('smtp_to') || '';
   const backupEmail = user.mfa_backup_email || '';
   const recipients = [adminEmail, backupEmail].filter(Boolean).join(', ');
+  const smtpConfig = getSmtpConfig();
+  if (!smtpConfig) {
+    log2faFallback(req, user.username, code, 'SMTP not configured');
+    res.json({ success: true, emailFailed: true });
+    return;
+  }
   if (!recipients) {
     res.status(503).json({ error: 'No admin email address configured.' });
     return;
   }
   try {
-    const { sendEmailTo } = await import('../email');
     await sendEmailTo(
       recipients,
       'Tasker Admin Login — Verification Code (resent)',
       `Your Tasker admin login verification code is:\n\n  ${code}\n\nThis code expires in 10 minutes. Do not share it with anyone.`,
+      smtpConfig,
     );
     res.json({ success: true });
   } catch (e: any) {
@@ -336,7 +394,7 @@ router.post('/resend-2fa', validateCsrf, async (req: Request, res: Response) => 
       res.status(503).json({ error: '2FA delivery failed. Please contact an administrator.' });
       return;
     }
-    console.warn(`[Tasker] 2FA FALLBACK — verification code for user ${user.username}: ${code} (expires in 10 minutes)`);
+    log2faFallback(req, user.username, code, 'SMTP delivery failed');
     res.json({ success: true, emailFailed: true });
   }
 });

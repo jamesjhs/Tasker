@@ -40,6 +40,13 @@ afterAll(() => {
 // Helper: fresh supertest agent per test (isolated cookie jar)
 const agent = () => request.agent(app);
 
+function localDateISO(offsetDays = 0): string {
+  const d = new Date();
+  d.setDate(d.getDate() + offsetDays);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // 1. CSRF PROTECTION
 // ─────────────────────────────────────────────────────────────────────────────
@@ -298,7 +305,7 @@ describe('Input validation', () => {
   test('Task start: future assigned_date rejected', async () => {
     const a = agent();
     const { csrf } = await createUserSession(a);
-    const tomorrow = new Date(Date.now() + 86_400_000).toISOString().split('T')[0];
+    const tomorrow = localDateISO(1);
     const res = await a.post('/api/tasks/start')
       .set('X-CSRF-Token', csrf)
       .send({
@@ -614,7 +621,7 @@ describe('Temporal consistency checks', () => {
         assigned_date: new Date().toISOString().split('T')[0],
       });
     const taskId = startRes.body.taskId;
-    const tomorrow = new Date(Date.now() + 86_400_000).toISOString().split('T')[0];
+    const tomorrow = localDateISO(1);
     const patchRes = await a.patch(`/api/tasks/${taskId}`)
       .set('X-CSRF-Token', csrf)
       .send({ assigned_date: tomorrow });
@@ -1740,6 +1747,46 @@ describe('Session fixation prevention', () => {
     expect(meRes.status).toBe(200);
     // Verify session is still valid after login (session regeneration did not lose auth state)
     expect(meRes.body).toHaveProperty('username');
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 20a. ADMIN 2FA LOG FALLBACK
+// ─────────────────────────────────────────────────────────────────────────────
+describe('Admin 2FA log fallback', () => {
+  test('Admin login without SMTP configured logs a one-time verification link', async () => {
+    const a = agent();
+    const db = getDb();
+    db.prepare("DELETE FROM settings WHERE key IN ('smtp_host','smtp_to')").run();
+    const bcrypt = require('bcryptjs');
+    const password = 'AdminP@ss1!';
+    const username = 'mfa_admin_' + Math.random().toString(16).slice(2);
+    const hash = await bcrypt.hash(password, 4);
+    db.prepare(
+      'INSERT INTO users (username,password_hash,is_admin,is_approved,pending_activation,mfa_enabled) VALUES (?,?,1,1,0,1)',
+    ).run(username, hash);
+
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    const csrf = (await a.get('/api/auth/csrf-token')).body.token;
+    const loginRes = await a.post('/api/auth/login')
+      .set('X-CSRF-Token', csrf)
+      .send({ username, password });
+
+    expect(loginRes.status).toBe(200);
+    expect(loginRes.body.requires2fa).toBe(true);
+    expect(loginRes.body.emailFailed).toBe(true);
+
+    const logLine = warnSpy.mock.calls.map(call => call.join(' ')).find(line => line.includes('2FA LOG FALLBACK')) || '';
+    warnSpy.mockRestore();
+    expect(logLine).toContain('/api/auth/verify-2fa-link?code=');
+    const code = logLine.match(/code=(\d{6})/)?.[1];
+    expect(code).toBeTruthy();
+
+    const linkRes = await a.get(`/api/auth/verify-2fa-link?code=${code}`);
+    expect(linkRes.status).toBe(302);
+    const meRes = await a.get('/api/auth/me');
+    expect(meRes.status).toBe(200);
+    expect(meRes.body.username).toBe(username);
   });
 });
 
