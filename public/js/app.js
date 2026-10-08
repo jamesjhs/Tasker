@@ -216,6 +216,7 @@ const ACTION_HANDLERS = {
   handleRunningOutcomePick: (el) => handleRunningOutcomePick(el),
   showInterruptModal: () => showInterruptModal(),
   renderTaskEnd: () => renderTaskEnd(),
+  endTaskAndNext: () => endTaskAndNext(),
   cancelActiveTask: () => cancelActiveTask(),
   resumeTask: (_el, _ev, saveAuto) => resumeTask(saveAuto),
   showManualInterruptForm: () => showManualInterruptForm(),
@@ -1906,25 +1907,68 @@ async function togglePendingGraph(days) {
 
 async function renderPendingChart(days) {
   try {
-    const res = await fetch(`/api/tasks/pending-count/history?days=${days}`, { credentials: 'same-origin' });
-    if (!res.ok) return;
-    const logs = await res.json();
-    if (!logs.length) return;
-    const labels = logs.map(l => `${formatDateShort(l.logged_at)} ${formatTimeShort(l.logged_at)}`);
-    const counts = logs.map(l => l.count);
+    const [pendingRes, completedRes] = await Promise.all([
+      fetch(`/api/tasks/pending-count/history?days=${days}`, { credentials: 'same-origin' }),
+      fetch(`/api/tasks/completed-count/history?days=${days}`, { credentials: 'same-origin' }),
+    ]);
+    if (!pendingRes.ok || !completedRes.ok) return;
+    const logs = await pendingRes.json();
+    const completedRows = await completedRes.json();
+    const daysInWindow = buildDateWindow(days);
+    const pendingByDay = latestPendingCountByDay(logs);
+    const completedByDay = Object.fromEntries(completedRows.map(r => [r.day, Number(r.count) || 0]));
+    const labels = daysInWindow.map(day => formatDateShort(`${day}T12:00:00`));
+    const pendingCounts = daysInWindow.map(day => pendingByDay[day] ?? null);
+    let completedTotal = 0;
+    const cumulativeCompleted = daysInWindow.map(day => {
+      completedTotal += completedByDay[day] || 0;
+      return completedTotal;
+    });
+    if (!logs.length && completedTotal === 0) return;
     renderChart('chart-pending', 'line', labels, [{
       label: 'Pending tasks',
-      data: counts,
+      data: pendingCounts,
       borderColor: '#1a56db',
       backgroundColor: 'rgba(26,86,219,0.1)',
-      fill: true,
-      tension: 0.3,
+      fill: false,
+      spanGaps: true,
+      tension: 0.25,
+      pointRadius: 3,
+    }, {
+      label: 'Completed tasks (cumulative)',
+      data: cumulativeCompleted,
+      borderColor: '#16a34a',
+      backgroundColor: 'rgba(22,163,74,0.1)',
+      fill: false,
+      tension: 0.25,
       pointRadius: 3,
     }], {
-      plugins: { legend: { display: false } },
+      plugins: { legend: { display: true, position: 'bottom' } },
       scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } }, x: { ticks: { maxRotation: 45 } } },
     });
   } catch(e) {}
+}
+
+function buildDateWindow(days) {
+  const dates = [];
+  const d = new Date();
+  d.setHours(12, 0, 0, 0);
+  d.setDate(d.getDate() - (days - 1));
+  for (let i = 0; i < days; i++) {
+    dates.push(formatLocalDateISO(d));
+    d.setDate(d.getDate() + 1);
+  }
+  return dates;
+}
+
+function latestPendingCountByDay(logs) {
+  const byDay = {};
+  for (const log of logs || []) {
+    const day = String(log.logged_at || '').slice(0, 10);
+    if (!day) continue;
+    byDay[day] = Number(log.count) || 0;
+  }
+  return byDay;
 }
 
 // ── SETTINGS ─────────────────────────────────────────────────────────────────
@@ -2306,6 +2350,7 @@ function renderTaskActive() {
       <h1>⏱️ Task Running</h1>
       <span class="badge ${t.is_duty ? 'badge-duty' : 'badge-personal'}">${t.is_duty ? 'My Group' : 'Personal'}</span>
     </div>
+    <div id="ta-alerts"></div>
     ${midWarn ? '<div class="midnight-warn">⚠️ Approaching midnight — your session will end at midnight!</div>' : ''}
     ${t.category ? `<p style="text-align:center;font-size:1rem;color:#374151;margin-bottom:4px">${esc(t.category)}${t.subcategory ? ' › ' + esc(t.subcategory) : ''}</p>` : ''}
     <div class="timer-display" id="timer-display">00:00:00</div>
@@ -2315,7 +2360,8 @@ function renderTaskActive() {
     </div>
     ${buildRunningOutcomeGroup(state.dropdowns.outcome, t.outcome || null)}
     <button class="btn btn-secondary btn-full" style="margin-bottom:10px" data-action="showInterruptModal">⏸️ Interrupted</button>
-    <button class="btn btn-primary btn-full" style="margin-bottom:10px" data-action="renderTaskEnd">⏹️ End Task</button>
+    <button class="btn btn-success btn-full" style="margin-bottom:10px" data-action="renderTaskEnd">✓ End Task</button>
+    <button class="btn btn-success-dark btn-full" style="margin-bottom:10px" data-action="endTaskAndNext">→ End and Next</button>
     <button class="btn btn-danger btn-full" data-action="cancelActiveTask">✕ Cancel Task</button>
   </div>`;
 
@@ -2488,6 +2534,29 @@ function renderTaskEnd() {
   const runningOutcome = document.getElementById('tr-outcome-sel')?.value;
   if (runningOutcome) t.outcome = runningOutcome;
   renderTaskReview(t, false);
+}
+
+async function endTaskAndNext() {
+  stopTimer();
+  const t = state.activeTask;
+  if (!t) { renderHome(); return; }
+  const runningOutcome = document.getElementById('tr-outcome-sel')?.value || t.outcome || null;
+  const end_time = new Date().toISOString();
+  const body = {
+    status: 'completed',
+    end_time,
+    outcome: runningOutcome,
+  };
+  try {
+    await api('PATCH', `/api/tasks/${t.id}`, body);
+    state.activeTask = null;
+    await checkActiveTask();
+    state.lastUsedCombos = { category: t.category, subcategory: t.subcategory };
+    state.commonFields.category = moveValueToFront(state.commonFields.category, t.category);
+    state.commonFields.subcategory = moveValueToFront(state.commonFields.subcategory, t.subcategory);
+    state.recentAssignedDate = t.assigned_date || state.recentAssignedDate;
+    renderTaskStart();
+  } catch(e) { showAlert(e.message, 'error', 'ta-alerts'); }
 }
 
 function renderTaskEdit(task) {
