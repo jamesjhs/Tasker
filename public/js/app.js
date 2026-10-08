@@ -1149,7 +1149,7 @@ async function render2faVerify(emailFailed = false) {
   state.currentView = 'login';
   replaceHistory('login');
   const subtitle = emailFailed
-    ? `<p class="alert alert-warning" style="font-size:.9rem;margin:0">⚠️ Email delivery failed (SMTP error). Check the server logs for your verification code, then enter it below.</p>`
+    ? `<p class="alert alert-warning" style="font-size:.9rem;margin:0">⚠️ SMTP is unavailable. Check the server logs for your one-time verification link or code.</p>`
     : `<p style="color:#6b7280;font-size:.9rem;margin-top:4px">A verification code has been sent to your registered admin email address.</p>`;
   app().innerHTML = `
   <div class="view" style="min-height:auto;padding-bottom:24px">
@@ -1212,7 +1212,7 @@ async function do2faResend() {
   try {
     const d = await api('POST', '/api/auth/resend-2fa', {});
     if (d?.emailFailed) {
-      showAlert('Email delivery failed (SMTP error) — check the server logs for your new code.', 'warning', 'tfa-alerts');
+      showAlert('SMTP is unavailable — check the server logs for your new one-time link or code.', 'warning', 'tfa-alerts');
     } else {
       showAlert('A new code has been sent to your admin email.', 'success', 'tfa-alerts');
     }
@@ -1914,61 +1914,78 @@ async function renderPendingChart(days) {
     if (!pendingRes.ok || !completedRes.ok) return;
     const logs = await pendingRes.json();
     const completedRows = await completedRes.json();
-    const daysInWindow = buildDateWindow(days);
-    const pendingByDay = latestPendingCountByDay(logs);
-    const completedByDay = Object.fromEntries(completedRows.map(r => [r.day, Number(r.count) || 0]));
-    const labels = daysInWindow.map(day => formatDateShort(`${day}T12:00:00`));
-    const pendingCounts = daysInWindow.map(day => pendingByDay[day] ?? null);
+    const range = buildTimeWindow(days);
+    const pendingPoints = (logs || [])
+      .map(log => ({ x: new Date(log.logged_at).getTime(), y: Number(log.count) || 0 }))
+      .filter(point => Number.isFinite(point.x))
+      .sort((a, b) => a.x - b.x);
     let completedTotal = 0;
-    const cumulativeCompleted = daysInWindow.map(day => {
-      completedTotal += completedByDay[day] || 0;
-      return completedTotal;
-    });
-    if (!logs.length && completedTotal === 0) return;
-    renderChart('chart-pending', 'line', labels, [{
+    const completedPoints = [{ x: range.min, y: 0 }];
+    for (const row of completedRows || []) {
+      const x = new Date(row.completed_at).getTime();
+      if (!Number.isFinite(x)) continue;
+      completedTotal += 1;
+      completedPoints.push({ x, y: completedTotal });
+    }
+    if (completedTotal > 0) completedPoints.push({ x: range.max, y: completedTotal });
+    if (!pendingPoints.length && completedTotal === 0) return;
+    renderChart('chart-pending', 'line', [], [{
       label: 'Pending tasks',
-      data: pendingCounts,
+      data: pendingPoints,
       borderColor: '#1a56db',
       backgroundColor: 'rgba(26,86,219,0.1)',
       fill: false,
-      spanGaps: true,
-      tension: 0.25,
+      tension: 0.15,
       pointRadius: 3,
     }, {
       label: 'Completed tasks (cumulative)',
-      data: cumulativeCompleted,
+      data: completedPoints,
       borderColor: '#16a34a',
       backgroundColor: 'rgba(22,163,74,0.1)',
       fill: false,
-      tension: 0.25,
+      stepped: 'after',
+      tension: 0,
       pointRadius: 3,
     }], {
-      plugins: { legend: { display: true, position: 'bottom' } },
-      scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } }, x: { ticks: { maxRotation: 45 } } },
+      parsing: false,
+      scales: {
+        y: { beginAtZero: true, ticks: { stepSize: 1 } },
+        x: {
+          type: 'linear',
+          min: range.min,
+          max: range.max,
+          bounds: 'ticks',
+          ticks: {
+            stepSize: 24 * 60 * 60 * 1000,
+            maxRotation: 0,
+            callback: value => formatDateShort(Number(value)),
+          },
+          grid: { drawTicks: true },
+        },
+      },
+      plugins: {
+        legend: { display: true, position: 'bottom' },
+        tooltip: {
+          callbacks: {
+            title: items => {
+              const x = items?.[0]?.parsed?.x;
+              return Number.isFinite(x) ? `${formatDateShort(x)} ${formatTimeShort(x)}` : '';
+            },
+          },
+        },
+      },
     });
   } catch(e) {}
 }
 
-function buildDateWindow(days) {
-  const dates = [];
+function buildTimeWindow(days) {
   const d = new Date();
-  d.setHours(12, 0, 0, 0);
+  d.setHours(0, 0, 0, 0);
   d.setDate(d.getDate() - (days - 1));
-  for (let i = 0; i < days; i++) {
-    dates.push(formatLocalDateISO(d));
-    d.setDate(d.getDate() + 1);
-  }
-  return dates;
-}
-
-function latestPendingCountByDay(logs) {
-  const byDay = {};
-  for (const log of logs || []) {
-    const day = String(log.logged_at || '').slice(0, 10);
-    if (!day) continue;
-    byDay[day] = Number(log.count) || 0;
-  }
-  return byDay;
+  const min = d.getTime();
+  const end = new Date();
+  end.setHours(23, 59, 59, 999);
+  return { min, max: end.getTime() };
 }
 
 // ── SETTINGS ─────────────────────────────────────────────────────────────────

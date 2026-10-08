@@ -66,9 +66,9 @@ router.get('/pending-count/history', (req: Request, res: Response) => {
   const s = req.session as any;
   const daysParam = Number(req.query['days']);
   const days = daysParam === 30 ? 30 : 7;
-  const modifier = `-${days} days`;
+  const modifier = `-${days - 1} days`;
   const logs = getDb().prepare(
-    `SELECT count, logged_at FROM pending_task_logs WHERE user_id=? AND logged_at >= datetime('now',?) ORDER BY logged_at ASC`
+    `SELECT count, logged_at FROM pending_task_logs WHERE user_id=? AND date(logged_at) >= date('now',?) ORDER BY logged_at ASC`
   ).all(s.userId, modifier) as any[];
   res.json(logs);
 });
@@ -79,14 +79,13 @@ router.get('/completed-count/history', (req: Request, res: Response) => {
   const days = daysParam === 30 ? 30 : 7;
   const modifier = `-${days - 1} days`;
   const rows = getDb().prepare(
-    `SELECT date(end_time) AS day, COUNT(*) AS count
+    `SELECT end_time AS completed_at
      FROM tasks
      WHERE user_id=?
        AND status='completed'
        AND end_time IS NOT NULL
        AND date(end_time) >= date('now',?)
-     GROUP BY date(end_time)
-     ORDER BY day ASC`
+     ORDER BY end_time ASC`
   ).all(s.userId, modifier) as any[];
   res.json(rows);
 });
