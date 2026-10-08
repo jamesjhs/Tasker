@@ -1916,13 +1916,13 @@ async function renderPendingChart(days) {
     const completedRows = await completedRes.json();
     const range = buildTimeWindow(days);
     const pendingPoints = (logs || [])
-      .map(log => ({ x: new Date(log.logged_at).getTime(), y: Number(log.count) || 0 }))
+      .map(log => ({ x: parseTaskerTimestamp(log.logged_at), y: Number(log.count) || 0 }))
       .filter(point => Number.isFinite(point.x))
       .sort((a, b) => a.x - b.x);
     let completedTotal = 0;
     const completedPoints = [{ x: range.min, y: 0 }];
     for (const row of completedRows || []) {
-      const x = new Date(row.completed_at).getTime();
+      const x = parseTaskerTimestamp(row.completed_at);
       if (!Number.isFinite(x)) continue;
       completedTotal += 1;
       completedPoints.push({ x, y: completedTotal });
@@ -1986,6 +1986,18 @@ function buildTimeWindow(days) {
   const end = new Date();
   end.setHours(23, 59, 59, 999);
   return { min, max: end.getTime() };
+}
+
+function parseTaskerTimestamp(value) {
+  if (!value) return NaN;
+  if (typeof value === 'number') return value;
+  const text = String(value).trim();
+  if (!text) return NaN;
+  if (/[zZ]$|[+-]\d{2}:?\d{2}$/.test(text)) return new Date(text).getTime();
+  if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/.test(text)) {
+    return new Date(text.replace(' ', 'T') + 'Z').getTime();
+  }
+  return new Date(text).getTime();
 }
 
 // ── SETTINGS ─────────────────────────────────────────────────────────────────

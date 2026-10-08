@@ -79,13 +79,13 @@ router.get('/completed-count/history', (req: Request, res: Response) => {
   const days = daysParam === 30 ? 30 : 7;
   const modifier = `-${days - 1} days`;
   const rows = getDb().prepare(
-    `SELECT end_time AS completed_at
+    `SELECT COALESCE(end_time, updated_at, start_time, created_at) AS completed_at
      FROM tasks
      WHERE user_id=?
        AND status='completed'
-       AND end_time IS NOT NULL
-       AND date(end_time) >= date('now',?)
-     ORDER BY end_time ASC`
+       AND COALESCE(end_time, updated_at, start_time, created_at) IS NOT NULL
+       AND date(COALESCE(end_time, updated_at, start_time, created_at)) >= date('now',?)
+     ORDER BY COALESCE(end_time, updated_at, start_time, created_at) ASC`
   ).all(s.userId, modifier) as any[];
   res.json(rows);
 });

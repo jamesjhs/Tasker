@@ -1425,6 +1425,28 @@ describe('Intended user flows', () => {
     expect(getRes.body.count).toBe(5);
   });
 
+  test('Homepage graph history returns granular pending logs and completed events', async () => {
+    const a = agent();
+    const { csrf } = await createUserSession(a);
+    await a.post('/api/tasks/pending-count').set('X-CSRF-Token', csrf).send({ count: 3 });
+    await a.post('/api/tasks/pending-count').set('X-CSRF-Token', csrf).send({ count: 7 });
+    const pendingHistory = await a.get('/api/tasks/pending-count/history?days=7').set('X-CSRF-Token', csrf);
+    expect(pendingHistory.status).toBe(200);
+    expect(pendingHistory.body.slice(-2).map((r: any) => r.count)).toEqual([3, 7]);
+    expect(pendingHistory.body[pendingHistory.body.length - 1]).toHaveProperty('logged_at');
+
+    const db = getDb();
+    const user = db.prepare('SELECT id FROM users WHERE username=?').get((await a.get('/api/auth/me')).body.username) as any;
+    db.prepare(
+      `INSERT INTO tasks (user_id,is_duty,start_time,end_time,category,subcategory,outcome,status)
+       VALUES (?,?,?,?,?,?,?,?)`,
+    ).run(user.id, 0, new Date().toISOString(), null, 'Clinical', 'Handover', 'Completed', 'completed');
+    const completedHistory = await a.get('/api/tasks/completed-count/history?days=7').set('X-CSRF-Token', csrf);
+    expect(completedHistory.status).toBe(200);
+    expect(completedHistory.body.length).toBeGreaterThanOrEqual(1);
+    expect(completedHistory.body[completedHistory.body.length - 1].completed_at).toBeTruthy();
+  });
+
   test('Admin creates user — credentials returned but no password stored in plaintext', async () => {
     const a = agent();
     const { csrf } = await createAdminSession(a);
