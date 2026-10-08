@@ -165,6 +165,10 @@ html, body {
 }
 .btn-primary { background: #1a56db; color: #fff; }
 .btn-primary:hover { opacity: .9; }
+.btn-success { background: #16a34a; color: #fff; }
+.btn-success:hover { opacity: .9; }
+.btn-success-dark { background: #15803d; color: #fff; }
+.btn-success-dark:hover { opacity: .9; }
 .btn-danger  { background: #dc2626; color: #fff; }
 .btn-danger:hover { opacity: .9; }
 .btn-secondary { background: #e5e7eb; color: #1a1a2e; }

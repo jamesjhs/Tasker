@@ -73,6 +73,24 @@ router.get('/pending-count/history', (req: Request, res: Response) => {
   res.json(logs);
 });
 
+router.get('/completed-count/history', (req: Request, res: Response) => {
+  const s = req.session as any;
+  const daysParam = Number(req.query['days']);
+  const days = daysParam === 30 ? 30 : 7;
+  const modifier = `-${days - 1} days`;
+  const rows = getDb().prepare(
+    `SELECT date(end_time) AS day, COUNT(*) AS count
+     FROM tasks
+     WHERE user_id=?
+       AND status='completed'
+       AND end_time IS NOT NULL
+       AND date(end_time) >= date('now',?)
+     GROUP BY date(end_time)
+     ORDER BY day ASC`
+  ).all(s.userId, modifier) as any[];
+  res.json(rows);
+});
+
 router.post('/pending-count', validateCsrf, (req: Request, res: Response) => {
   const s = req.session as any;
   const count = Number(req.body?.count);
