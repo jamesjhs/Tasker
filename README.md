@@ -1,6 +1,6 @@
 # Tasker
 
-**v1.16.1** — A self-hosted, anonymous workload-logging PWA for NHS and healthcare teams. Built with TypeScript, Express 5, SQLite, and vanilla JS.
+**v1.16.2** — A self-hosted, anonymous workload-logging PWA for NHS and healthcare teams. Built with TypeScript, Express 5, SQLite, and vanilla JS.
 
 ---
 
@@ -24,7 +24,7 @@
 - **30-day data retention** — task data is automatically deleted after 30 days.
 - **Health-check endpoint** — `GET /readyz` returns a JSON status response for uptime/heartbeat monitoring.
 - **Landing, SEO & crawler-ready homepage** — homepage now includes semantic marketing copy, structured data, Open Graph/Twitter cards, `robots.txt`, `sitemap.xml`, and `llms.txt`.
-- **Asset version endpoint** — `GET /api/version` returns `{"version":"1.16.1"}` for client-side cache-busting.
+- **Asset version endpoint** — `GET /api/version` returns `{"version":"1.16.2"}` for client-side cache-busting.
 - **Cloudflare Turnstile CAPTCHA** — optional bot-protection for login and self-registration. When `TURNSTILE_SITE_KEY` and `TURNSTILE_SECRET_KEY` are set, Turnstile widgets are rendered on the login and registration forms; tokens are verified server-side before credentials are checked. The feature is fully disabled (and invisible) when the environment variables are not set.
 
 ---
@@ -165,6 +165,14 @@ See [`/policy`](/policy) for the full Data and Use Policy.
 ---
 
 ## Changelog
+
+### v1.16.2 (October 2026) — Task Running outcome flow refinements
+
+- **Task Running outcome actions** — disabled End and Next until an outcome is selected, added the checked-by-default automatically start next option, and made outcome quick-picks complete directly into Log Task when enabled.
+- **Outcome quick-pick ordering** — aligned Task Running outcome buttons with Log Task quick-picks: up to 9 options, most recent first with the green border cue, then most common outcomes.
+- **Log Task start label** — renamed the Selected Date action to Start.
+- **Version bump** — incremented the bugfix release to 1.16.2 in package metadata and runtime version surfaces.
+- **Documentation version sync** — updated user-facing pages and manuals so current-version labels consistently show 1.16.2.
 
 ### v1.16.1 (October 2026) — Active task completion controls
 
