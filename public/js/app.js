@@ -24,6 +24,7 @@ const state = {
   flagOptions: [],       // [{ id, value }]
   commonFields: { category: [], subcategory: [], outcome: [] },
   recentAssignedDate: null, // YYYY-MM-DD from most recently logged task
+  autoStartNext: true,
   taskForm: {},
   lastUsedCombos: {},
   editTask: null,
@@ -214,6 +215,7 @@ const ACTION_HANDLERS = {
   startTaskWithDatePreset: (_el, _ev, preset) => startTaskWithDatePreset(preset),
   handleQuickPick: (el) => handleQuickPick(el),
   handleRunningOutcomePick: (el) => handleRunningOutcomePick(el),
+  toggleAutoStartNext: (el) => toggleAutoStartNext(el),
   showInterruptModal: () => showInterruptModal(),
   renderTaskEnd: () => renderTaskEnd(),
   endTaskAndNext: () => endTaskAndNext(),
@@ -369,6 +371,7 @@ function selectComboOpt(id, field, value) {
   state.taskForm[field] = value;
   syncQuickPickSelection(id, field, value);
   closeCombo(id);
+  if (id === 'tr-outcome') updateRunningOutcomeControls(value);
   // hide add-new row if it was open
   const newDiv = document.getElementById(`${id}-new`);
   if (newDiv) newDiv.style.display = 'none';
@@ -2177,7 +2180,7 @@ function renderTaskStart() {
     <div class="date-preset-group task-start-date-actions">
       <button class="btn btn-sm task-date-btn task-date-btn--previous" aria-label="${esc(previousAria)}" ${hasPreviousAssigned ? '' : 'disabled title="No previous task date available"'} data-action="startTaskWithDatePreset" data-arg="previous">🟢 Prev (${esc(previousLabel)})</button>
       <button class="btn btn-sm task-date-btn task-date-btn--yesterday" data-action="startTaskWithDatePreset" data-arg="yesterday">🟡 Yesterday</button>
-      <button class="btn btn-sm btn-primary task-date-btn" data-action="startTaskWithDatePreset" data-arg="selected">▶ Selected Date</button>
+      <button class="btn btn-sm btn-primary task-date-btn" data-action="startTaskWithDatePreset" data-arg="selected">▶ Start</button>
     </div>
   </div>`;
 }
@@ -2274,7 +2277,7 @@ function buildRunningOutcomeGroup(options, current) {
   const picks = (state.commonFields.outcome || []).slice(0, 9);
   const picksHtml = picks.length ? `
   <div id="tr-outcome-picks" class="quick-pick-grid quick-pick-grid--3col" style="margin-bottom:8px">
-    ${picks.map(v => `<button type="button" class="quick-pick-btn${displayValue === v ? ' qp-selected' : ''}" data-value="${esc(v)}" data-action="handleRunningOutcomePick">${esc(v)}</button>`).join('')}
+    ${picks.map((v, idx) => `<button type="button" class="quick-pick-btn${displayValue === v ? ' qp-selected' : ''}${idx === 0 ? ' qp-recent' : ''}" data-value="${esc(v)}" data-action="handleRunningOutcomePick">${esc(v)}</button>`).join('')}
   </div>` : '';
   return `
   <div class="form-group" style="margin-top:4px">
@@ -2299,9 +2302,11 @@ function buildRunningOutcomeGroup(options, current) {
   </div>`;
 }
 
-function handleRunningOutcomePick(el) {
+async function handleRunningOutcomePick(el) {
   selectRunningOutcome(el.dataset.value);
-  renderTaskEnd();
+  if (state.autoStartNext) {
+    await endTaskAndNext();
+  }
 }
 
 function selectRunningOutcome(value) {
@@ -2309,10 +2314,27 @@ function selectRunningOutcome(value) {
   const btn = document.getElementById('tr-outcome-btn');
   if (hidden) hidden.value = value;
   if (btn) { btn.textContent = value; btn.classList.remove('placeholder'); }
+  if (state.activeTask) state.activeTask.outcome = value;
   document.querySelectorAll('#tr-outcome-picks .quick-pick-btn').forEach(el => {
     el.classList.toggle('qp-selected', el.dataset.value === value);
   });
+  updateRunningOutcomeControls(value);
   closeCombo('tr-outcome');
+}
+
+function getRunningOutcome() {
+  return document.getElementById('tr-outcome-sel')?.value || state.activeTask?.outcome || null;
+}
+
+function updateRunningOutcomeControls(value = getRunningOutcome()) {
+  const hasOutcome = Boolean(value);
+  const nextBtn = document.getElementById('ta-end-next');
+  if (nextBtn) nextBtn.disabled = !hasOutcome;
+  if (state.activeTask && hasOutcome) state.activeTask.outcome = value;
+}
+
+function toggleAutoStartNext(el) {
+  state.autoStartNext = Boolean(el.checked);
 }
 
 function onDropdownChange(containerId, field) {
@@ -2373,6 +2395,7 @@ function renderTaskActive() {
   if (!t) { renderHome(); return; }
   pushHistory('task-active');
   const midWarn = checkMidnightWarn();
+  const hasOutcome = Boolean(t.outcome);
   app().innerHTML = `
   <div class="view">
     <div class="view-header">
@@ -2388,9 +2411,13 @@ function renderTaskActive() {
       ${t.interruptions?.length ? ` · ${t.interruptions.length} interruption(s)` : ''}
     </div>
     ${buildRunningOutcomeGroup(state.dropdowns.outcome, t.outcome || null)}
+    <label class="task-auto-next">
+      <input type="checkbox" ${state.autoStartNext ? 'checked' : ''} data-action-change="toggleAutoStartNext">
+      <span>automatically start next</span>
+    </label>
     <button class="btn btn-secondary btn-full" style="margin-bottom:10px" data-action="showInterruptModal">⏸️ Interrupted</button>
     <button class="btn btn-success btn-full" style="margin-bottom:10px" data-action="renderTaskEnd">✓ End Task</button>
-    <button class="btn btn-success-dark btn-full" style="margin-bottom:10px" data-action="endTaskAndNext">→ End and Next</button>
+    <button class="btn btn-success-dark btn-full" id="ta-end-next" style="margin-bottom:10px" data-action="endTaskAndNext" ${hasOutcome ? '' : 'disabled'}>→ End and Next</button>
     <button class="btn btn-danger btn-full" data-action="cancelActiveTask">✕ Cancel Task</button>
   </div>`;
 
@@ -2570,6 +2597,11 @@ async function endTaskAndNext() {
   const t = state.activeTask;
   if (!t) { renderHome(); return; }
   const runningOutcome = document.getElementById('tr-outcome-sel')?.value || t.outcome || null;
+  if (!runningOutcome) {
+    showAlert('Please select a Task Outcome before ending and starting the next task.', 'error', 'ta-alerts');
+    updateRunningOutcomeControls(null);
+    return;
+  }
   const end_time = new Date().toISOString();
   const body = {
     status: 'completed',
@@ -2583,6 +2615,7 @@ async function endTaskAndNext() {
     state.lastUsedCombos = { category: t.category, subcategory: t.subcategory };
     state.commonFields.category = moveValueToFront(state.commonFields.category, t.category);
     state.commonFields.subcategory = moveValueToFront(state.commonFields.subcategory, t.subcategory);
+    state.commonFields.outcome = moveValueToFront(state.commonFields.outcome, runningOutcome);
     state.recentAssignedDate = t.assigned_date || state.recentAssignedDate;
     renderTaskStart();
   } catch(e) { showAlert(e.message, 'error', 'ta-alerts'); }
@@ -2807,6 +2840,7 @@ async function submitTaskReview(taskId, isEdit, dest) {
       state.lastUsedCombos = { category: categoryVal, subcategory: subcategoryVal };
       state.commonFields.category = moveValueToFront(state.commonFields.category, categoryVal);
       state.commonFields.subcategory = moveValueToFront(state.commonFields.subcategory, subcategoryVal);
+      state.commonFields.outcome = moveValueToFront(state.commonFields.outcome, outcome);
       state.recentAssignedDate = body.assigned_date || state.recentAssignedDate;
       renderTaskStart();
     } else {
