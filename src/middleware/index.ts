@@ -31,7 +31,7 @@ export function requirePasswordChange(req: Request, res: Response, next: NextFun
   const s = req.session as any;
   const allowed = req.path.includes('/change-password') || req.path.includes('/logout');
   if (s?.mustChangePassword && !allowed) {
-    res.status(403).json({ error: 'You must change your password before continuing', mustChangePassword: true });
+    res.status(403).json({ error: 'You must change your password before continuing!', mustChangePassword: true });
     return;
   }
   next();
